@@ -10,7 +10,7 @@ Pausio uses the portable [Agent Skills specification](https://agentskills.io/spe
 | [pausio-python-architecture](../.agents/skills/pausio-python-architecture/SKILL.md) | Python core, JSON schema, interfaces, CLI | No media signal tuning |
 | [pausio-media-ffmpeg](../.agents/skills/pausio-media-ffmpeg/SKILL.md) | FFmpeg, VFR, timebases, encoding and A/V sync | No editorial policy |
 | [pausio-natural-editing](../.agents/skills/pausio-natural-editing/SKILL.md) | Natural rhythm, cut policy, reviewable proposals | No ASR internals |
-| [pausio-speech-ai](../.agents/skills/pausio-speech-ai/SKILL.md) | Local ASR, VAD and word alignment | No automatic edit approval |
+| [pausio-speech-ai](../.agents/skills/pausio-speech-ai/SKILL.md) | ClosedRoom ASR reuse, VAD, local adapter contracts | No parallel ASR or edit approval |
 | [pausio-subtitles](../.agents/skills/pausio-subtitles/SKILL.md) | Italian captions, timing, safe areas | No raw codec design |
 | [pausio-test-engineering](../.agents/skills/pausio-test-engineering/SKILL.md) | Unit/E2E tests, CI, golden-media evaluation | No release sign-off |
 | [pausio-security-release](../.agents/skills/pausio-security-release/SKILL.md) | Privacy, dependency licenses, releases | No editorial strategy |

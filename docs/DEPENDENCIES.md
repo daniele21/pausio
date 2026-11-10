@@ -6,9 +6,9 @@ The code in this repository is original and does **not** vendor third-party proj
 | --- | --- | --- | --- |
 | [FFmpeg](https://ffmpeg.org/) | Probe, silence detection, render | External executables (required for media commands) | Build-specific LGPL/GPL and codecs |
 | [auto-editor](https://github.com/WyattBlue/auto-editor) | Algorithm/design reference for cut workflows | Inspiration only | Inspect current upstream LICENSE before any source reuse |
-| [WhisperX](https://github.com/m-bain/whisperX) | Word-aligned transcripts | Future optional adapter | Dependencies/models/cross-platform support |
-| [faster-whisper](https://github.com/SYSTRAN/faster-whisper) | Local ASR | Future optional adapter | Runtime, model weights and packaging |
-| [Silero VAD](https://github.com/snakers4/silero-vad) | Speech activity confidence | Future optional adapter | Check model distribution and transitive licenses |
+| [WhisperX](https://github.com/m-bain/whisperX) | Research reference only | Not planned: avoid duplicating ClosedRoom ASR | License/weights if reconsidered |
+| [ClosedRoom](https://github.com/daniele21/closedroom) | Existing local MLX Whisper/Nemotron, VAD and cache | Same-machine HTTP API integration | MIT source; separate review of runtime/models before distribution |
+| [Silero VAD](https://github.com/snakers4/silero-vad) | Used inside ClosedRoom | Reuse ClosedRoom evidence; no additional Pausio VAD backend | Upstream controls model license/downloads |
 | [DeepFilterNet](https://github.com/Rikorose/DeepFilterNet) | Audio denoising | Future optional adapter | License and model weights |
 | CapCut project manipulation tools | Editable project exporter | Idea only; no dependency | Non-public interchange format, breakage risk, licenses |
 

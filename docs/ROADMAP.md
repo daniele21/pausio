@@ -12,11 +12,12 @@
 
 ## Phase 1 — Speech-aware editing
 
-- [ ] Introduce a common SpeechAnalysis interface (timestamp, confidence, model provenance).
-- [ ] Compare faster-whisper / whisper.cpp for local Italian ASR quality and macOS setup.
-- [ ] Optional Silero VAD; combine with silence detection to avoid cutting quiet speech.
+- [x] Consume ClosedRoom's existing localhost ASR path endpoint with local-only provider; produce timestamped JSON sidecar.
+- [ ] E2E compatibility verification with running ClosedRoom `dev`, A56 footage, VFR audio offset and actual model output.
+- [ ] Reuse ClosedRoom's speech/VAD evidence via an upstream shared contract; do **not** create another Silero/Whisper stack.
+- [ ] Integrate ClosedRoom transcript with reviewable edit proposals without automatically removing speech.
 - [ ] Detect suspected repeats and fillers as **review prompts**, never silent deletion.
-- [ ] Word-level subtitle draft and editor, proper typography/safe-area previews.
+- [ ] Editable subtitles using **actual** ClosedRoom word timestamps when available, otherwise segment-level review; safe-area previews.
 - [ ] Test natural pacing vs aggressive auto cuts using three real clips.
 
 ## Phase 2 — Quality and UX
