@@ -9,7 +9,7 @@ description: Use for any Pausio UI edit, timeline action, command schema, projec
 
 Every user change that may affect the rendered video **MUST** have a typed, replayable command in `src/pausio/project_commands.py`. The browser dispatches instructions to `POST /api/command` with `revision`, `type` and `payload`. Python validates, appends, replays and derives the FFmpeg `EditPlan`. No separate JS-only editing state or silent full-plan overwrite.
 
-Before touching edit behavior, read [`docs/PROJECT_FORMAT.md`](../../../docs/PROJECT_FORMAT.md), [JSON Schema v1](../../../schemas/pausio-project-v1.schema.json) and `src/pausio/domain.py`.
+Before touching edit behavior, read [`docs/PROJECT_FORMAT.md`](../../../docs/PROJECT_FORMAT.md), [JSON Schema v2](../../../schemas/pausio-project-v2.schema.json), legacy [v1 schema](../../../schemas/pausio-project-v1.schema.json), and `src/pausio/domain.py`.
 
 ## Checklist for each new edit feature
 
@@ -22,7 +22,16 @@ Before touching edit behavior, read [`docs/PROJECT_FORMAT.md`](../../../docs/PRO
 7. Add pure replay, JSON export/import, rollback-on-invalid, stale revision and HTTP integration tests. Document migration strategy for later versions.
 8. Keep source media, raw transcripts, private paths and API tokens **out of portable edit instructions**. External assets require references and provenance, not assumptions.
 
-## Current v1 types
+## History and recovery invariants
+
+- V2 portable projects store the complete event history, `history_cursor` and monotonic `revision`. Undo/Redo are structured `history.undo` / `history.redo` API operations that move the cursor without generating fake inverse edits.
+- On an edit after Undo, drop only the now-inactive redo tail and append the new event, preserving stable segment IDs. Redo must not apply an abandoned branch.
+- Validate the full history, including inactive redo events. V1 import must migrate with cursor at the end and unchanged event IDs.
+- The **portable** project is media-free; the **private local** session in `studio_persistence.py` additionally stores the imported video and atomic checkpoints. Do not conflate the two.
+- Commit autosave to disk before displaying a successful UI edit; on disk failure leave in-memory project unchanged. Use one previous checkpoint and verify the media SHA-256 on restart.
+- Never silently delete cached media after a failed recovery. Provide an explicit local-data delete action, locked to one running Studio per workspace.
+
+## Current v2 event types
 `analysis.propose`, `segment.update`, `segment.remove`, `segment.insert`, `timeline.restore_suggestion`, `timeline.keep_all`, `timeline.approve`, `timeline.replace` (legacy bridge).
 
 ## Future rule for prompt-driven changes
@@ -32,4 +41,4 @@ AI may **propose** a list of typed events plus evidence and rationale, but never
 `python -m unittest discover -s tests -v`
 `python scripts/validate_skills.py`
 
-The v1 import/export already protects video identity with SHA-256 and replays event history. Undo/redo and effects are planned, not currently implemented.
+Portable v2 project export/import, Undo/Redo, v1 import migration and local active-session recovery are implemented. Subtitle, audio/video effect commands and multi-project management are still future work.

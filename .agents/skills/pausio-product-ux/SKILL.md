@@ -14,7 +14,7 @@ Creators want to finish a trustworthy talking-head video, not learn FFmpeg or ne
 3. Design **empty, loading, ready, error and completed** states for each action. Every error must explain the next safe action.
 4. Provide understandable **Importa progetto / Esporta progetto** actions with clear source pairing; every edit must be replayable. Show exactly what was proposed and what will be removed. Require explicit approval; modifying a cut invalidates approval and any previous export.
 5. Preview editing decisions *before* rendering. Clearly mark the browser's seek-simulation as an approximation, not final AV quality.
-6. Keep the original immutable and make recovery easy: restore suggestion, retain all, add missed region, edit seconds.
+6. Keep the original immutable and make recovery easy: restore suggestion, retain all, add missed region, edit seconds, **Undo/Redo**. State clearly that Studio autosaves the original video locally until the creator explicitly deletes stored data. Test recovery after closing and reopening.
 7. Test with a first-time creator without CLI knowledge. Measure task completion and editing clarity, not merely visual appeal.
 
 ## Before shipping

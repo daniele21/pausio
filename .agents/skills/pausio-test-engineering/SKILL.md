@@ -9,7 +9,7 @@ description: Use when adding tests, fixing regressions, modifying GitHub CI, ben
 1. Write a minimal failing test/reproduction for a bug, or an explicit acceptance criterion for a feature.
 2. Place pure-domain tests in `tests/test_domain.py` and policy tests in `tests/test_planner.py`; media/CLI tests in `tests/test_media.py` and `tests/test_cli.py`; synthetic video E2E in `tests/test_e2e.py`.
 3. Generate small synthetic fixtures with FFmpeg when possible. Do not commit real personal video/audio, full transcripts, embeddings or weights.
-4. Test positive, negative and interrupted paths. Verify non-destructive behavior and predictable errors as well as happy-path output.
+4. Test positive, negative and interrupted paths. Verify non-destructive behavior and predictable errors as well as happy-path output. Specifically test Undo→Redo, branching after Undo, v1→v2 project migration, persisted redo cursor, save failure rollback, corrupted-checkpoint fallback, same-directory locking and explicit removal of private cached media.
 5. For timebase changes, test edited boundaries on source frames and audio samples, not only duration/stream metadata.
 6. Keep fast deterministic tests in the required CI path. Optional slow ML/golden tests must be opt-in, version-pinned and run on representative macOS/Linux machines.
 7. When media quality is subjective, report **what required human video/audio inspection** and do not mark visual or phoneme fidelity as verified by metadata-only tests.

@@ -4,7 +4,7 @@
 
 **Every editing action is a typed instruction.** The UI never directly owns the final timeline. The pure Python reducer `src/pausio/project_commands.py` validates/replays an ordered command tape and derives the same `EditPlan` used by FFmpeg.
 
-The format is `pausio.project`, `schema_version: 1` and is documented by [JSON Schema v1](../schemas/pausio-project-v1.schema.json). JSON Schema checks the *shape*; the reducer additionally checks ordering, interval overlap, valid IDs, existing targets, media duration bounds and command history semantics.
+The current format is `pausio.project`, `schema_version: 2` and is documented by [JSON Schema v2](../schemas/pausio-project-v2.schema.json). **Existing v1 files remain readable** using a strict migration (all commands preserved; history cursor placed at the end). V1 schema: [JSON Schema v1](../schemas/pausio-project-v1.schema.json). JSON Schema checks the *shape*; the reducer additionally checks ordering, interval overlap, valid IDs, existing targets, media duration bounds and command history semantics.
 
 ## Example
 
@@ -13,7 +13,7 @@ Below is explanatory sample data, **not a file for importing against your own vi
 ```json
 {
   "format": "pausio.project",
-  "schema_version": 1,
+  "schema_version": 2,
   "media": {
     "filename": "ripresa.mp4",
     "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -48,11 +48,13 @@ Below is explanatory sample data, **not a file for importing against your own vi
       "type": "timeline.approve",
       "payload": {}
     }
-  ]
+  ],
+  "history_cursor": 3,
+  "revision": 3
 }
 ```
 
-This reproduces a final kept timeline of `[0,2400)` and `[3900,10000)`, with explicit human approval. No ASR rerun is necessary because the proposal is recorded as concrete source-time intervals.
+This reproduces a final kept timeline of `[0,2400)` and `[3900,10000)`, with explicit human approval. The example has three total events, all applied; `history_cursor` is 3. No ASR rerun is necessary because the proposal is recorded as concrete source-time intervals.
 
 ## Command vocabulary v1
 
@@ -70,6 +72,16 @@ This reproduces a final kept timeline of `[0,2400)` and `[3900,10000)`, with exp
 IDs are 32-character lowercase hex identifiers. Times are integer milliseconds on the **original source timeline**, not output timestamps. Keep regions are half-open [start_ms, end_ms), sorted, non-overlapping and within media duration. Source paths, video bytes, model weights and transcripts are deliberately excluded from this v1 project file.
 
 Only timeline-changing commands reset approval; an imported approved timeline stays logically approved **only after matching the exact source fingerprint**. Rendering an imported project still requires explicitly clicking Export and validating the final output.
+
+## Undo, Redo and revisions in v2
+
+- `commands` contains the **complete ordered history**, including any future events that can be redone. `history_cursor` is the number of currently applied events, from 0 through `len(commands)`.
+- `revision` is a **monotonic concurrency token**, incremented by every accepted edit, Undo and Redo. It is not necessarily equal to the number of events. All API commands must carry the current revision; stale callers receive HTTP 409.
+- The UI sends explicit `history.undo` and `history.redo` operations to `POST /api/command` with an empty payload. These **move the cursor**, while preserving the original immutable events. Undo/Redo is therefore structured and reversible, and the current position survives project export/import.
+- A new editing event after Undo truncates the inactive Redo tail before appending the new event. Old event IDs stay stable; new events get new IDs. Rendering always uses the replayed **active prefix**, never the inactive tail.
+- An explicit `timeline.approve` event may be undone/redone along with the edit history. Edits made after Undo invalidate prior approval as usual.
+- Import validates both the active prefix **and the complete redo tail**; unknown or corrupted instructions are rejected even when currently undone.
+- V1 imports are upgraded to V2 in memory; exporting always writes V2, preserving original event IDs and instructions.
 
 ## API and UI flow
 
@@ -91,9 +103,15 @@ Only timeline-changing commands reset approval; an imported approved timeline st
 }
 ```
 
-The server assigns a unique event ID, validates the requested revision against the current history length, and responds with a fresh authoritative snapshot. Stale revisions fail with HTTP 409 (optimistic concurrency); malformed commands fail with HTTP 400. The Studio UI never sends a generic "overwrite the entire JSON" for single-range edits.
+The server assigns a unique event ID, validates the requested revision against the monotonic project revision, and responds with a fresh authoritative snapshot. Stale revisions fail with HTTP 409 (optimistic concurrency); malformed commands fail with HTTP 400. The Studio UI never sends a generic "overwrite the entire JSON" for single-range edits.
 
 The legacy `POST /api/plan` continues to work for compatibility, but explicitly creates a `timeline.replace` instruction.
+
+## Local autosave versus the portable project
+
+Pausio Studio also maintains a **private, automatically saved local session** for crash/restart recovery. This is distinct from the portable document: the local workspace retains a copy of the imported video and an atomic JSON checkpoint, plus one previous checkpoint for fallback. Closing the server does not erase this directory. Default paths: macOS `~/Library/Application Support/Pausio/Studio`; Linux `~/.local/share/pausio/studio` (or XDG_DATA_HOME). Use `pausio studio --data-dir <directory>` to choose another folder.
+
+The session is locked to a single running Studio process; file/directory permissions on POSIX are 0600/0700. If the latest checkpoint is damaged, Studio attempts to recover the previous valid one without discarding media. The UI allows **Elimina dati locali** to remove stored media and project/checkpoints. **Raw transcript data is not part of this v2 autosave**; ClosedRoom remains the ASR owner. The exported `.pausio.json` never embeds the video.
 
 ## Portability and safety
 
@@ -115,4 +133,4 @@ The legacy `POST /api/plan` continues to work for compatibility, but explicitly 
 
 ## Next evolution
 
-Add generic undo/redo by structured history cursor or explicit compensating commands; structured effects (captions, crop, color, audio), selection tools, AI/prompt edits (as a proposal that emits the **same typed commands**), batch operations and optional interchange exporters (e.g. OpenTimelineIO / CapCut). Preserve the canonical Pausio command model as source of truth rather than making CapCut drafts the database.
+Extend structured effects (captions, crop, color, audio), selection tools, AI/prompt edits (as a proposal that emits the **same typed commands**), batch operations and optional interchange exporters (e.g. OpenTimelineIO / CapCut). Preserve the canonical Pausio command model as source of truth rather than making CapCut drafts the database.

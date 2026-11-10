@@ -20,7 +20,7 @@ Tasks may use two relevant skills; avoid loading the entire catalog by default.
 
 ## Structured editing commands and portable projects
 
-Use [pausio-edit-command-schema](../.agents/skills/pausio-edit-command-schema/SKILL.md) whenever adding an edit tool, changing project import/export, implementing AI prompt edits, undo/redo or external interchange. All output-affecting UI actions must have typed commands with deterministic replay. See [PROJECT_FORMAT.md](PROJECT_FORMAT.md).
+Use [pausio-edit-command-schema](../.agents/skills/pausio-edit-command-schema/SKILL.md) whenever adding an edit tool, changing project import/export, implementing AI prompt edits, undo/redo or external interchange. All output-affecting UI actions must have typed commands with deterministic replay. Undo/Redo use a V2 history cursor and monotonic revision; autosave commits a private local project plus media atomically, with recovery tests. Portable project export remains media-free. See [PROJECT_FORMAT.md](PROJECT_FORMAT.md).
 
 ## Pausio Studio UX/UI skills
 

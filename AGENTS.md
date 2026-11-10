@@ -5,13 +5,14 @@ Pausio is a local-first, reviewable editor for natural talking-head videos. Read
 ## Non-negotiable product contracts
 
 - **UI tests must exercise real behavior:** import, analyze, edit KEEP spans, approve explicitly, render and download—never decorative mock controls.
+- **Undo/Redo are typed history operations with an exported active cursor and monotonic revision**; a new edit after Undo must truncate the redo tail, with v1 import compatibility. Tests must cover crash-safe disk writes and session recovery.
 - **Every output-affecting UI edit MUST be a typed, deterministic, importable/exportable command** in `project_commands.py`, with stable IDs, integer millisecond units, strict schema validation and replay tests. The UI cannot own an untracked authoritative timeline; unknown command versions must fail closed. Read `docs/PROJECT_FORMAT.md`.
 - **Models propose, humans approve, deterministic rendering executes.** Do not automatically render proposed edits without a user-controlled review step.
 - Input media is immutable. Do not overwrite raw files; require explicit overwrite for outputs.
 - Keep `src/pausio/domain.py` and `src/pausio/planner.py` independent of FFmpeg, ML frameworks, and UI.
 - All edit-plan times are integer **milliseconds**. Intervals are half-open [start_ms, end_ms), sorted, non-overlapping, and validated. Preserve the versioned schema or write an explicit migration and tests.
 - **ClosedRoom is the source of truth for transcription.** Reuse the working ASR in `daniele21/closedroom` (`dev`) via a narrow adapter. Never implement a parallel Whisper, faster-whisper, WhisperX, Nemotron or Silero ASR/VAD stack inside Pausio. If reusable engine extraction is needed, do it upstream in ClosedRoom.
-- Studio binds exclusively to loopback; browser imports remain local ephemeral files. Preserve CSRF safeguards, keyboard navigation and accessible state.
+- Studio binds exclusively to loopback; browser imports are copied into a private persistent local workspace for autosave/recovery. Respect the explicit delete action, 0600/0700 permissions on POSIX, atomic checkpoints, source-hash verification, single-process lock, CSRF safeguards and keyboard accessibility.
 - Local-first means no implicit upload, telemetry, remote models or auto-downloading weights. Any network-dependent feature needs user opt-in.
 - Do not vendor third-party media/editor code or distribute binaries/weights without documented licensing approval.
 - Reject destructive changes, unstated fallback behaviors, silent speech removal and unreviewed AI decisions.

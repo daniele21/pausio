@@ -221,7 +221,7 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         self.assertEqual(status, 200)
         self.assertIn(".pausio.json", headers["Content-Disposition"])
         document = json.loads(serialized)
-        self.assertEqual(document["schema_version"], 1)
+        self.assertEqual(document["schema_version"], 2)
         self.assertEqual(
             [item["type"] for item in document["commands"]],
             ["analysis.propose", "segment.update", "timeline.approve"],
@@ -247,13 +247,76 @@ class StudioMediaWorkflowTests(StudioHttpTests):
 
         wrong = json.loads(json.dumps(document))
         wrong["media"]["sha256"] = "f" * 64
-        for bad in (wrong, {**document, "schema_version": 2},
+        for bad in (wrong, {**document, "schema_version": 3},
                     {**document, "commands": [{"id": "0" * 32,
                                               "type": "execute.code", "payload": {}}]}):
             status, _, _ = self.post("/api/project/import", bad)
             self.assertEqual(status, 400)
             self.assertEqual(self.get_state()["project_revision"], 3)
             self.assertEqual(self.get_state()["editor_segments"], approved["editor_segments"])
+
+    def test_undo_redo_v2_import_and_new_edit_branches(self):
+        self.import_clip()
+        status, _, _ = self.post("/api/jobs", {"kind": "analyze"})
+        self.assertEqual(status, 202)
+        analyzed = self.await_job("analyze")
+        self.assertEqual(analyzed["project_revision"], 1)
+        original = analyzed["editor_segments"]
+
+        status, _, data = self.post("/api/command", {
+            "revision": 1, "type": "timeline.keep_all", "payload": {}
+        })
+        self.assertEqual(status, 200, data)
+        all_keep = json.loads(data)
+        self.assertTrue(all_keep["can_undo"])
+        self.assertFalse(all_keep["can_redo"])
+        self.assertEqual(all_keep["project_revision"], 2)
+
+        status, _, data = self.post("/api/command", {
+            "revision": 2, "type": "history.undo", "payload": {}
+        })
+        self.assertEqual(status, 200, data)
+        undone = json.loads(data)
+        self.assertEqual(undone["editor_segments"], original)
+        self.assertEqual(undone["history_cursor"], 1)
+        self.assertEqual(undone["project_revision"], 3)
+        self.assertTrue(undone["can_redo"])
+
+        portable = json.loads(self.request("GET", "/api/project/export")[2])
+        self.assertEqual(portable["schema_version"], 2)
+        self.assertEqual(portable["history_cursor"], 1)
+        self.assertEqual(len(portable["commands"]), 2)
+        self.assertEqual(portable["revision"], 3)
+
+        status, _, data = self.post("/api/command", {
+            "revision": 3, "type": "history.redo", "payload": {}
+        })
+        self.assertEqual(status, 200, data)
+        redone = json.loads(data)
+        self.assertEqual(redone["editor_segments"], all_keep["editor_segments"])
+        self.assertEqual(redone["project_revision"], 4)
+
+        status, _, data = self.post("/api/project/import", portable)
+        self.assertEqual(status, 200, data)
+        restored = json.loads(data)
+        self.assertEqual(restored["editor_segments"], original)
+        self.assertTrue(restored["can_redo"])
+        self.assertEqual(restored["project_revision"], 3)
+
+        status, _, data = self.post("/api/command", {
+            "revision": 3, "type": "timeline.keep_all", "payload": {}
+        })
+        self.assertEqual(status, 200, data)
+        forked = json.loads(data)
+        self.assertFalse(forked["can_redo"])
+        self.assertEqual(forked["command_count"], 2)
+        self.assertEqual(forked["project_revision"], 4)
+
+        status, _, data = self.post("/api/command", {
+            "revision": 3, "type": "history.undo", "payload": {}
+        })
+        self.assertEqual(status, 409)
+        self.assertIn("Versione", json.loads(data)["error"])
 
     def test_export_requires_matching_uploaded_video(self):
         status, _, response = self.request("GET", "/api/project/export")

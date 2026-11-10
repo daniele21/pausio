@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import sys
 import re
 import shutil
 import tempfile
@@ -24,9 +26,10 @@ from pausio.domain import EditPlan, Interval
 from pausio.media import MediaInfo, detect_silences, probe, render
 from pausio.planner import propose_segments
 from pausio.project_commands import ProjectTape, ProjectFormatError, UI_COMMANDS
+from pausio.studio_persistence import StudioSessionStore, RecoveryError, default_studio_directory
 
 MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024
-MAX_JSON_BYTES = 256 * 1024
+MAX_JSON_BYTES = 4 * 1024 * 1024
 ALLOWED_VIDEO_EXTENSIONS = frozenset({".mp4", ".mov", ".m4v", ".mkv", ".webm"})
 ASSETS = {
     "/": ("index.html", "text/html; charset=utf-8"),
@@ -43,9 +46,10 @@ class StudioError(ValueError):
 class StudioWorkspace:
     """Single-user, ephemeral project with mutually exclusive mutating jobs."""
 
-    def __init__(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory(prefix="pausio-studio-")
-        self.directory = Path(self._tmp.name)
+    def __init__(self, *, data_dir: Path | None = None) -> None:
+        self.store = StudioSessionStore(data_dir) if data_dir is not None else None
+        self._tmp = None if self.store else tempfile.TemporaryDirectory(prefix="pausio-studio-")
+        self.directory = self.store.directory if self.store else Path(self._tmp.name)
         self.lock = threading.RLock()
         self.importing = False
         self.approved = False
@@ -59,10 +63,43 @@ class StudioWorkspace:
         self.suggested_plan: EditPlan | None = None
         self.transcript: dict | None = None
         self.export_ready = False
+        self.recovered = False
+        self.recovery_warning: str | None = None
         self.job: dict = {"status": "idle", "kind": None, "error": None}
 
+        if self.store:
+            try:
+                recovered = self.store.recover()
+                if recovered:
+                    source, tape, from_backup = recovered
+                    info = probe(source)
+                    tape.require_media(
+                        sha256=tape.media["sha256"],
+                        duration_ms=info.duration_ms, has_audio=info.has_audio,
+                    )
+                    self.source = source
+                    self.filename = tape.media["filename"]
+                    self.media_sha256 = tape.media["sha256"]
+                    self.media_id = uuid.uuid4().hex
+                    self.info = info
+                    self._install_tape(tape, persist=False)
+                    self.recovered = True
+                    if from_backup:
+                        self.recovery_warning = (
+                            "Recuperata una copia precedente: l'ultimo salvataggio era incompleto."
+                        )
+                    self.store.cleanup_orphans(self.source)
+            except (RecoveryError, OSError, ValueError) as exc:
+                # Never erase damaged recovery files automatically.
+                self.recovery_warning = str(exc)[:350]
+
     def close(self) -> None:
-        self._tmp.cleanup()
+        # Persistent media is deleted only by explicit "Elimina dati locali",
+        # not implicitly when the user closes the browser/server.
+        if self._tmp is not None:
+            self._tmp.cleanup()
+        if self.store:
+            self.store.close()
 
     def _ensure_unlocked(self) -> None:
         if self.importing or self.job["status"] == "running":
@@ -75,10 +112,16 @@ class StudioWorkspace:
                 "file": self.filename,
                 "media_id": self.media_id,
                 "approved": self.approved,
+                "autosaved": self.store is not None,
+                "recovered": self.recovered,
+                "recovery_warning": self.recovery_warning,
                 "project_revision": self.tape.revision if self.tape else 0,
                 "editor_segments": [dict(s) for s in self.tape.view.segments] if self.tape else [],
-                "command_count": self.tape.revision if self.tape else 0,
-                "last_command": self.tape.commands[-1]["type"] if self.tape and self.tape.commands else None,
+                "command_count": len(self.tape.commands) if self.tape else 0,
+                "history_cursor": self.tape.history_cursor if self.tape else 0,
+                "can_undo": self.tape.can_undo if self.tape else False,
+                "can_redo": self.tape.can_redo if self.tape else False,
+                "last_command": self.tape.active_command["type"] if self.tape and self.tape.active_command else None,
                 "media": self.info.as_dict() if self.info else None,
                 "plan": self.plan.as_dict() if self.plan else None,
                 "suggested_plan": self.suggested_plan.as_dict() if self.suggested_plan else None,
@@ -98,44 +141,65 @@ class StudioWorkspace:
             self.importing = True
         return self.directory / f"incoming-{uuid.uuid4().hex}{suffix}", label[:160]
 
-    def finish_import(self, candidate: Path, label: str, info: MediaInfo | None, sha256: str | None = None) -> None:
+    def abort_import(self, candidate: Path) -> None:
+        with self.lock:
+            candidate.unlink(missing_ok=True)
+            self.importing = False
+
+    def finish_import(
+        self, candidate: Path, label: str, info: MediaInfo | None, sha256: str | None = None
+    ) -> None:
         with self.lock:
             try:
-                if info is not None:
-                    old_source = self.source
-                    self.source = candidate
-                    self.filename = label
-                    self.media_id = uuid.uuid4().hex
-                    self.approved = False
-                    self.info = info
-                    if sha256 is None:
-                        with candidate.open("rb") as file:
-                            sha256 = hashlib.file_digest(file, "sha256").hexdigest()
-                    self.media_sha256 = sha256
-                    self.tape = ProjectTape({
-                        "filename": label, "sha256": sha256,
-                        "duration_ms": info.duration_ms, "has_audio": info.has_audio,
-                    })
-                    self.plan = None
-                    self.suggested_plan = None
-                    self.transcript = None
-                    self.export_ready = False
-                    self.job = {"status": "idle", "kind": None, "error": None}
-                    if old_source and old_source != candidate:
-                        old_source.unlink(missing_ok=True)
-                    (self.directory / "export.mp4").unlink(missing_ok=True)
-                else:
+                if info is None:
                     candidate.unlink(missing_ok=True)
+                    return
+                if sha256 is None:
+                    with candidate.open("rb") as file:
+                        sha256 = hashlib.file_digest(file, "sha256").hexdigest()
+                tape = ProjectTape({
+                    "filename": label, "sha256": sha256,
+                    "duration_ms": info.duration_ms, "has_audio": info.has_audio,
+                })
+                new_source = candidate
+                if self.store is not None:
+                    # Commit point is the atomic JSON checkpoint, NOT in-memory state.
+                    # Leave the old session intact until the new checkpoint succeeds.
+                    new_source = self.store.media_path(sha256, candidate.suffix)
+                    os.replace(candidate, new_source)
+                    if os.name == "posix":
+                        new_source.chmod(0o600)
+                    self.store.save(tape, new_source)
+
+                old_source = self.source
+                self.source = new_source
+                self.filename = label
+                self.media_id = uuid.uuid4().hex
+                self.media_sha256 = sha256
+                self.info = info
+                self.tape = tape
+                self.plan = None
+                self.suggested_plan = None
+                self.approved = False
+                self.transcript = None
+                self.export_ready = False
+                self.recovered = False
+                self.recovery_warning = None
+                self.job = {"status": "idle", "kind": None, "error": None}
+                if self.store:
+                    self.store.cleanup_orphans(new_source)
+                elif old_source and old_source != new_source:
+                    old_source.unlink(missing_ok=True)
+                (self.directory / "export.mp4").unlink(missing_ok=True)
             finally:
                 self.importing = False
 
-    def _install_tape(self, tape: ProjectTape) -> None:
-        """Replace derived state only after full validation; never allow partial replay."""
+    def _install_tape(self, tape: ProjectTape, *, persist: bool = True) -> None:
+        """Only expose the new derived state after successful autosave."""
         assert self.source is not None
-        self.tape = tape
-        self.plan = tape.edit_plan(str(self.source))
+        new_plan = tape.edit_plan(str(self.source))
         proposal = tape.view.suggested
-        self.suggested_plan = (
+        suggested_plan = (
             EditPlan(
                 source=str(self.source), source_duration_ms=tape.media["duration_ms"],
                 has_audio=tape.media["has_audio"],
@@ -143,9 +207,38 @@ class StudioWorkspace:
             )
             if proposal is not None else None
         )
+        if persist and self.store:
+            self.store.save(tape, self.source)
+        self.tape = tape
+        self.plan = new_plan
+        self.suggested_plan = suggested_plan
         self.approved = tape.view.approved
         self.export_ready = False
         (self.directory / "export.mp4").unlink(missing_ok=True)
+
+    def clear_session(self) -> None:
+        """Forget explicitly, including managed cached media and recovery backups."""
+        with self.lock:
+            self._ensure_unlocked()
+            if self.store:
+                self.store.drop()
+            elif self.source:
+                self.source.unlink(missing_ok=True)
+            (self.directory / "export.mp4").unlink(missing_ok=True)
+            self.source = None
+            self.filename = None
+            self.info = None
+            self.media_sha256 = None
+            self.media_id = None
+            self.tape = None
+            self.plan = None
+            self.suggested_plan = None
+            self.approved = False
+            self.transcript = None
+            self.export_ready = False
+            self.recovered = False
+            self.recovery_warning = None
+            self.job = {"status": "idle", "kind": None, "error": None}
 
     def command(self, raw: dict) -> None:
         """Execute a version-checked typed command requested by the Studio UI."""
@@ -159,11 +252,20 @@ class StudioWorkspace:
             if not isinstance(rev, int) or isinstance(rev, bool) or rev != self.tape.revision:
                 raise StudioError("Versione del progetto non aggiornata. Ricarica e riprova.")
             kind = raw["type"]
-            if not isinstance(kind, str) or kind not in UI_COMMANDS:
+            if not isinstance(kind, str) or kind not in (UI_COMMANDS | {"history.undo", "history.redo"}):
                 raise StudioError("Comando UI non supportato.")
             payload = raw["payload"]
             if not isinstance(payload, dict):
                 raise StudioError("Parametri del comando non validi.")
+            if kind in {"history.undo", "history.redo"}:
+                if payload:
+                    raise StudioError("Undo/Redo non accetta parametri.")
+                try:
+                    next_tape = self.tape.undo() if kind == "history.undo" else self.tape.redo()
+                except ProjectFormatError as exc:
+                    raise StudioError(str(exc)) from exc
+                self._install_tape(next_tape)
+                return
             if kind == "segment.insert":
                 if set(payload) != {"start_ms", "end_ms"}:
                     raise StudioError("Aggiungi intervallo richiede start_ms ed end_ms.")
@@ -188,7 +290,7 @@ class StudioWorkspace:
                 raise StudioError("Inserisci da 1 a 200 intervalli da mantenere.")
             try:
                 intervals = tuple(Interval(**row) for row in raw_segments)
-                self.plan = EditPlan(
+                EditPlan(
                     source=str(self.source), source_duration_ms=self.info.duration_ms,
                     segments=intervals, has_audio=self.info.has_audio,
                 )
@@ -395,6 +497,10 @@ class StudioHandler(BaseHTTPRequestHandler):
                 self.server.workspace.import_project(self._read_json())
                 self._json(200, self.server.workspace.snapshot())
                 return
+            if path == "/api/session/clear":
+                self.server.workspace.clear_session()
+                self._json(200, self.server.workspace.snapshot())
+                return
             if path == "/api/approve":
                 self.server.workspace.approve_plan()
                 self._json(200, self.server.workspace.snapshot())
@@ -417,8 +523,10 @@ class StudioHandler(BaseHTTPRequestHandler):
         destination, label = self.server.workspace.begin_import(filename)
         metadata: MediaInfo | None = None
         digest = hashlib.sha256()
+        completed = False
         try:
-            with destination.open("xb") as target:
+            fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "wb") as target:
                 remaining = size
                 while remaining:
                     chunk = self.rfile.read(min(1024 * 1024, remaining))
@@ -427,12 +535,15 @@ class StudioHandler(BaseHTTPRequestHandler):
                     target.write(chunk)
                     digest.update(chunk)
                     remaining -= len(chunk)
+                target.flush()
+                os.fsync(target.fileno())
             metadata = probe(destination)
             self.server.workspace.finish_import(destination, label, metadata, digest.hexdigest())
+            completed = True
             self._json(200, self.server.workspace.snapshot())
         finally:
-            if metadata is None:
-                self.server.workspace.finish_import(destination, label, None)
+            if not completed:
+                self.server.workspace.abort_import(destination)
 
     def do_GET(self) -> None:
         path = urlsplit(self.path).path
@@ -547,10 +658,21 @@ def create_server(*, port: int = 8765, workspace: StudioWorkspace | None = None)
     return StudioServer(("127.0.0.1", port), workspace or StudioWorkspace())
 
 
-def run_studio(*, port: int = 8765, open_browser: bool = True) -> None:
-    server = create_server(port=port)
+def run_studio(
+    *, port: int = 8765, open_browser: bool = True, data_dir: Path | None = None
+) -> None:
+    workspace = StudioWorkspace(data_dir=data_dir or default_studio_directory())
+    try:
+        server = create_server(port=port, workspace=workspace)
+    except BaseException:
+        workspace.close()
+        raise
     url = f"http://127.0.0.1:{server.server_port}"
-    print(f"Pausio Studio • {url}\nTutti i file restano su questo Mac. Ctrl+C per chiudere.")
+    print(
+        f"Pausio Studio • {url}\n"
+        f"Sessione salvata localmente in: {workspace.directory}\n"
+        "Per eliminare i media locali usa «Elimina dati locali»."
+    )
     if open_browser:
         webbrowser.open(url)
     try:
