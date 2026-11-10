@@ -366,3 +366,23 @@ a { color: inherit; text-decoration: none; }
 .project-io { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; }
 .project-io .button { font-size: 10px; padding: 0 7px; min-height: 36px; white-space: normal; line-height: 1.3; text-align: center; }
 .project-io a.button { word-break: normal; }
+
+/* Durable local session and reversible edit history */
+.autosave-indicator {
+  color: var(--keep); font-size: 10px; line-height: 1.55;
+  margin: 0 0 12px; overflow-wrap: anywhere;
+}
+.history-actions {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px; margin: 0 0 9px;
+}
+.history-actions button {
+  min-height: 37px; white-space: normal;
+  font-size: 11px; padding: 6px 7px;
+}
+.clear-session-action {
+  background: transparent; border: none; padding: 12px 0 2px; width: 100%;
+  text-align: left; color: var(--muted); font-size: 10px;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.clear-session-action:not(:disabled):hover { color: var(--danger); }

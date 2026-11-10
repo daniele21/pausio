@@ -98,6 +98,8 @@ class StudioWorkspace:
         # not implicitly when the user closes the browser/server.
         if self._tmp is not None:
             self._tmp.cleanup()
+        if self.store:
+            self.store.close()
 
     def _ensure_unlocked(self) -> None:
         if self.importing or self.job["status"] == "running":
@@ -652,10 +654,21 @@ def create_server(*, port: int = 8765, workspace: StudioWorkspace | None = None)
     return StudioServer(("127.0.0.1", port), workspace or StudioWorkspace())
 
 
-def run_studio(*, port: int = 8765, open_browser: bool = True) -> None:
-    server = create_server(port=port)
+def run_studio(
+    *, port: int = 8765, open_browser: bool = True, data_dir: Path | None = None
+) -> None:
+    workspace = StudioWorkspace(data_dir=data_dir or default_studio_directory())
+    try:
+        server = create_server(port=port, workspace=workspace)
+    except BaseException:
+        workspace.close()
+        raise
     url = f"http://127.0.0.1:{server.server_port}"
-    print(f"Pausio Studio • {url}\nTutti i file restano su questo Mac. Ctrl+C per chiudere.")
+    print(
+        f"Pausio Studio • {url}\n"
+        f"Sessione salvata localmente in: {workspace.directory}\n"
+        "Per eliminare i media locali usa «Elimina dati locali»."
+    )
     if open_browser:
         webbrowser.open(url)
     try:

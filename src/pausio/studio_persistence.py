@@ -10,6 +10,7 @@ Never call this module from the pure edit reducer or from the renderer.
 from __future__ import annotations
 
 import hashlib
+import fcntl
 import json
 import os
 import re
@@ -61,6 +62,20 @@ class StudioSessionStore:
             self.directory.chmod(0o700)
         self.active = self.directory / STATE_FILE
         self.previous = self.directory / BACKUP_FILE
+        self._lock_fd = os.open(
+            self.directory / ".session.lock", os.O_CREAT | os.O_RDWR, 0o600
+        )
+        try:
+            fcntl.flock(self._lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            os.close(self._lock_fd)
+            raise RecoveryError(
+                "Pausio Studio è già aperto con questa cartella di progetto."
+            ) from exc
+
+    def close(self) -> None:
+        fcntl.flock(self._lock_fd, fcntl.LOCK_UN)
+        os.close(self._lock_fd)
 
     def media_path(self, sha256: str, suffix: str) -> Path:
         filename = f"media-{sha256}{suffix.lower()}"
@@ -111,6 +126,8 @@ class StudioSessionStore:
         raw = (json.dumps(state, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
         if len(raw) > MAX_STATE_BYTES:
             raise RecoveryError("La sessione è troppo grande per il salvataggio automatico.")
+        if self.active.is_symlink() or self.previous.is_symlink():
+            raise RecoveryError("Il file di autosalvataggio non può essere un collegamento.")
         if self.active.is_file():
             # Keep previous known-good state; this copy is also atomically written.
             self._atomic_bytes(self.previous, self.active.read_bytes())
@@ -174,11 +191,28 @@ class StudioSessionStore:
                 path.unlink(missing_ok=True)
 
     def cleanup_orphans(self, active_video: Path | None) -> None:
-        """Prune only our own abandoned imports/media, after verified recovery."""
-        for path in self.directory.iterdir():
-            if path == active_video or not path.is_file() or path.is_symlink():
+        """Prune abandoned imports and media NOT referenced by either checkpoint.
+
+        Keep media from the previous checkpoint too: if the newest autosave
+        is corrupted, falling back must never point to an already deleted video.
+        """
+        protected = {active_video.name} if active_video else set()
+        for session_file in (self.active, self.previous):
+            if session_file.is_symlink() or not session_file.is_file():
                 continue
-            if MEDIA_FILE_PATTERN.fullmatch(path.name) or re.fullmatch(
-                r"incoming-[0-9a-f]{32}\.(?:mp4|mov|m4v|mkv|webm)", path.name
-            ) or path.name.startswith(".pausio-save-"):
+            try:
+                data = json.loads(session_file.read_text(encoding="utf-8"))
+                name = data.get("media_file") if isinstance(data, dict) else None
+                if isinstance(name, str) and MEDIA_FILE_PATTERN.fullmatch(name):
+                    protected.add(name)
+            except (OSError, UnicodeError, json.JSONDecodeError):
+                continue
+        for path in self.directory.iterdir():
+            if path.name in protected or not path.is_file() or path.is_symlink():
+                continue
+            if (
+                MEDIA_FILE_PATTERN.fullmatch(path.name)
+                or re.fullmatch(r"incoming-[0-9a-f]{32}\.(?:mp4|mov|m4v|mkv|webm)", path.name)
+                or path.name.startswith(".pausio-save-")
+            ):
                 path.unlink(missing_ok=True)

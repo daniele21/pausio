@@ -4,6 +4,7 @@ const el = id => document.getElementById(id);
 const v = el("preview-video");
 let project = null, mediaKey = null, mode = "original", uploading = false;
 let lastJobNotice = "", toastTimeout = 0, dragLevel = 0;
+let didNotifyRecovery = false;
 const msFormat = (value, exact=false) => {
   const x = Math.max(0, Math.floor(Number(value) || 0));
   const base = String(Math.floor(x/60000)).padStart(2,"0") + ":" +
@@ -55,8 +56,16 @@ function update(next){
   el("project-meta").textContent=has?msFormat(next.media.duration_ms)+" · "+next.media.width+" × "+
     next.media.height+" · "+(next.media.has_audio?"Audio presente":"Senza audio"):"Scegli un file per iniziare.";
   el("project-revision").textContent = has
-    ? "Progetto · "+String(next.command_count || 0)+" istruzioni registrate"
+    ? "Progetto · "+String(next.history_cursor ?? next.command_count)+" / "+
+      String(next.command_count || 0)+" istruzioni applicate"
     : "Progetto non ancora inizializzato";
+  el("autosave-indicator").textContent = next.autosaved
+    ? has ? "✓ Salvato sul Mac · recuperabile dopo il riavvio" :
+      "Autosalvataggio locale attivo"
+    : "Sessione temporanea: esporta il progetto per conservarlo";
+  el("undo-action").disabled = !has || !next.can_undo || busy;
+  el("redo-action").disabled = !has || !next.can_redo || busy;
+  el("clear-session").disabled = !has || busy;
   el("project-export").hidden=!has;
   el("project-import").disabled=!has||busy;
   el("import-label").textContent=has?"Cambia video":"Importa video";
@@ -106,6 +115,13 @@ function update(next){
   el("canvas-badge").textContent=mode==="edited"?"MONTAGGIO • ANTEPRIMA":"ORIGINALE";
   el("job-banner").hidden=!busy;
   if(busy&&!uploading)el("job-message").textContent=busyLabel(next.job.kind);
+  if(!didNotifyRecovery && next.recovery_warning){
+    didNotifyRecovery = true;
+    toast(next.recovery_warning,"error");
+  } else if(!didNotifyRecovery && next.recovered){
+    didNotifyRecovery = true;
+    toast("Sessione recuperata automaticamente. Puoi continuare a modificare.");
+  }
   if(["failed","completed"].includes(next.job?.status)){
     const signature=[next.media_id,next.job.kind,next.job.status,next.job.error].join("|");
     if(signature!==lastJobNotice){
@@ -225,6 +241,22 @@ async function startJob(kind){
 async function approve(){
   await edit("timeline.approve");
 }
+async function moveHistory(kind){
+  await edit(kind);
+}
+async function clearSession(){
+  if(!project?.file)return;
+  if(!window.confirm(
+    "Eliminare il progetto attivo e la copia locale del video? "+
+    "Gli autosalvataggi verranno cancellati. "+
+    "Salva prima un file .pausio.json se vuoi conservarne le istruzioni."
+  ))return;
+  update(await post("/api/session/clear", {}));
+  mediaKey=null;
+  mode="original";
+  v.pause();v.removeAttribute("src");v.load();
+  toast("Sessione e video locali eliminati.");
+}
 function changeMode(chosen){
   if(chosen==="edited"&&!project?.plan)return;
   v.pause();mode=chosen;
@@ -315,6 +347,9 @@ el("analyze-action").addEventListener("click",()=>run(()=>startJob("analyze")));
 el("transcribe-action").addEventListener("click",()=>run(()=>startJob("transcribe")));
 el("export-action").addEventListener("click",()=>run(()=>startJob("render")));
 el("approve-action").addEventListener("click",()=>run(approve));
+el("undo-action").addEventListener("click",()=>run(()=>moveHistory("history.undo")));
+el("redo-action").addEventListener("click",()=>run(()=>moveHistory("history.redo")));
+el("clear-session").addEventListener("click",()=>run(clearSession));
 el("cuts-tab").addEventListener("click",()=>tab("cuts"));
 el("transcript-tab").addEventListener("click",()=>tab("transcript"));
 el("restore-suggested").addEventListener("click",()=>run(()=>edit("timeline.restore_suggestion")));
@@ -345,9 +380,21 @@ el("timeline-track").addEventListener("keydown",event=>{
   if(event.key==="End")v.currentTime=project.media.duration_ms/1000;
 });
 document.addEventListener("keydown",event=>{
+  const target=event.target;
+  if(["INPUT","TEXTAREA","SELECT"].includes(target?.tagName) || target?.isContentEditable)
+    return; // Let native fields handle their own undo.
+  if((event.metaKey||event.ctrlKey)&&!event.altKey){
+    const isRedo=(event.code==="KeyZ"&&event.shiftKey)||
+      (event.code==="KeyY"&&!event.shiftKey);
+    if((event.code==="KeyZ"&&!event.shiftKey)||isRedo){
+      event.preventDefault();
+      if(!working())run(()=>moveHistory(isRedo?"history.redo":"history.undo"));
+      return;
+    }
+  }
   if(event.metaKey||event.altKey||event.ctrlKey)return;
-  if(["INPUT","TEXTAREA","BUTTON","A","SELECT"].includes(event.target.tagName)||
-    event.target.isContentEditable||event.target.getAttribute("role")==="slider")return;
+  if(["BUTTON","A"].includes(target.tagName)||
+    target.getAttribute("role")==="slider")return;
   if(event.code==="Space"){event.preventDefault();play();}
   if(event.code==="ArrowLeft"){event.preventDefault();jump(-5);}
   if(event.code==="ArrowRight"){event.preventDefault();jump(5);}

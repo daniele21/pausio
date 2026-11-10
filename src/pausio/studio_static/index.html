@@ -68,6 +68,15 @@
             <span id="import-label">Importa video</span>
           </button>
           <p class="project-revision" id="project-revision">Progetto non ancora inizializzato</p>
+          <p class="autosave-indicator" id="autosave-indicator" role="status">
+            Sessione locale non ancora avviata
+          </p>
+          <div class="history-actions" role="group" aria-label="Cronologia del montaggio">
+            <button class="button button-outline" id="undo-action" type="button"
+              title="Annulla ultima operazione (Cmd/Ctrl+Z)" disabled>↶ Annulla</button>
+            <button class="button button-outline" id="redo-action" type="button"
+              title="Ripeti operazione annullata (Cmd/Ctrl+Shift+Z)" disabled>↷ Ripeti</button>
+          </div>
           <div class="project-io" aria-label="Importazione ed esportazione del progetto">
             <button class="button button-outline" id="project-import" type="button" disabled
               title="Carica un file .pausio.json e ricostruisci le modifiche sul video importato">
@@ -79,6 +88,10 @@
               Esporta progetto
             </a>
           </div>
+          <button type="button" class="clear-session-action" id="clear-session"
+            title="Elimina il video e gli autosalvataggi conservati sul Mac" disabled>
+            Elimina dati locali
+          </button>
         </div>
 
         <div class="rail-section tools">
