@@ -26,7 +26,9 @@
 - [x] Editable source-time ranges, restore decisions, original vs edited simulated preview, explicit approval and MP4 export.
 - [x] Optional ClosedRoom transcript panel; existing ASR stack remains upstream.
 - [x] Four tailored Studio UX/UI Agent Skills and automated HTTP/workflow tests.
-- [ ] Validate real browser UX and accessibility on macOS at desktop/tablet/mobile widths.
+- [x] Playwright Chromium browser audit on Linux with synthetic FFmpeg media: 320/390/768/1024/1440 viewport screenshots, complete editing/export, keyboard + pointer trim, responsive regression checks and JSON project round-trip.
+- [x] Playwright-found responsive fixes: 320px horizontal overflow, desktop timeline below fold, hidden approval control, waveform status refresh and mobile timeline order.
+- [ ] Validate Safari/macOS browser behavior, screen readers and real Samsung A56 video/UX with human testers.
 - [ ] Run real Samsung A56 videos through the full preview and export; inspect VFR, rotation, codec and A/V sync.
 - [x] Asynchronous waveform from actual FFmpeg-decoded audio (not a visual placeholder); source-time alignment, bounded to ≤15-minute clips.
 - [x] Precise range trim interactions on the timeline (pointer + accessible keyboard) issuing existing typed `segment.update` commands, not UI-only state.

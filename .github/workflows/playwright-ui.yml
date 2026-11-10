@@ -1,0 +1,43 @@
+name: Playwright UI Audit
+on:
+  push:
+    branches: [main, "daniele/**"]
+    paths:
+      - "src/pausio/**"
+      - "tests/browser/**"
+      - ".github/workflows/playwright-ui.yml"
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  playwright-studio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      PAUSIO_UI_ARTIFACTS: /tmp/pausio-ui-audit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install Pausio and Playwright
+        run: |
+          python -m pip install -e .
+          python -m pip install "playwright>=1.55,<2"
+          python -m playwright install --with-deps chromium
+      - name: Run real browser audit
+        run: python -m unittest discover -s tests/browser -v
+      - name: Save browser screenshots and layout diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pausio-playwright-ui-audit
+          path: /tmp/pausio-ui-audit/
+          retention-days: 14
+          if-no-files-found: warn
