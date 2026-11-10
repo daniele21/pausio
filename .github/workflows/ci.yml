@@ -1,0 +1,33 @@
+name: CI
+on:
+  push:
+    branches: [main, "daniele/**", "feature/**"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install FFmpeg and FFprobe
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install Pausio
+        run: python -m pip install -e .
+      - name: Compile all modules
+        run: python -m compileall -q src
+      - name: Run tests including a real-video smoke test
+        run: python -m unittest discover -s tests -v
+      - name: CLI smoke test
+        run: pausio doctor
