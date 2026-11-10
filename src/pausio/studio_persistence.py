@@ -10,15 +10,18 @@ Never call this module from the pure edit reducer or from the renderer.
 from __future__ import annotations
 
 import hashlib
-import fcntl
 import json
 import os
 import re
-import stat
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any
+
+try:
+    import fcntl  # POSIX: the file lock releases automatically after a crash.
+except ImportError:  # pragma: no cover - Windows compatibility
+    fcntl = None
+    import msvcrt
 
 from pausio.project_commands import ProjectTape, ProjectFormatError
 
@@ -66,16 +69,28 @@ class StudioSessionStore:
             self.directory / ".session.lock", os.O_CREAT | os.O_RDWR, 0o600
         )
         try:
-            fcntl.flock(self._lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError as exc:
+            if fcntl is not None:
+                fcntl.flock(self._lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            else:  # pragma: no cover - Windows compatibility
+                if os.fstat(self._lock_fd).st_size == 0:
+                    os.write(self._lock_fd, b"0")
+                os.lseek(self._lock_fd, 0, os.SEEK_SET)
+                msvcrt.locking(self._lock_fd, msvcrt.LK_NBLCK, 1)
+        except (OSError, BlockingIOError) as exc:
             os.close(self._lock_fd)
             raise RecoveryError(
                 "Pausio Studio è già aperto con questa cartella di progetto."
             ) from exc
 
     def close(self) -> None:
-        fcntl.flock(self._lock_fd, fcntl.LOCK_UN)
-        os.close(self._lock_fd)
+        try:
+            if fcntl is not None:
+                fcntl.flock(self._lock_fd, fcntl.LOCK_UN)
+            else:  # pragma: no cover - Windows compatibility
+                os.lseek(self._lock_fd, 0, os.SEEK_SET)
+                msvcrt.locking(self._lock_fd, msvcrt.LK_UNLCK, 1)
+        finally:
+            os.close(self._lock_fd)
 
     def media_path(self, sha256: str, suffix: str) -> Path:
         filename = f"media-{sha256}{suffix.lower()}"
@@ -170,6 +185,10 @@ class StudioSessionStore:
                 continue
             try:
                 video, tape = self._parse(candidate)
+                if candidate == self.previous:
+                    # Repair primary before the next save, so a corrupt active
+                    # document never overwrites the only known-good backup.
+                    self._atomic_bytes(self.active, self.previous.read_bytes())
                 return video, tape, candidate == self.previous
             except RecoveryError as exc:
                 errors.append(f"{candidate.name}: {exc}")

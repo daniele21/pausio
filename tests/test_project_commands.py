@@ -105,7 +105,7 @@ class ProjectReplayTests(unittest.TestCase):
         tape = analyze(ProjectTape(media()))
         d = tape.as_dict()
         mutated = copy.deepcopy(d)
-        mutated["schema_version"] = 2
+        mutated["schema_version"] = 3
         with self.assertRaises(ProjectFormatError):
             ProjectTape.from_dict(mutated)
         mutated = copy.deepcopy(d)
@@ -148,6 +148,83 @@ class ProjectReplayTests(unittest.TestCase):
             tape.append("segment.insert", {"segment": {
                 **segment(2100, 2300), "start_ms": "not a timestamp"
             }})
+
+    def test_undo_redo_export_import_and_new_branch(self):
+        tape = analyze(ProjectTape(media()))
+        s = tape.view.segments[0]
+        original_id = s["id"]
+        tape = tape.append("segment.update", {
+            "segment_id": original_id, "start_ms": 100, "end_ms": 1800
+        }).append("timeline.approve", {})
+        self.assertEqual(tape.revision, 3)
+        self.assertTrue(tape.view.approved)
+
+        undo_approval = tape.undo()
+        self.assertFalse(undo_approval.view.approved)
+        self.assertTrue(undo_approval.can_redo)
+        self.assertEqual(undo_approval.history_cursor, 2)
+        self.assertEqual(undo_approval.revision, 4)
+        undo_trim = undo_approval.undo()
+        self.assertEqual(undo_trim.view.segments[0]["id"], original_id)
+        self.assertEqual(undo_trim.view.segments[0]["start_ms"], s["start_ms"])
+        self.assertEqual(undo_trim.revision, 5)
+
+        portable = ProjectTape.from_dict(json.loads(json.dumps(undo_trim.as_dict())))
+        self.assertEqual(portable.revision, 5)
+        self.assertEqual(portable.history_cursor, 1)
+        self.assertEqual(len(portable.commands), 3)
+        self.assertTrue(portable.can_undo)
+        self.assertTrue(portable.can_redo)
+        redo = portable.redo().redo()
+        self.assertEqual(redo.view, tape.view)
+        self.assertEqual(redo.revision, 7)
+
+        forked = portable.append("timeline.keep_all", {})
+        self.assertEqual(forked.history_cursor, 2)
+        self.assertEqual(len(forked.commands), 2)
+        self.assertFalse(forked.can_redo)
+        self.assertEqual(forked.revision, 6)
+        self.assertEqual(forked.view.segments[0]["end_ms"], 12_000)
+
+    def test_v1_import_migrates_without_changing_legacy_event_ids(self):
+        original = analyze(ProjectTape(media()))
+        v1 = original.as_dict()
+        del v1["history_cursor"]
+        del v1["revision"]
+        v1["schema_version"] = 1
+        restored = ProjectTape.from_dict(v1)
+        self.assertEqual(restored.as_dict()["schema_version"], 2)
+        self.assertEqual(restored.commands, original.commands)
+        self.assertEqual(restored.view, original.view)
+        self.assertEqual(restored.history_cursor, len(original.commands))
+        self.assertFalse(restored.can_redo)
+
+    def test_invalid_cursor_revision_redo_tail_and_empty_history(self):
+        tape = analyze(ProjectTape(media())).undo()
+        document = tape.as_dict()
+        for key, value in (
+            ("history_cursor", -1),
+            ("history_cursor", 5),
+            ("history_cursor", True),
+            ("revision", 0),
+            ("revision", True),
+            ("revision", 2**40),
+        ):
+            broken = copy.deepcopy(document)
+            broken[key] = value
+            with self.subTest(key=key, value=value), self.assertRaises(ProjectFormatError):
+                ProjectTape.from_dict(broken)
+        broken = copy.deepcopy(document)
+        broken["commands"][0]["payload"]["segments"][0]["end_ms"] = 50_000
+        with self.assertRaises(ProjectFormatError):
+            ProjectTape.from_dict(broken)
+
+        with self.assertRaises(ProjectFormatError):
+            ProjectTape(media()).undo()
+        with self.assertRaises(ProjectFormatError):
+            ProjectTape(media()).redo()
+        with self.assertRaises(ProjectFormatError):
+            analyze(ProjectTape(media())).redo()
 
     def test_invalid_actions_do_not_mutate_older_project(self):
         tape = analyze(ProjectTape(media()))
