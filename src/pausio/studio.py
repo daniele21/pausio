@@ -6,6 +6,7 @@ Every imported video remains in this server's temporary workspace until exit.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
@@ -22,6 +23,7 @@ from pausio.closedroom_asr import transcribe_video_with_closedroom
 from pausio.domain import EditPlan, Interval
 from pausio.media import MediaInfo, detect_silences, probe, render
 from pausio.planner import propose_segments
+from pausio.project_commands import ProjectTape, ProjectFormatError, UI_COMMANDS
 
 MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024
 MAX_JSON_BYTES = 256 * 1024
@@ -47,6 +49,8 @@ class StudioWorkspace:
         self.lock = threading.RLock()
         self.importing = False
         self.approved = False
+        self.tape: ProjectTape | None = None
+        self.media_sha256: str | None = None
         self.media_id: str | None = None
         self.source: Path | None = None
         self.filename: str | None = None
@@ -71,6 +75,10 @@ class StudioWorkspace:
                 "file": self.filename,
                 "media_id": self.media_id,
                 "approved": self.approved,
+                "project_revision": self.tape.revision if self.tape else 0,
+                "editor_segments": [dict(s) for s in self.tape.view.segments] if self.tape else [],
+                "command_count": self.tape.revision if self.tape else 0,
+                "last_command": self.tape.commands[-1]["type"] if self.tape and self.tape.commands else None,
                 "media": self.info.as_dict() if self.info else None,
                 "plan": self.plan.as_dict() if self.plan else None,
                 "suggested_plan": self.suggested_plan.as_dict() if self.suggested_plan else None,
@@ -90,7 +98,7 @@ class StudioWorkspace:
             self.importing = True
         return self.directory / f"incoming-{uuid.uuid4().hex}{suffix}", label[:160]
 
-    def finish_import(self, candidate: Path, label: str, info: MediaInfo | None) -> None:
+    def finish_import(self, candidate: Path, label: str, info: MediaInfo | None, sha256: str | None = None) -> None:
         with self.lock:
             try:
                 if info is not None:
@@ -100,6 +108,14 @@ class StudioWorkspace:
                     self.media_id = uuid.uuid4().hex
                     self.approved = False
                     self.info = info
+                    if sha256 is None:
+                        with candidate.open("rb") as file:
+                            sha256 = hashlib.file_digest(file, "sha256").hexdigest()
+                    self.media_sha256 = sha256
+                    self.tape = ProjectTape({
+                        "filename": label, "sha256": sha256,
+                        "duration_ms": info.duration_ms, "has_audio": info.has_audio,
+                    })
                     self.plan = None
                     self.suggested_plan = None
                     self.transcript = None
@@ -113,32 +129,112 @@ class StudioWorkspace:
             finally:
                 self.importing = False
 
-    def save_plan(self, raw_segments: object) -> None:
+    def _install_tape(self, tape: ProjectTape) -> None:
+        """Replace derived state only after full validation; never allow partial replay."""
+        assert self.source is not None
+        self.tape = tape
+        self.plan = tape.edit_plan(str(self.source))
+        proposal = tape.view.suggested
+        self.suggested_plan = (
+            EditPlan(
+                source=str(self.source), source_duration_ms=tape.media["duration_ms"],
+                has_audio=tape.media["has_audio"],
+                segments=tuple(Interval(s["start_ms"], s["end_ms"]) for s in proposal),
+            )
+            if proposal is not None else None
+        )
+        self.approved = tape.view.approved
+        self.export_ready = False
+        (self.directory / "export.mp4").unlink(missing_ok=True)
+
+    def command(self, raw: dict) -> None:
+        """Execute a version-checked typed command requested by the Studio UI."""
         with self.lock:
             self._ensure_unlocked()
-            if self.source is None or self.info is None:
+            if self.tape is None:
+                raise StudioError("Importa un video prima di modificarlo.")
+            if not isinstance(raw, dict) or set(raw) != {"revision", "type", "payload"}:
+                raise StudioError("Il comando richiede revision, type e payload.")
+            rev = raw["revision"]
+            if not isinstance(rev, int) or isinstance(rev, bool) or rev != self.tape.revision:
+                raise StudioError("Versione del progetto non aggiornata. Ricarica e riprova.")
+            kind = raw["type"]
+            if not isinstance(kind, str) or kind not in UI_COMMANDS:
+                raise StudioError("Comando UI non supportato.")
+            payload = raw["payload"]
+            if not isinstance(payload, dict):
+                raise StudioError("Parametri del comando non validi.")
+            if kind == "segment.insert":
+                if set(payload) != {"start_ms", "end_ms"}:
+                    raise StudioError("Aggiungi intervallo richiede start_ms ed end_ms.")
+                payload = {"segment": {
+                    "id": uuid.uuid4().hex,
+                    "start_ms": payload["start_ms"],
+                    "end_ms": payload["end_ms"],
+                }}
+            try:
+                next_tape = self.tape.append(kind, payload)
+            except ProjectFormatError as exc:
+                raise StudioError(str(exc)) from exc
+            self._install_tape(next_tape)
+
+    def save_plan(self, raw_segments: object) -> None:
+        """Compatibility endpoint: still records an explicit timeline.replace event."""
+        with self.lock:
+            self._ensure_unlocked()
+            if self.source is None or self.info is None or self.tape is None:
                 raise StudioError("Importa un video prima di modificare il montaggio.")
             if not isinstance(raw_segments, list) or not 1 <= len(raw_segments) <= 200:
                 raise StudioError("Inserisci da 1 a 200 intervalli da mantenere.")
             try:
-                segments = tuple(Interval(**row) for row in raw_segments)
-                plan = EditPlan(
+                intervals = tuple(Interval(**row) for row in raw_segments)
+                self.plan = EditPlan(
                     source=str(self.source), source_duration_ms=self.info.duration_ms,
-                    segments=segments, has_audio=self.info.has_audio,
+                    segments=intervals, has_audio=self.info.has_audio,
                 )
             except (TypeError, ValueError) as exc:
                 raise StudioError(f"Intervalli non validi: {exc}") from exc
-            self.plan = plan
-            self.approved = False
-            self.export_ready = False
-            (self.directory / "export.mp4").unlink(missing_ok=True)
+            old_segments = self.tape.view.segments
+            rows = [{
+                "id": old_segments[i]["id"] if i < len(old_segments) else uuid.uuid4().hex,
+                "start_ms": interval.start_ms, "end_ms": interval.end_ms,
+            } for i, interval in enumerate(intervals)]
+            try:
+                next_tape = self.tape.append("timeline.replace", {"segments": rows})
+            except ProjectFormatError as exc:
+                raise StudioError(str(exc)) from exc
+            self._install_tape(next_tape)
 
     def approve_plan(self) -> None:
         with self.lock:
             self._ensure_unlocked()
-            if self.plan is None:
+            if self.tape is None:
                 raise StudioError("Analizza un video prima di confermare il montaggio.")
-            self.approved = True
+            try:
+                self._install_tape(self.tape.append("timeline.approve", {}))
+            except ProjectFormatError as exc:
+                raise StudioError(str(exc)) from exc
+
+    def export_project(self) -> dict:
+        with self.lock:
+            if self.tape is None:
+                raise StudioError("Importa un video prima di esportare il progetto.")
+            return self.tape.as_dict()
+
+    def import_project(self, raw: dict) -> None:
+        with self.lock:
+            self._ensure_unlocked()
+            if self.tape is None or self.info is None or self.media_sha256 is None:
+                raise StudioError("Importa prima il video originale da collegare al progetto.")
+            try:
+                incoming = ProjectTape.from_dict(raw)
+                incoming.require_media(
+                    sha256=self.media_sha256,
+                    duration_ms=self.info.duration_ms, has_audio=self.info.has_audio,
+                )
+            except ProjectFormatError as exc:
+                raise StudioError(str(exc)) from exc
+            self._install_tape(incoming)
 
     def start_job(self, kind: str) -> None:
         if kind not in {"analyze", "render", "transcribe"}:
@@ -168,11 +264,18 @@ class StudioWorkspace:
                         segments=propose_segments(info.duration_ms, silences),
                     )
                     with self.lock:
-                        self.plan = proposal
-                        self.suggested_plan = proposal
-                        self.approved = False
-                        self.export_ready = False
-                        (self.directory / "export.mp4").unlink(missing_ok=True)
+                        assert self.tape is not None
+                        next_tape = self.tape.append("analysis.propose", {
+                            "segments": [
+                                {"id": uuid.uuid4().hex,
+                                 "start_ms": segment.start_ms, "end_ms": segment.end_ms}
+                                for segment in proposal.segments
+                            ],
+                            "engine": "ffmpeg.silencedetect",
+                            "policy": "ai-natural",
+                            "noise_db": -35,
+                        })
+                        self._install_tape(next_tape)
                 elif kind == "transcribe":
                     result = transcribe_video_with_closedroom(source)
                     with self.lock:
@@ -284,6 +387,14 @@ class StudioHandler(BaseHTTPRequestHandler):
                 self.server.workspace.save_plan(self._read_json().get("segments"))
                 self._json(200, self.server.workspace.snapshot())
                 return
+            if path == "/api/command":
+                self.server.workspace.command(self._read_json())
+                self._json(200, self.server.workspace.snapshot())
+                return
+            if path == "/api/project/import":
+                self.server.workspace.import_project(self._read_json())
+                self._json(200, self.server.workspace.snapshot())
+                return
             if path == "/api/approve":
                 self.server.workspace.approve_plan()
                 self._json(200, self.server.workspace.snapshot())
@@ -294,7 +405,7 @@ class StudioHandler(BaseHTTPRequestHandler):
                 return
             self._failed(404, "Endpoint non trovato.")
         except StudioError as exc:
-            self._failed(409 if "in corso" in str(exc) else 400, str(exc))
+            self._failed(409 if "in corso" in str(exc) or "Versione" in str(exc) else 400, str(exc))
         except Exception:
             self._failed(500, "Errore interno. Controlla il terminale di Pausio.")
 
@@ -305,6 +416,7 @@ class StudioHandler(BaseHTTPRequestHandler):
         filename = unquote(self.headers.get("X-Filename", ""))
         destination, label = self.server.workspace.begin_import(filename)
         metadata: MediaInfo | None = None
+        digest = hashlib.sha256()
         try:
             with destination.open("xb") as target:
                 remaining = size
@@ -313,9 +425,10 @@ class StudioHandler(BaseHTTPRequestHandler):
                     if not chunk:
                         raise StudioError("Caricamento interrotto. Riprova.")
                     target.write(chunk)
+                    digest.update(chunk)
                     remaining -= len(chunk)
             metadata = probe(destination)
-            self.server.workspace.finish_import(destination, label, metadata)
+            self.server.workspace.finish_import(destination, label, metadata, digest.hexdigest())
             self._json(200, self.server.workspace.snapshot())
         finally:
             if metadata is None:
@@ -332,6 +445,21 @@ class StudioHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/state":
             self._json(200, self.server.workspace.snapshot())
+            return
+        if path == "/api/project/export":
+            try:
+                content = json.dumps(
+                    self.server.workspace.export_project(), ensure_ascii=False, indent=2
+                ).encode("utf-8")
+            except StudioError as exc:
+                self._failed(400, str(exc))
+                return
+            self._headers(200, len(content), "application/json; charset=utf-8")
+            self.send_header(
+                "Content-Disposition", 'attachment; filename="pausio-project.pausio.json"'
+            )
+            self.end_headers()
+            self.wfile.write(content)
             return
         if path == "/api/media":
             self._media(False, False)
