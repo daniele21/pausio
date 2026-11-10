@@ -25,6 +25,7 @@ REQUIRED_SKILLS = frozenset(
         "pausio-ui-design-system",
         "pausio-video-interaction-ux",
         "pausio-ui-quality",
+        "pausio-edit-command-schema",
     }
 )
 NAME_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")

@@ -69,7 +69,7 @@ class StudioHttpTests(unittest.TestCase):
         for path, snippet in (
             ("/", b"Studio"),
             ("/styles.css", b"focus-visible"),
-            ("/app.js", b"/api/plan"),
+            ("/app.js", b"/api/command"),
         ):
             status, headers, content = self.request("GET", path)
             self.assertEqual(status, 200)
@@ -180,6 +180,85 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         self.assertFalse(json.loads(updated)["approved"])
         self.assertFalse(json.loads(updated)["export_ready"])
         self.assertEqual(self.request("GET", "/api/export")[0], 404)
+
+    def test_project_commands_export_import_and_media_binding(self):
+        self.import_clip()
+        status, _, response = self.post("/api/jobs", {"kind": "analyze"})
+        self.assertEqual(status, 202, response)
+        analyzed = self.await_job("analyze")
+        self.assertEqual(analyzed["project_revision"], 1)
+        self.assertEqual(analyzed["last_command"], "analysis.propose")
+        first = analyzed["editor_segments"][0]
+        self.assertEqual(len(first["id"]), 32)
+
+        status, _, response = self.post("/api/command", {
+            "revision": 1, "type": "segment.update",
+            "payload": {
+                "segment_id": first["id"],
+                "start_ms": first["start_ms"],
+                "end_ms": first["end_ms"] - 100,
+            }
+        })
+        self.assertEqual(status, 200, response)
+        edited = json.loads(response)
+        self.assertEqual(edited["project_revision"], 2)
+        self.assertFalse(edited["approved"])
+
+        status, _, response = self.post("/api/command", {
+            "revision": 1, "type": "timeline.keep_all", "payload": {},
+        })
+        self.assertEqual(status, 409)
+        self.assertIn("Versione", json.loads(response)["error"])
+
+        status, _, response = self.post("/api/command", {
+            "revision": 2, "type": "timeline.approve", "payload": {},
+        })
+        self.assertEqual(status, 200, response)
+        approved = json.loads(response)
+        self.assertTrue(approved["approved"])
+
+        status, headers, serialized = self.request("GET", "/api/project/export")
+        self.assertEqual(status, 200)
+        self.assertIn(".pausio.json", headers["Content-Disposition"])
+        document = json.loads(serialized)
+        self.assertEqual(document["schema_version"], 1)
+        self.assertEqual(
+            [item["type"] for item in document["commands"]],
+            ["analysis.propose", "segment.update", "timeline.approve"],
+        )
+        self.assertEqual(document["media"]["sha256"], self.workspace.media_sha256)
+        self.assertNotIn(str(self.workspace.source), serialized.decode("utf-8"))
+
+        status, _, response = self.post("/api/command", {
+            "revision": 3, "type": "timeline.keep_all", "payload": {},
+        })
+        self.assertEqual(status, 200, response)
+        self.assertFalse(json.loads(response)["approved"])
+
+        # The imported *instructions*, not a cached snapshot, recreate state.
+        status, _, response = self.post("/api/project/import", document)
+        self.assertEqual(status, 200, response)
+        replayed = json.loads(response)
+        self.assertEqual(replayed["plan"], approved["plan"])
+        self.assertEqual(replayed["editor_segments"], approved["editor_segments"])
+        self.assertEqual(replayed["project_revision"], 3)
+        self.assertTrue(replayed["approved"])
+        self.assertFalse(replayed["export_ready"])
+
+        wrong = json.loads(json.dumps(document))
+        wrong["media"]["sha256"] = "f" * 64
+        for bad in (wrong, {**document, "schema_version": 2},
+                    {**document, "commands": [{"id": "0" * 32,
+                                              "type": "execute.code", "payload": {}}]}):
+            status, _, _ = self.post("/api/project/import", bad)
+            self.assertEqual(status, 400)
+            self.assertEqual(self.get_state()["project_revision"], 3)
+            self.assertEqual(self.get_state()["editor_segments"], approved["editor_segments"])
+
+    def test_export_requires_matching_uploaded_video(self):
+        status, _, response = self.request("GET", "/api/project/export")
+        self.assertEqual(status, 400)
+        self.assertIn("Importa", json.loads(response)["error"])
 
     def test_transcription_uses_closedroom_adapter_only(self):
         self.import_clip()

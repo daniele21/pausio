@@ -30,6 +30,14 @@
 
 **Future:** if local API distribution is unsuitable, extract a reusable library **inside ClosedRoom** and version it for both consumers. Pin and contract-test any stable version before distributing. Live compatibility and source timing have not yet been verified with real A56 video.
 
+## ADR 008 — Typed edit commands are Pausio's canonical project format
+
+**Decision:** all output-affecting Studio changes are represented as validated, deterministic, ordered operations in `src/pausio/project_commands.py`. The UI sends specific commands; Python replays them to derive the FFmpeg `EditPlan`. The portable `.pausio.json` document contains schema version, SHA-256 media binding and the command history without raw media or absolute paths. Import validates atomically and rejects unknown operations, versions and source mismatches.
+
+**Consequences:** stable segment IDs; `timeline.replace` bridge for legacy clients; approval as an event, invalidated by subsequent editing. Reopening a project reconstructs cuts without rerunning ASR or silence analysis. Future prompt edits, subtitles, crop, gain and export settings must use new typed/versioned instructions. See [project format](PROJECT_FORMAT.md).
+
+**Not delivered yet:** undo/redo, autosave, subtitle or audio effect commands, CapCut/OTIO importers, video embedding or byte-identical output across FFmpeg versions.
+
 ## Unresolved
 
 - Choose Pausio repository license intentionally before inviting source reuse.

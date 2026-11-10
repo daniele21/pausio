@@ -67,6 +67,18 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
             <span id="import-label">Importa video</span>
           </button>
+          <p class="project-revision" id="project-revision">Progetto non ancora inizializzato</p>
+          <div class="project-io" aria-label="Importazione ed esportazione del progetto">
+            <button class="button button-outline" id="project-import" type="button" disabled
+              title="Carica un file .pausio.json e ricostruisci le modifiche sul video importato">
+              Importa progetto
+            </button>
+            <a class="button button-outline" id="project-export"
+               href="/api/project/export" download="pausio-project.pausio.json" hidden
+               title="Scarica le istruzioni di montaggio, senza il video originale">
+              Esporta progetto
+            </a>
+          </div>
         </div>
 
         <div class="rail-section tools">
@@ -229,6 +241,7 @@
     </section>
 
     <input type="file" id="file-input" accept="video/mp4,video/quicktime,video/webm,video/x-matroska,.m4v,.mov,.mkv" hidden>
+    <input type="file" id="project-input" accept=".json,.pausio.json,application/json" hidden>
     <div class="job-banner" id="job-banner" role="status" aria-live="polite" hidden>
       <span class="spinner" aria-hidden="true"></span>
       <span id="job-message">Analisi in corso…</span>

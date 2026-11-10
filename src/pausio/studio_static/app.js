@@ -12,7 +12,7 @@ const msFormat = (value, exact=false) => {
 };
 const shortDuration = ms => ms>=60000 ? msFormat(ms,true) :
   (Math.round(ms/100)/10).toLocaleString("it-IT")+" s";
-const segments = () => project?.plan?.segments || [];
+const segments = () => project?.editor_segments || [];
 const editedDuration = () => segments().reduce((sum,s) => sum+s.end_ms-s.start_ms,0);
 const outputTime = ms => {
   let elapsed=0;
@@ -54,6 +54,11 @@ function update(next){
   el("project-title").textContent=next.file||"Nessun video caricato";
   el("project-meta").textContent=has?msFormat(next.media.duration_ms)+" · "+next.media.width+" × "+
     next.media.height+" · "+(next.media.has_audio?"Audio presente":"Senza audio"):"Scegli un file per iniziare.";
+  el("project-revision").textContent = has
+    ? "Progetto · "+String(next.command_count || 0)+" istruzioni registrate"
+    : "Progetto non ancora inizializzato";
+  el("project-export").hidden=!has;
+  el("project-import").disabled=!has||busy;
   el("import-label").textContent=has?"Cambia video":"Importa video";
   for(const id of ["import-action","empty-import"])el(id).disabled=busy;
   el("analyze-action").disabled=!has||busy;
@@ -129,12 +134,15 @@ function drawSegments(){
     from.value=(s.start_ms/1000).toFixed(2);to.value=(s.end_ms/1000).toFixed(2);
     from.disabled=working();to.disabled=working();card.querySelector(".remove").disabled=working()||segments().length<=1;
     async function save(){
-      const all=segments().map(item=>({...item}));all[index].start_ms=Math.round(Number(from.value)*1000);
-      all[index].end_ms=Math.round(Number(to.value)*1000);await saveSegments(all);
+      await edit("segment.update", {
+        segment_id:s.id,
+        start_ms:Math.round(Number(from.value)*1000),
+        end_ms:Math.round(Number(to.value)*1000)
+      });
     }
     from.addEventListener("change",()=>run(save));to.addEventListener("change",()=>run(save));
     card.querySelector(".remove").addEventListener("click",()=>run(()=>
-      saveSegments(segments().filter((_,position)=>position!==index))));
+      edit("segment.remove", {segment_id:s.id})));
     card.querySelector(".listen").addEventListener("click",()=>{
       v.currentTime=s.start_ms/1000;v.play().catch(()=>{});highlight(index);
     });
@@ -201,16 +209,21 @@ function tab(name){
 async function run(fn){
   try{await fn();}catch(error){toast(error.message||"Operazione non riuscita.","error");refresh().catch(()=>{});}
 }
-async function saveSegments(all){
-  update(await post("/api/plan",{segments:all}));
-  toast("Tagli modificati. Conferma nuovamente prima di esportare.");
+async function edit(type, payload={}){
+  if(!project?.file)throw Error("Importa prima un video.");
+  update(await post("/api/command", {
+    revision:project.project_revision, type, payload
+  }));
+  toast(type==="timeline.approve"
+    ? "Montaggio confermato. Puoi esportare."
+    : "Modifica registrata nelle istruzioni del progetto.");
 }
 async function startJob(kind){
   update(await post("/api/jobs",{kind}));
   el("job-banner").hidden=false;el("job-message").textContent=busyLabel(kind);
 }
 async function approve(){
-  update(await post("/api/approve",{}));toast("Montaggio confermato. Puoi esportare.");
+  await edit("timeline.approve");
 }
 function changeMode(chosen){
   if(chosen==="edited"&&!project?.plan)return;
@@ -277,6 +290,18 @@ function importVideo(file){
   xhr.send(file);
 }
 for(const id of ["import-action","empty-import"])el(id).addEventListener("click",()=>el("file-input").click());
+el("project-import").addEventListener("click",()=>el("project-input").click());
+el("project-input").addEventListener("change",()=>run(async()=>{
+  const file=el("project-input").files?.[0];
+  if(!file)return;
+  if(file.size>256*1024)throw Error("File progetto troppo grande (massimo 256 KB).");
+  let payload;
+  try{payload=JSON.parse(await file.text());}
+  catch{throw Error("Il file selezionato non è un progetto JSON valido.");}
+  el("project-input").value="";
+  update(await post("/api/project/import",payload));
+  toast("Progetto importato. I tagli sono stati ricostruiti dalle istruzioni.");
+}));
 el("file-input").addEventListener("change",()=>importVideo(el("file-input").files?.[0]));
 const drop=el("drop-target");
 drop.addEventListener("dragenter",event=>{
@@ -292,11 +317,11 @@ el("export-action").addEventListener("click",()=>run(()=>startJob("render")));
 el("approve-action").addEventListener("click",()=>run(approve));
 el("cuts-tab").addEventListener("click",()=>tab("cuts"));
 el("transcript-tab").addEventListener("click",()=>tab("transcript"));
-el("restore-suggested").addEventListener("click",()=>run(()=>saveSegments(project.suggested_plan.segments)));
-el("restore-all").addEventListener("click",()=>run(()=>saveSegments([{start_ms:0,end_ms:project.media.duration_ms}])));
+el("restore-suggested").addEventListener("click",()=>run(()=>edit("timeline.restore_suggestion")));
+el("restore-all").addEventListener("click",()=>run(()=>edit("timeline.keep_all")));
 el("add-segment").addEventListener("click",()=>run(async()=>{
   const extra=biggestGap();if(!extra)throw Error("Non ci sono parti escluse recuperabili.");
-  await saveSegments([...segments(),extra].sort((a,b)=>a.start_ms-b.start_ms));
+  await edit("segment.insert", {start_ms:extra.start_ms, end_ms:extra.end_ms});
 }));
 for(const button of document.querySelectorAll("[data-mode]"))
   button.addEventListener("click",()=>changeMode(button.dataset.mode));

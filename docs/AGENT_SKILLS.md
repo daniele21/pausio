@@ -18,6 +18,10 @@ Pausio uses the portable [Agent Skills specification](https://agentskills.io/spe
 
 Tasks may use two relevant skills; avoid loading the entire catalog by default.
 
+## Structured editing commands and portable projects
+
+Use [pausio-edit-command-schema](../.agents/skills/pausio-edit-command-schema/SKILL.md) whenever adding an edit tool, changing project import/export, implementing AI prompt edits, undo/redo or external interchange. All output-affecting UI actions must have typed commands with deterministic replay. See [PROJECT_FORMAT.md](PROJECT_FORMAT.md).
+
 ## Pausio Studio UX/UI skills
 
 | Skill | What it addresses |
