@@ -7,7 +7,7 @@ description: Use for Pausio privacy, local-first behavior, secrets, subprocess/f
 
 ## Procedure
 1. Check `SECURITY.md`, `docs/DEPENDENCIES.md`, current `pyproject.toml` and release/CI config before adding dependencies or platform binaries.
-2. Confirm raw video, transcripts and local artifacts do not leave machine by default; no telemetry, cloud APIs or weight downloads without explicit informed consent and settings.
+2. Confirm raw video, transcripts and local artifacts do not leave machine by default; no telemetry, cloud APIs or weight downloads without explicit informed consent and settings. Remember Studio **retains a private local copy of imported media** for autosave after exit; verify private permissions, explicit deletion, atomic checkpoints and crash fallback.
 3. Validate untrusted JSON and media path assumptions. Use FFmpeg as a subprocess argument list, never a shell. Protect against overwriting input, directory traversal in a future workspace, symlink races, stale project writes and unexpected output collisions.
 4. New model/backend: document exact source, pinned revision, runtime version, weight cache, memory constraints and model license. New assets: provenance, license and attribution obligations.
 5. Before bundling FFmpeg, audit **the actual binary build** and transitive codec licenses, not just FFmpeg source license. Do not import GPL/AGPL third-party code by accident.

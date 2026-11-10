@@ -167,6 +167,8 @@ class StudioWorkspace:
                     # Leave the old session intact until the new checkpoint succeeds.
                     new_source = self.store.media_path(sha256, candidate.suffix)
                     os.replace(candidate, new_source)
+                    if os.name == "posix":
+                        new_source.chmod(0o600)
                     self.store.save(tape, new_source)
 
                 old_source = self.source
@@ -533,6 +535,8 @@ class StudioHandler(BaseHTTPRequestHandler):
                     target.write(chunk)
                     digest.update(chunk)
                     remaining -= len(chunk)
+                target.flush()
+                os.fsync(target.fileno())
             metadata = probe(destination)
             self.server.workspace.finish_import(destination, label, metadata, digest.hexdigest())
             completed = True

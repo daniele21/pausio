@@ -36,7 +36,10 @@
 - [x] `.pausio.json` v1 export/import, JSON Schema, original-video SHA-256 binding and optimistic revision checks.
 - [x] Deterministic replay to FFmpeg `EditPlan`, including concrete AI proposals and explicit approval.
 - [x] Pure-domain and HTTP regression tests: replay, reimport, media mismatch and stale edits.
-- [ ] Undo/redo and optional autosave based on a history cursor/checkpoints.
+- [x] Undo/Redo via typed history commands and v2 cursor/revision, with v1 project import migration.
+- [x] Private autosave of active video + project, atomic checkpoint, previous checkpoint fallback, media SHA-256 validation, single-process lock and explicit delete.
+- [ ] Validate visual/keyboard Undo/Redo UX and restart recovery on a real Mac with a Samsung A56 video.
+- [ ] Extend autosave to separate user-managed multi-project workspaces and optionally persist transcripts (with clear privacy controls).
 - [ ] New commands for subtitles, audio effects, crop, export presets and AI prompt editing.
 - [ ] Optional export adapters (OpenTimelineIO / CapCut) without changing the canonical format.
 

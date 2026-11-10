@@ -36,7 +36,15 @@
 
 **Consequences:** stable segment IDs; `timeline.replace` bridge for legacy clients; approval as an event, invalidated by subsequent editing. Reopening a project reconstructs cuts without rerunning ASR or silence analysis. Future prompt edits, subtitles, crop, gain and export settings must use new typed/versioned instructions. See [project format](PROJECT_FORMAT.md).
 
-**Not delivered yet:** undo/redo, autosave, subtitle or audio effect commands, CapCut/OTIO importers, video embedding or byte-identical output across FFmpeg versions.
+**Not delivered yet:** subtitle or audio effect commands, CapCut/OTIO importers, video embedding or byte-identical output across FFmpeg versions.
+
+## ADR 009 — History cursor and recoverable private session
+
+**Decision:** portable `.pausio.json` schema v2 adds `history_cursor` and monotonic `revision`. Undo/Redo are validated structured API operations that move the cursor over replayable events without adding synthetic inverses. Editing after Undo forks by dropping the redo tail. Import supports v1 and upgrades in memory while preserving event IDs. Rendering uses only the active prefix.
+
+**Decision:** Studio's default runtime maintains one private, local, autosaved session on disk (including imported media) separately from the portable project. It commits a validated JSON snapshot atomically before exposing a UI change; retains one previous checkpoint for corruption fallback; verifies original-media SHA-256; and uses a single-process lock. On recoverability failure, do not silently delete the user's stored media. A deliberate UI action deletes managed local media and checkpoints. Users can select `--data-dir` for storage location.
+
+**Limitations:** autosave covers active project, media and history; it does not restore ClosedRoom transcript, unfinished renders, or multiple project workspaces. The exported portable file remains media-free.
 
 ## Unresolved
 
