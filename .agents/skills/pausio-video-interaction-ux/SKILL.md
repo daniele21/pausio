@@ -10,7 +10,7 @@ Source-time intervals are KEEP decisions in milliseconds. The **original** uses 
 
 ## Procedure
 1. Read `src/pausio/domain.py`, `studio.py`, `studio_static/app.js` and `docs/STUDIO_UI.md` before adding controls.
-2. Timeline regions and inspector cards must represent the same validated edit plan; no parallel client-only source of truth.
+2. Timeline regions and inspector cards must represent the same validated edit plan; no parallel client-only source of truth. Send every edit via `POST /api/command` with stable segment ID and revision; see `pausio-edit-command-schema`.
 3. Make scrubbing direct and responsive; support pointer and keyboard. Read out times with tabular numerals and distinguish original/output time.
 4. Prevent invalid edits (negative, inverted, overlaps, end beyond duration) at the server boundary; show a recoverable error in UI and preserve prior plan.
 5. Browser seek simulation may skip/jitter due to keyframes; label it as preview, **not** final-render proof. Check exported MP4 separately for AV continuity.

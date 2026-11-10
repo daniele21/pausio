@@ -91,7 +91,7 @@ class StudioWorkspace:
     def begin_import(self, name: str) -> tuple[Path, str]:
         label = Path(name).name.strip()
         suffix = Path(label).suffix.lower()
-        if not label or suffix not in ALLOWED_VIDEO_EXTENSIONS:
+        if not label or "\\" in label or suffix not in ALLOWED_VIDEO_EXTENSIONS:
             raise StudioError("Formato non supportato. Usa MP4, MOV, M4V, MKV o WebM.")
         with self.lock:
             self._ensure_unlocked()

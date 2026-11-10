@@ -9,6 +9,8 @@ With Python 3.11+, FFmpeg and FFprobe on PATH, install once (`pip install -e .`)
 1. **Importa** — choose or drag a video up to 2 GiB (MP4 / MOV / M4V / MKV / WebM). Browser uploads to the loopback-only Python server and stores bytes temporarily. Inspect duration, codec, dimensions and audio presence in the project panel. The original imported file is not mutated by editing.
 2. **Analizza** — run the current FFmpeg energy-based silence detector; its conservative AI Natural policy proposes a versioned plan containing intervals to **keep**. It is *not* yet semantic speech editing.
 3. **Rivedi** — inspect the retained intervals in the right inspector and timeline. Change start/end numeric seconds, exclude a retained interval, bring back the largest excluded gap, restore the initial suggestion, or keep everything. Browser-side preview has **Originale** vs **Montaggio** modes. The latter seeks across the original clip and is an approximate preview, not a final audio master.
+**Salva e riprendi:** dopo aver analizzato o modificato, clicca **Esporta progetto** per scaricare `.pausio.json`. Per continuare, importa prima **lo stesso video originale**, poi clicca **Importa progetto**. Pausio confronta lo SHA-256 e ricostruisce il montaggio riproducendo le istruzioni salvate. Il file non contiene il video o trascrizioni. Vedi [Formato progetto](PROJECT_FORMAT.md).
+
 4. **Conferma montaggio** — explicit approval. The backend blocks rendering until this action. Every change after approval resets the approval and invalidates prior export.
 5. **Esporta MP4** — asynchronous FFmpeg render and direct download. Final output is 1080x1920, 30 fps H.264/AAC (if source has audio), aspect ratio preserved with padding. Inspect the saved file for quality and A/V synchronization before publishing.
 6. **Trascrivi il parlato** — optional parallel action: requires the existing ClosedRoom local service running on the same Mac. A normalized, timestamped transcript appears in the inspector. The transcription does not change KEEP intervals and is not yet used to generate subtitles.
@@ -33,7 +35,7 @@ Design language: cinematic neutral ink surfaces, warm amber action, mint kept sp
 ## Persistence and privacy
 
 - HTTP server listens **only on 127.0.0.1**. Mutating endpoints require a custom `X-Pausio-Client` header and reject foreign `Origin` values; no CORS, no remote assets, external analytics or user login.
-- Imported video, its transcript and exported file exist in a **temporary server workspace**. The application does not persist a project between restarts. Download your output before exiting. No real media or private transcripts are committed to Git.
+- Imported video, its transcript and exported file exist in a **temporary server workspace**. The application does not persist a project between restarts unless you manually export `.pausio.json` and re-import it with the original media. Download your output before exiting. No real media or private transcripts are committed to Git.
 - Browser upload (`application/octet-stream`) is streamed to disk with a 2 GiB cap; fixed-file-name processing paths are not accepted from untrusted browser JSON.
 - ClosedRoom is external, separately running, and is the sole ASR engine. Pausio does not install ASR weights; keep upstream model downloads explicit.
 - Local-only does not mean hostile multi-user isolation: do not expose the port with reverse proxies or host forwarding. The v0 Studio is not designed for shared-machine access.

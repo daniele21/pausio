@@ -129,7 +129,7 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
             raise ProjectFormatError("duplicate command id")
         used_events.add(eid)
         kind = cmd["type"]
-        if kind not in _TYPES:
+        if not isinstance(kind, str) or kind not in _TYPES:
             raise ProjectFormatError(f"unknown command type: {kind}")
         payload = cmd["payload"]
         if kind == "analysis.propose":
@@ -242,7 +242,7 @@ class ProjectTape:
     @classmethod
     def from_dict(cls, document: Any) -> ProjectTape:
         obj = _object(document, {"format", "schema_version", "media", "commands"}, "project")
-        if obj["format"] != FORMAT or obj["schema_version"] != VERSION:
+        if obj["format"] != FORMAT or type(obj["schema_version"]) is not int or obj["schema_version"] != VERSION:
             raise ProjectFormatError("unsupported project format or schema version")
         return cls(obj["media"], obj["commands"])
 

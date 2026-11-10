@@ -5,6 +5,7 @@ Pausio is a local-first, reviewable editor for natural talking-head videos. Read
 ## Non-negotiable product contracts
 
 - **UI tests must exercise real behavior:** import, analyze, edit KEEP spans, approve explicitly, render and download—never decorative mock controls.
+- **Every output-affecting UI edit MUST be a typed, deterministic, importable/exportable command** in `project_commands.py`, with stable IDs, integer millisecond units, strict schema validation and replay tests. The UI cannot own an untracked authoritative timeline; unknown command versions must fail closed. Read `docs/PROJECT_FORMAT.md`.
 - **Models propose, humans approve, deterministic rendering executes.** Do not automatically render proposed edits without a user-controlled review step.
 - Input media is immutable. Do not overwrite raw files; require explicit overwrite for outputs.
 - Keep `src/pausio/domain.py` and `src/pausio/planner.py` independent of FFmpeg, ML frameworks, and UI.
@@ -32,6 +33,7 @@ Skills follow the [Agent Skills specification](https://agentskills.io/specificat
 | User journey, step flow, review and helpful empty/error states | `pausio-product-ux` |
 | Tokens, hierarchy, contrast, responsive layouts | `pausio-ui-design-system` |
 | Video preview, scrubbing, jump-cut timeline and keyboard | `pausio-video-interaction-ux` |
+| Typed edits, project import/export, replay, schema changes, undo/redo | `pausio-edit-command-schema` |
 | Browser QA, accessibility and regressions | `pausio-ui-quality` |
 
 ## Workflow and evidence
