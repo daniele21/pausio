@@ -8,7 +8,7 @@ description: Use when testing, auditing or accepting Pausio Studio changes for b
 ## Audit order
 1. Run existing test suite and `python scripts/validate_skills.py`. Confirm Studio serves packaged HTML/CSS/JS and rejects external/unsafe HTTP POSTs.
 2. Test end-to-end HTTP workflow with a generated synthetic MP4: import, analyze, edit, server rejection of invalid plan, explicit approval, render, Range GET and download.
-3. In a real browser, verify file import/drop, waveform alignment, zoom/scroll, trim handle keyboard/pointer, original vs simulated vs rendered FFmpeg preview, scrub, restore controls, transcript panel, status/error feedback and disabled/busy states.
+3. In a real browser, verify file import/drop, video preview and scrub, split original/montaggio, restore controls, transcript panel, status/error feedback and disabled/busy states.
 4. Keyboard-only pass: full Tab flow; controls show focus; space/arrow shortcut works only outside typing; every input has a label; tab aria state mirrors visible panel.
 5. Responsive pass at 1440x900, 1024x768 and 390x844, plus zoom/reduced-motion. No horizontal overflow, clipped button or focus trap.
 6. Evaluate actual sound and cut boundaries with a real consented clip; a synthetic CI render alone does not verify editor naturalness or audio continuity.

@@ -4,7 +4,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from pausio.domain import Interval
-from pausio.media import MediaError, parse_silences, render, waveform_envelope
+from pausio.media import MediaError, parse_silences, render
 
 
 class TestMedia(unittest.TestCase):
@@ -24,40 +24,6 @@ class TestMedia(unittest.TestCase):
             source.touch()
             with self.assertRaises(MediaError):
                 render(source, source, (Interval(0, 200),), has_audio=False)
-
-    def test_waveform_silent_source_needs_no_ffmpeg(self):
-        self.assertEqual(waveform_envelope(Path("/no-file"), 1000, has_audio=False), [])
-
-    def test_waveform_guards_unbounded_media_duration_and_bin_counts(self):
-        with self.assertRaises(MediaError):
-            waveform_envelope(Path("/no-file"), 1_800_000, has_audio=True)
-        with self.assertRaises(ValueError):
-            waveform_envelope(Path("/no-file"), 1000, has_audio=True, bins=2000)
-
-    def test_low_resolution_preview_uses_same_cut_filter_graph(self):
-        with TemporaryDirectory() as d:
-            source = Path(d) / "input.mov"
-            source.touch()
-            with patch("pausio.media.require_binary", return_value="ffmpeg"):
-                normal = render(
-                    source, Path(d) / "final.mp4",
-                    (Interval(100, 1200), Interval(1700, 2500)), has_audio=True,
-                    dry_run=True,
-                )
-                preview = render(
-                    source, Path(d) / "preview.mp4",
-                    (Interval(100, 1200), Interval(1700, 2500)), has_audio=True,
-                    dry_run=True, size=(540, 960),
-                )
-            original_filter = normal[normal.index("-filter_complex") + 1]
-            draft_filter = preview[preview.index("-filter_complex") + 1]
-            self.assertIn("trim=start=0.100:end=1.200", draft_filter)
-            self.assertIn("atrim=start=1.700:end=2.500", draft_filter)
-            self.assertIn("pad=540:960", draft_filter)
-            self.assertIn("pad=1080:1920", original_filter)
-            self.assertEqual(
-                original_filter.split(";")[:-1], draft_filter.split(";")[:-1]
-            )
 
     def test_render_builds_command_without_execution(self):
         with TemporaryDirectory() as d:

@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import json
-import sys
-from array import array
 import re
 import shutil
 import subprocess
@@ -137,7 +135,6 @@ def detect_silences(
 def render(
     source: Path, output: Path, segments: tuple[Interval, ...], *,
     has_audio: bool, overwrite: bool = False, dry_run: bool = False,
-    size: tuple[int, int] = (1080, 1920),
 ) -> list[str]:
     """Render ordered intervals in one re-encode; preserve aspect ratio with padding.
 
@@ -146,8 +143,6 @@ def render(
     """
     if not source.is_file():
         raise MediaError(f"source not found: {source}")
-    if size not in {(1080, 1920), (540, 960)}:
-        raise MediaError("unsupported render size")
     if source.resolve() == output.resolve():
         raise MediaError("input and output must be different files")
     if output.suffix.lower() != ".mp4":
@@ -173,8 +168,8 @@ def render(
         + ("[joinedv][joineda]" if has_audio else "[joinedv]")
     )
     components.append(
-        f"[joinedv]fps=30,scale={size[0]}:{size[1]}:force_original_aspect_ratio=decrease,"
-        f"pad={size[0]}:{size[1]}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p[outv]"
+        "[joinedv]fps=30,scale=1080:1920:force_original_aspect_ratio=decrease,"
+        "pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p[outv]"
     )
     def make_args(destination: Path) -> list[str]:
         args = [
@@ -205,61 +200,3 @@ def render(
             raise MediaError(f"output appeared during rendering: {output}")
         staged_output.replace(output)
     return args
-
-
-def waveform_envelope(
-    source: Path,
-    duration_ms: int,
-    *,
-    has_audio: bool,
-    bins: int = 900,
-) -> list[int]:
-    """A compact 0–1000 peak envelope, indexed over ORIGINAL media time.
-
-    Uses FFmpeg to decode into low-rate mono PCM. Never invents a waveform
-    from transcription, and never persists or sends raw audio outside localhost.
-    To avoid unbounded processing, media longer than 15 minutes yields an
-    actionable failure instead of scanning arbitrarily long streams.
-    """
-    if not has_audio:
-        return []
-    if not 1 <= bins <= 1800:
-        raise ValueError("bins must be in the range 1..1800")
-    if not 0 < duration_ms <= 900_000:
-        raise MediaError("Waveform disponibile per video fino a 15 minuti.")
-    if not source.is_file():
-        raise MediaError(f"source not found: {source}")
-    command = [
-        require_binary("ffmpeg"), "-hide_banner", "-nostdin", "-v", "error",
-        "-i", str(source), "-t", f"{duration_ms / 1000:.3f}",
-        "-map", "0:a:0", "-vn", "-ac", "1",
-        "-ar", "2000", "-f", "s16le", "-c:a", "pcm_s16le", "-",
-    ]
-    # 15 minutes at 2 kHz mono 16-bit PCM = under 4 MB of stdout.
-    try:
-        result = subprocess.run(
-            command, capture_output=True, check=False, timeout=180,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise MediaError("Creazione waveform troppo lenta; prova un video più corto.") from exc
-    except OSError as exc:
-        raise MediaError(f"Impossibile avviare FFmpeg: {exc}") from exc
-    if result.returncode:
-        raise MediaError(
-            "FFmpeg non riesce a leggere la traccia audio: "
-            + result.stderr.decode("utf-8", errors="replace")[-500:]
-        )
-    if not result.stdout:
-        return [0] * bins
-    samples = array("h")
-    samples.frombytes(result.stdout[:len(result.stdout) // 2 * 2])
-    if sys.byteorder != "little":
-        samples.byteswap()
-    peaks = [0] * bins
-    # The envelope follows source duration, even when encoded audio has
-    # slightly shorter/longer sample counts.
-    expected_samples = max(1, round(duration_ms / 1000 * 2000))
-    for position, value in enumerate(samples):
-        bucket = min(bins - 1, position * bins // expected_samples)
-        peaks[bucket] = max(peaks[bucket], abs(value))
-    return [min(1000, round(value * 1000 / 32768)) for value in peaks]
