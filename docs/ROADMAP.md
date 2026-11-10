@@ -28,7 +28,12 @@
 - [x] Four tailored Studio UX/UI Agent Skills and automated HTTP/workflow tests.
 - [ ] Validate real browser UX and accessibility on macOS at desktop/tablet/mobile widths.
 - [ ] Run real Samsung A56 videos through the full preview and export; inspect VFR, rotation, codec and A/V sync.
-- [ ] Add waveform extraction, frame-accurate edited preview and audio transitions.
+- [x] Asynchronous waveform from actual FFmpeg-decoded audio (not a visual placeholder); source-time alignment, bounded to ≤15-minute clips.
+- [x] Precise range trim interactions on the timeline (pointer + accessible keyboard) issuing existing typed `segment.update` commands, not UI-only state.
+- [x] Rendered 540×960 draft preview using **the same FFmpeg trim/concat pipeline** as full-resolution export, without requiring approval; invalidated by changes.
+- [x] Timeline zoom 1×/2×/4×/8× and source-time ruler with scroll sync.
+- [ ] Browser/visual testing on macOS and Samsung A56 recordings; validate color, rotation, VFR, preview latency and audio sync.
+- [ ] Audio continuity across jump cuts, fades and future word-level semantic editing.
 
 ## Portable instruction-driven editing
 

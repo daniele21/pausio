@@ -15,6 +15,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from pausio.studio import STATIC_DIR, StudioWorkspace, create_server
+from pausio.media import waveform_envelope, probe
 
 
 class StudioHttpTests(unittest.TestCase):
@@ -180,6 +181,61 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         self.assertFalse(json.loads(updated)["approved"])
         self.assertFalse(json.loads(updated)["export_ready"])
         self.assertEqual(self.request("GET", "/api/export")[0], 404)
+
+    def test_waveform_is_real_pcm_envelope_not_visual_placeholder(self):
+        self.import_clip()
+        for _ in range(150):
+            state=self.get_state()
+            if state["waveform_status"] in {"ready","failed"}:
+                break
+            time.sleep(0.1)
+        self.assertEqual(state["waveform_status"],"ready",state["waveform_error"])
+        status, headers, payload=self.request("GET","/api/waveform")
+        self.assertEqual(status,200)
+        data=json.loads(payload)
+        self.assertEqual(data["media_id"],state["media_id"])
+        self.assertEqual(len(data["values"]),900)
+        self.assertTrue(any(value>0 for value in data["values"]))
+        self.assertTrue(all(0<=value<=1000 for value in data["values"]))
+        self.assertEqual(data["duration_ms"],state["media"]["duration_ms"])
+
+    def test_ffmpeg_draft_preview_without_approval_and_invalidation(self):
+        self.import_clip()
+        # Before making any edit proposal, preview cannot run.
+        status, _, data=self.post("/api/jobs",{"kind":"preview"})
+        self.assertEqual(status,400)
+        self.assertIn("montaggio",json.loads(data)["error"])
+        self.assertEqual(self.request("GET","/api/preview")[0],404)
+        status, _, data=self.post("/api/jobs",{"kind":"analyze"})
+        self.assertEqual(status,202,data)
+        analyzed=self.await_job("analyze")
+        self.assertFalse(analyzed["approved"])
+        status, _, data=self.post("/api/jobs",{"kind":"preview"})
+        self.assertEqual(status,202,data)
+        ready=self.await_job("preview")
+        self.assertTrue(ready["preview_ready"])
+        self.assertFalse(ready["approved"])
+        status, headers, chunk=self.request("GET","/api/preview",headers={"Range":"bytes=0-99"})
+        self.assertEqual(status,206)
+        self.assertEqual(len(chunk),100)
+        self.assertEqual(headers["Content-Type"],"video/mp4")
+        self.assertEqual(self.request("HEAD","/api/preview")[0],200)
+        preview_file=self.workspace.directory / "preview.mp4"
+        self.assertTrue(preview_file.exists())
+        info=probe(preview_file)
+        self.assertEqual((info.width,info.height),(540,960))
+        source_info=ready["media"]
+        self.assertFalse(ready["export_ready"])
+        self.assertEqual(ready["project_revision"],1)
+
+        status, _, modified=self.post("/api/command",{
+            "revision":1,"type":"timeline.keep_all","payload":{},
+        })
+        self.assertEqual(status,200,modified)
+        self.assertFalse(json.loads(modified)["preview_ready"])
+        self.assertEqual(self.request("GET","/api/preview")[0],404)
+        self.assertFalse(preview_file.exists())
+        self.assertEqual(source_info["duration_ms"],self.workspace.info.duration_ms)
 
     def test_project_commands_export_import_and_media_binding(self):
         self.import_clip()
@@ -348,6 +404,9 @@ class StudioStaticCodeTests(unittest.TestCase):
         self.assertIn(":focus-visible", css)
         self.assertIn('aria-live="polite"', html)
         self.assertIn('id="timeline-track"', html)
+        self.assertIn('id="waveform-canvas"', html)
+        self.assertIn('id="preview-action"', html)
+        self.assertIn('"trim-handle "+side', (STATIC_DIR / "app.js").read_text(encoding="utf-8"))
         self.assertNotIn("https://", html)
 
     @unittest.skipUnless(shutil.which("node"), "Node unavailable for JS syntax check")
