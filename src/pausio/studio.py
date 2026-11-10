@@ -23,7 +23,7 @@ from urllib.parse import unquote, urlsplit
 from pausio import __version__
 from pausio.closedroom_asr import transcribe_video_with_closedroom
 from pausio.domain import EditPlan, Interval
-from pausio.media import MediaInfo, detect_silences, probe, render
+from pausio.media import MediaInfo, detect_silences, probe, render, waveform_envelope
 from pausio.planner import propose_segments
 from pausio.project_commands import ProjectTape, ProjectFormatError, UI_COMMANDS
 from pausio.studio_persistence import StudioSessionStore, RecoveryError, default_studio_directory
@@ -63,6 +63,10 @@ class StudioWorkspace:
         self.suggested_plan: EditPlan | None = None
         self.transcript: dict | None = None
         self.export_ready = False
+        self.preview_ready = False
+        self.waveform: list[int] | None = None
+        self.waveform_status = "idle"
+        self.waveform_error: str | None = None
         self.recovered = False
         self.recovery_warning: str | None = None
         self.job: dict = {"status": "idle", "kind": None, "error": None}
@@ -89,6 +93,7 @@ class StudioWorkspace:
                             "Recuperata una copia precedente: l'ultimo salvataggio era incompleto."
                         )
                     self.store.cleanup_orphans(self.source)
+                    self._start_waveform()
             except (RecoveryError, OSError, ValueError) as exc:
                 # Never erase damaged recovery files automatically.
                 self.recovery_warning = str(exc)[:350]
@@ -127,6 +132,9 @@ class StudioWorkspace:
                 "suggested_plan": self.suggested_plan.as_dict() if self.suggested_plan else None,
                 "transcript": self.transcript,
                 "export_ready": self.export_ready,
+                "preview_ready": self.preview_ready,
+                "waveform_status": self.waveform_status,
+                "waveform_error": self.waveform_error,
                 "importing": self.importing,
                 "job": dict(self.job),
             }
@@ -183,14 +191,20 @@ class StudioWorkspace:
                 self.approved = False
                 self.transcript = None
                 self.export_ready = False
+                self.preview_ready = False
+                self.waveform = None
+                self.waveform_status = "idle"
+                self.waveform_error = None
                 self.recovered = False
                 self.recovery_warning = None
                 self.job = {"status": "idle", "kind": None, "error": None}
+                self._start_waveform()
                 if self.store:
                     self.store.cleanup_orphans(new_source)
                 elif old_source and old_source != new_source:
                     old_source.unlink(missing_ok=True)
                 (self.directory / "export.mp4").unlink(missing_ok=True)
+                (self.directory / "preview.mp4").unlink(missing_ok=True)
             finally:
                 self.importing = False
 
@@ -214,7 +228,9 @@ class StudioWorkspace:
         self.suggested_plan = suggested_plan
         self.approved = tape.view.approved
         self.export_ready = False
+        self.preview_ready = False
         (self.directory / "export.mp4").unlink(missing_ok=True)
+        (self.directory / "preview.mp4").unlink(missing_ok=True)
 
     def clear_session(self) -> None:
         """Forget explicitly, including managed cached media and recovery backups."""
@@ -225,6 +241,7 @@ class StudioWorkspace:
             elif self.source:
                 self.source.unlink(missing_ok=True)
             (self.directory / "export.mp4").unlink(missing_ok=True)
+            (self.directory / "preview.mp4").unlink(missing_ok=True)
             self.source = None
             self.filename = None
             self.info = None
@@ -236,9 +253,56 @@ class StudioWorkspace:
             self.approved = False
             self.transcript = None
             self.export_ready = False
+            self.preview_ready = False
+            self.waveform = None
+            self.waveform_status = "idle"
+            self.waveform_error = None
             self.recovered = False
             self.recovery_warning = None
             self.job = {"status": "idle", "kind": None, "error": None}
+
+    def _start_waveform(self) -> None:
+        """Start non-blocking waveform extraction for the current source.
+
+        The media_id token prevents an old background worker from overwriting
+        the waveform of a newly imported/cleared video.
+        """
+        if self.source is None or self.info is None:
+            return
+        source, info, token = self.source, self.info, self.media_id
+        if not info.has_audio:
+            self.waveform = []
+            self.waveform_status = "ready"
+            return
+        self.waveform = None
+        self.waveform_error = None
+        self.waveform_status = "running"
+
+        def worker() -> None:
+            try:
+                values = waveform_envelope(source, info.duration_ms, has_audio=info.has_audio)
+            except Exception as exc:
+                with self.lock:
+                    if self.media_id == token:
+                        self.waveform_status = "failed"
+                        self.waveform_error = str(exc)[:250]
+            else:
+                with self.lock:
+                    if self.media_id == token:
+                        self.waveform = values
+                        self.waveform_status = "ready"
+
+        threading.Thread(target=worker, name="pausio-waveform", daemon=True).start()
+
+    def get_waveform(self) -> dict:
+        with self.lock:
+            if self.waveform_status != "ready" or self.info is None:
+                raise StudioError(self.waveform_error or "Waveform non ancora disponibile.")
+            return {
+                "media_id": self.media_id,
+                "duration_ms": self.info.duration_ms,
+                "values": list(self.waveform or []),
+            }
 
     def command(self, raw: dict) -> None:
         """Execute a version-checked typed command requested by the Studio UI."""
@@ -339,7 +403,7 @@ class StudioWorkspace:
             self._install_tape(incoming)
 
     def start_job(self, kind: str) -> None:
-        if kind not in {"analyze", "render", "transcribe"}:
+        if kind not in {"analyze", "render", "transcribe", "preview"}:
             raise StudioError("Operazione sconosciuta.")
         with self.lock:
             self._ensure_unlocked()
@@ -347,11 +411,15 @@ class StudioWorkspace:
                 raise StudioError("Importa prima un video.")
             if kind == "render" and (self.plan is None or not self.approved):
                 raise StudioError("Conferma il montaggio prima dell'esportazione.")
+            if kind == "preview" and self.plan is None:
+                raise StudioError("Analizza o prepara un montaggio prima dell'anteprima.")
             source = self.source
             info = self.info
             plan = self.plan
             if kind == "render":
                 self.export_ready = False
+            if kind == "preview":
+                self.preview_ready = False
             self.job = {"status": "running", "kind": kind, "error": None}
 
         def worker() -> None:
@@ -382,14 +450,18 @@ class StudioWorkspace:
                     result = transcribe_video_with_closedroom(source)
                     with self.lock:
                         self.transcript = result
-                else:
+                elif kind in {"render", "preview"}:
                     assert plan is not None
                     render(
-                        source, self.directory / "export.mp4", plan.segments,
-                        has_audio=plan.has_audio, overwrite=True,
+                        source, self.directory / ("preview.mp4" if kind == "preview" else "export.mp4"),
+                        plan.segments, has_audio=plan.has_audio, overwrite=True,
+                        size=(540, 960) if kind == "preview" else (1080, 1920),
                     )
                     with self.lock:
-                        self.export_ready = True
+                        if kind == "preview":
+                            self.preview_ready = True
+                        else:
+                            self.export_ready = True
                 with self.lock:
                     self.job = {"status": "completed", "kind": kind, "error": None}
             except Exception as exc:
@@ -557,6 +629,12 @@ class StudioHandler(BaseHTTPRequestHandler):
         if path == "/api/state":
             self._json(200, self.server.workspace.snapshot())
             return
+        if path == "/api/waveform":
+            try:
+                self._json(200, self.server.workspace.get_waveform())
+            except StudioError as exc:
+                self._failed(409, str(exc))
+            return
         if path == "/api/project/export":
             try:
                 content = json.dumps(
@@ -578,22 +656,28 @@ class StudioHandler(BaseHTTPRequestHandler):
         if path == "/api/export":
             self._media(True, False)
             return
+        if path == "/api/preview":
+            self._media(False, False, preview=True)
+            return
         self._failed(404, "Risorsa non trovata.")
 
     def do_HEAD(self) -> None:
         path = urlsplit(self.path).path
-        if path in {"/api/media", "/api/export"}:
-            self._media(path == "/api/export", True)
+        if path in {"/api/media", "/api/export", "/api/preview"}:
+            self._media(path == "/api/export", True, preview=path == "/api/preview")
         else:
             self._failed(404, "Risorsa non trovata.")
 
-    def _media(self, exported: bool, headers_only: bool) -> None:
+    def _media(self, exported: bool, headers_only: bool, *, preview: bool = False) -> None:
         with self.server.workspace.lock:
             path = (
-                (self.server.workspace.directory / "export.mp4")
-                if exported else self.server.workspace.source
+                self.server.workspace.directory / "preview.mp4" if preview
+                else self.server.workspace.directory / "export.mp4" if exported
+                else self.server.workspace.source
             )
-            if exported and not self.server.workspace.export_ready:
+            if (exported and not self.server.workspace.export_ready) or (
+                preview and not self.server.workspace.preview_ready
+            ):
                 path = None
             if path is None or not path.is_file():
                 self._failed(404, "Video non disponibile.")
@@ -624,7 +708,7 @@ class StudioHandler(BaseHTTPRequestHandler):
                 return
             end = min(end, total - 1)
         size = end - begin + 1
-        mime = "video/mp4" if exported or path.suffix.lower() in {".mp4", ".m4v", ".mov"} else "video/webm"
+        mime = "video/mp4" if preview or exported or path.suffix.lower() in {".mp4", ".m4v", ".mov"} else "video/webm"
         self._headers(206 if requested else 200, size, mime)
         self.send_header("Accept-Ranges", "bytes")
         if requested:

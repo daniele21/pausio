@@ -162,7 +162,8 @@
         <div class="playback-toolbar">
           <div class="mode-switch" role="group" aria-label="Modalità di anteprima">
             <button class="mode active" type="button" data-mode="original" aria-pressed="true">Originale</button>
-            <button class="mode" type="button" data-mode="edited" aria-pressed="false" disabled>Montaggio</button>
+            <button class="mode" type="button" data-mode="edited" aria-pressed="false" disabled>Simulazione</button>
+            <button class="mode" type="button" data-mode="rendered" aria-pressed="false" disabled>Preview FFmpeg</button>
           </div>
           <div class="player-controls">
             <button class="icon-button" id="back-five" title="Indietro 5 secondi" aria-label="Indietro 5 secondi" type="button" disabled>↶<sup>5</sup></button>
@@ -227,6 +228,19 @@
         <div class="timeline-actions">
           <span class="legend-item"><span class="legend-dot keep"></span>Mantieni</span>
           <span class="legend-item"><span class="legend-dot cut"></span>Escluso</span>
+          <label class="timeline-zoom-label" for="timeline-zoom">
+            Zoom
+            <select id="timeline-zoom" aria-label="Ingrandimento timeline">
+              <option value="1">1×</option>
+              <option value="2">2×</option>
+              <option value="4">4×</option>
+              <option value="8">8×</option>
+            </select>
+          </label>
+          <button class="button button-outline timeline-preview-action" id="preview-action" type="button" disabled
+            title="Renderizza la timeline attuale con FFmpeg in bassa risoluzione, senza confermare il montaggio">
+            Genera preview
+          </button>
           <button class="button button-export" id="export-action" type="button" disabled>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v3h16v-3"/></svg>
             <span>Esporta MP4</span>
@@ -236,20 +250,26 @@
           </a>
         </div>
       </div>
-      <div class="timeline-ruler" aria-hidden="true"><span>00:00</span><span id="tick-quarter">—</span><span id="tick-half">—</span><span id="tick-threequarter">—</span><span id="tick-end">—</span></div>
+      <div class="timeline-ruler" id="timeline-ruler" aria-hidden="true">
+        <div class="timeline-ruler-content" id="timeline-ruler-content">
+          <span>00:00</span><span id="tick-quarter">—</span><span id="tick-half">—</span><span id="tick-threequarter">—</span><span id="tick-end">—</span>
+        </div>
+      </div>
       <div class="timeline-surface" id="timeline-surface">
         <div class="timeline-placeholder" id="timeline-placeholder">
           <span class="placeholder-wave" aria-hidden="true">▂▄▆▃▇▅▃▆▄▂▅▇▃▅▂▂▆▄▇</span>
           <span>La tua storia comincia qui</span>
         </div>
-        <div class="timeline-track" id="timeline-track" role="slider" tabindex="0" aria-label="Posizione nella timeline originale" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden>
+        <div class="timeline-track" id="timeline-track" role="group" tabindex="0"
+          aria-label="Timeline originale: clicca per spostarti, usa le maniglie sui segmenti per regolare i tagli" hidden>
+          <canvas class="waveform-canvas" id="waveform-canvas" aria-hidden="true"></canvas>
           <div class="timeline-regions" id="timeline-regions"></div>
           <div class="playhead" id="playhead"><span></span></div>
         </div>
       </div>
       <div class="timeline-bottom">
         <span id="timeline-caption">Originale protetto. Nessuna modifica viene applicata senza la tua scelta.</span>
-        <span class="keyboard-hint">SPAZIO <span>Riproduci</span> &nbsp; · &nbsp; ← → <span>±5 sec</span></span>
+        <span class="keyboard-hint">Maniglie ← → <span>±0,1 sec</span> &nbsp; · &nbsp; SPAZIO <span>Riproduci</span></span>
       </div>
     </section>
 
