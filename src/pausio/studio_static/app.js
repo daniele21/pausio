@@ -57,6 +57,7 @@ function update(next){
   if(next.media_id && mediaKey!==next.media_id){
     mediaKey=next.media_id;mode="original";previewSourceMode="original";
     waveformData=null;waveformRequestedFor=null;
+    paintWaveform();
     v.pause();v.src="/api/media?v="+encodeURIComponent(mediaKey);v.load();tab("cuts");
   }
   el("empty-state").hidden=has;el("video-workspace").hidden=!has;
