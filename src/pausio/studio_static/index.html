@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#0b1017">
+  <meta name="description" content="Pausio Studio: analizza, rivedi ed esporta tagli video naturali, sul tuo Mac.">
+  <title>Studio · Pausio</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell" id="app">
+    <header class="topbar">
+      <div class="identity">
+        <div class="brand-lockup" aria-label="Pausio">
+          <span class="brand-icon" aria-hidden="true"><span></span><span></span><i></i></span>
+          <span class="brand-word">pausio<span class="brand-dot">.</span></span>
+        </div>
+        <span class="brand-divider" aria-hidden="true"></span>
+        <span class="location">Studio <span class="location-sub">/ Workspace</span></span>
+      </div>
+      <div class="topbar-right">
+        <span class="private-indicator"><span class="private-dot" aria-hidden="true"></span> Locale sul tuo Mac</span>
+        <span class="topbar-divider" aria-hidden="true"></span>
+        <span class="version-chip">EARLY ACCESS · V0.1</span>
+      </div>
+    </header>
+
+    <div class="workbench">
+      <aside class="rail" aria-labelledby="workflow-title">
+        <section class="rail-intro">
+          <p class="eyebrow">WORKFLOW</p>
+          <h1 id="workflow-title">Il tuo video,<br><em>il tuo ritmo.</em></h1>
+          <p class="muted">Togli il superfluo. Lascia respirare le idee.</p>
+        </section>
+
+        <ol class="steps" aria-label="Fasi di lavorazione">
+          <li class="step active" data-step="import">
+            <span class="step-num">01</span>
+            <span><strong>Importa</strong><small>Il girato originale</small></span>
+            <span class="step-check" aria-hidden="true">✓</span>
+          </li>
+          <li class="step" data-step="analyze">
+            <span class="step-num">02</span>
+            <span><strong>Analizza</strong><small>Trova pause lunghe</small></span>
+            <span class="step-check" aria-hidden="true">✓</span>
+          </li>
+          <li class="step" data-step="review">
+            <span class="step-num">03</span>
+            <span><strong>Rivedi</strong><small>Decidi cosa resta</small></span>
+            <span class="step-check" aria-hidden="true">✓</span>
+          </li>
+          <li class="step" data-step="export">
+            <span class="step-num">04</span>
+            <span><strong>Esporta</strong><small>Il video finale</small></span>
+            <span class="step-check" aria-hidden="true">✓</span>
+          </li>
+        </ol>
+
+        <div class="rail-section project-card">
+          <div class="section-heading"><span>PROGETTO</span><span class="tiny-badge" id="project-status">IN ATTESA</span></div>
+          <p class="project-name" id="project-title">Nessun video caricato</p>
+          <p class="project-meta" id="project-meta">Scegli un file per iniziare.</p>
+          <button class="button button-outline button-full" id="import-action" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+            <span id="import-label">Importa video</span>
+          </button>
+        </div>
+
+        <div class="rail-section tools">
+          <div class="section-heading"><span>STRUMENTI</span><span class="small-muted">01 / 02</span></div>
+          <button class="tool-action" id="analyze-action" type="button" disabled>
+            <span class="tool-icon">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 13 4 0 3-8 4 14 3-6h4"/></svg>
+            </span>
+            <span class="tool-copy"><strong>Analizza le pause</strong><small>Preset AI Natural</small></span>
+            <span class="action-arrow" aria-hidden="true">↗</span>
+          </button>
+          <button class="tool-action" id="transcribe-action" type="button" disabled>
+            <span class="tool-icon muted-icon">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"/></svg>
+            </span>
+            <span class="tool-copy"><strong>Trascrivi il parlato</strong><small>Con ClosedRoom locale</small></span>
+            <span class="action-arrow" aria-hidden="true">↗</span>
+          </button>
+        </div>
+
+        <div class="rail-footer">
+          <span class="micro-icon" aria-hidden="true">✧</span>
+          <p><strong>Nessuna magia nascosta.</strong> Ogni taglio è modificabile prima dell'export.</p>
+        </div>
+      </aside>
+
+      <main class="stage" aria-label="Area video e anteprima">
+        <div class="stage-head">
+          <div><p class="eyebrow">PREVIEW / 01</p><h2 id="stage-title">Il tuo spazio creativo</h2></div>
+          <div class="head-status"><span class="state-orb" id="stage-orb" aria-hidden="true"></span><span id="stage-status">Pronto a iniziare</span></div>
+        </div>
+        <div class="video-stage" id="drop-target">
+          <div class="stage-grid" aria-hidden="true"></div>
+          <div class="empty-state" id="empty-state">
+            <div class="empty-illustration" aria-hidden="true">
+              <div class="floating-frame">
+                <span class="frame-line wide"></span>
+                <span class="frame-line mid"></span>
+                <span class="play-pip">▶</span>
+                <span class="frame-wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+              </div>
+              <span class="float-glow"></span>
+            </div>
+            <p class="eyebrow accent">PARTI DAL TUO VIDEO</p>
+            <h3>Le pause giuste<br><em>fanno la differenza.</em></h3>
+            <p>Importa una ripresa per iniziare a creare<br class="desktop-break"> un montaggio che suona come te.</p>
+            <button type="button" class="button button-primary" id="empty-import">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+              Scegli un video
+            </button>
+            <span class="file-hint">MP4 · MOV · WEBM · MKV · fino a 2 GB</span>
+          </div>
+          <div class="video-workspace" id="video-workspace" hidden>
+            <div class="aspect-canvas">
+              <video id="preview-video" preload="metadata" playsinline aria-label="Anteprima del video"></video>
+              <div class="canvas-corner corner-tl" aria-hidden="true"></div>
+              <div class="canvas-corner corner-tr" aria-hidden="true"></div>
+              <div class="canvas-corner corner-bl" aria-hidden="true"></div>
+              <div class="canvas-corner corner-br" aria-hidden="true"></div>
+              <span class="canvas-badge" id="canvas-badge">ORIGINALE</span>
+              <button class="video-center-play" id="video-center-play" type="button" aria-label="Riproduci video">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 12 7-12 7z"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="drag-overlay" id="drag-overlay" hidden aria-hidden="true"><span>Rilascia il video per importarlo</span></div>
+        </div>
+        <div class="playback-toolbar">
+          <div class="mode-switch" role="group" aria-label="Modalità di anteprima">
+            <button class="mode active" type="button" data-mode="original" aria-pressed="true">Originale</button>
+            <button class="mode" type="button" data-mode="edited" aria-pressed="false" disabled>Montaggio</button>
+          </div>
+          <div class="player-controls">
+            <button class="icon-button" id="back-five" title="Indietro 5 secondi" aria-label="Indietro 5 secondi" type="button" disabled>↶<sup>5</sup></button>
+            <button class="icon-button play-control" id="play-pause" title="Riproduci o metti in pausa" aria-label="Riproduci" type="button" disabled>▶</button>
+            <button class="icon-button" id="forward-five" title="Avanti 5 secondi" aria-label="Avanti 5 secondi" type="button" disabled>↷<sup>5</sup></button>
+          </div>
+          <div class="time-readout"><span id="current-time">00:00</span><span class="time-divider">/</span><span id="total-time">00:00</span></div>
+        </div>
+      </main>
+
+      <aside class="inspector" aria-label="Revisione delle decisioni">
+        <div class="inspector-head">
+          <div><p class="eyebrow">REVISIONE / 02</p><h2>Ogni scelta, tua.</h2></div>
+          <span class="inspector-counter" id="segment-count">—</span>
+        </div>
+        <div class="inspector-tabs" role="tablist" aria-label="Pannelli di revisione">
+          <button type="button" class="inspector-tab active" id="cuts-tab" role="tab" aria-selected="true" aria-controls="cuts-panel">Tagli</button>
+          <button type="button" class="inspector-tab" id="transcript-tab" role="tab" aria-selected="false" aria-controls="transcript-panel">Trascrizione</button>
+        </div>
+        <div class="inspector-body" id="cuts-panel" role="tabpanel" aria-labelledby="cuts-tab">
+          <div class="inspector-empty" id="inspector-empty">
+            <div class="empty-minimal-icon" aria-hidden="true">≋</div>
+            <h3>La timeline ti aspetta.</h3>
+            <p>Importa un video e analizza le pause. Qui potrai rivedere ogni intervallo mantenuto.</p>
+          </div>
+          <div id="cuts-content" hidden>
+            <div class="summary-strip">
+              <div><span class="summary-label">TEMPO SALVATO</span><strong id="saved-time">—</strong></div>
+              <div><span class="summary-label">DA MANTENERE</span><strong id="keep-time">—</strong></div>
+            </div>
+            <p class="inspector-intro">Modifica gli intervalli da <strong>mantenere</strong>. Quelli esclusi non finiranno nel video finale.</p>
+            <div class="segment-list" id="segment-list" aria-label="Intervalli da mantenere"></div>
+            <button class="button button-ghost button-full" id="add-segment" type="button">+ Aggiungi intervallo</button>
+            <div class="inspector-actions">
+              <button type="button" class="text-button" id="restore-suggested">Ripristina suggerimenti</button>
+              <button type="button" class="text-button" id="restore-all">Mantieni tutto</button>
+            </div>
+          </div>
+        </div>
+        <div class="inspector-body" id="transcript-panel" role="tabpanel" aria-labelledby="transcript-tab" hidden>
+          <div class="inspector-empty" id="transcript-empty">
+            <div class="empty-minimal-icon" aria-hidden="true">“ ”</div>
+            <h3>La voce, in parole.</h3>
+            <p>Usa «Trascrivi il parlato» per chiedere a ClosedRoom, già avviato sul tuo Mac, il testo del video.</p>
+          </div>
+          <div id="transcript-content" hidden>
+            <div class="transcript-source"><span class="private-dot" aria-hidden="true"></span> ClosedRoom · locale <span id="transcript-model" class="truncate"></span></div>
+            <p class="transcript-note" id="transcript-note"></p>
+            <div class="transcript-list" id="transcript-list"></div>
+          </div>
+        </div>
+        <div class="inspector-bottom">
+          <p class="inspector-footnote"><span class="footnote-icon">i</span> I tagli rilevano pause nell'audio, non errori nel parlato. Controlla sempre prima di esportare.</p>
+        </div>
+      </aside>
+    </div>
+
+    <section class="timeline-panel" aria-labelledby="timeline-title">
+      <div class="timeline-top">
+        <div class="timeline-heading"><span class="timeline-glyph" aria-hidden="true">≋</span><h2 id="timeline-title">Timeline</h2><span class="timeline-subtitle" id="timeline-subtitle">Nessun video importato</span></div>
+        <div class="timeline-actions">
+          <span class="legend-item"><span class="legend-dot keep"></span>Mantieni</span>
+          <span class="legend-item"><span class="legend-dot cut"></span>Escluso</span>
+          <button class="button button-export" id="export-action" type="button" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v3h16v-3"/></svg>
+            <span>Esporta MP4</span>
+          </button>
+          <a class="button button-primary download-action" id="download-action" href="/api/export" download="pausio-final.mp4" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v3h16v-3"/></svg> Scarica MP4
+          </a>
+        </div>
+      </div>
+      <div class="timeline-ruler" aria-hidden="true"><span>00:00</span><span id="tick-quarter">—</span><span id="tick-half">—</span><span id="tick-threequarter">—</span><span id="tick-end">—</span></div>
+      <div class="timeline-surface" id="timeline-surface">
+        <div class="timeline-placeholder" id="timeline-placeholder">
+          <span class="placeholder-wave" aria-hidden="true">▂▄▆▃▇▅▃▆▄▂▅▇▃▅▂▂▆▄▇</span>
+          <span>La tua storia comincia qui</span>
+        </div>
+        <div class="timeline-track" id="timeline-track" role="slider" tabindex="0" aria-label="Posizione nella timeline originale" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden>
+          <div class="timeline-regions" id="timeline-regions"></div>
+          <div class="playhead" id="playhead"><span></span></div>
+        </div>
+      </div>
+      <div class="timeline-bottom">
+        <span id="timeline-caption">Originale protetto. Nessuna modifica viene applicata senza la tua scelta.</span>
+        <span class="keyboard-hint">SPAZIO <span>Riproduci</span> &nbsp; · &nbsp; ← → <span>±5 sec</span></span>
+      </div>
+    </section>
+
+    <input type="file" id="file-input" accept="video/mp4,video/quicktime,video/webm,video/x-matroska,.m4v,.mov,.mkv" hidden>
+    <div class="job-banner" id="job-banner" role="status" aria-live="polite" hidden>
+      <span class="spinner" aria-hidden="true"></span>
+      <span id="job-message">Analisi in corso…</span>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  </div>
+</body>
+</html>
