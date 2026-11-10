@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 18
     env:
-      PAUSIO_UI_ARTIFACTS: ${{ runner.temp }}/pausio-ui-audit
+      PAUSIO_UI_ARTIFACTS: /tmp/pausio-ui-audit
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -38,6 +38,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pausio-playwright-ui-audit
-          path: ${{ runner.temp }}/pausio-ui-audit/
+          path: /tmp/pausio-ui-audit/
           retention-days: 14
           if-no-files-found: warn
