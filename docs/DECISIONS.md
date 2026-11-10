@@ -24,9 +24,15 @@
 
 **Decision:** versioned JSON in integer milliseconds, source references relative to plan directory or absolute. Future CapCut export will be a translator layer, not the primary storage format.
 
+## ADR 007 — Reuse ClosedRoom transcription
+
+**Decision:** ClosedRoom (`daniele21/closedroom`, `dev`) is Pausio's sole transcription implementation. Pausio uses the existing local `POST /v1/audio/transcriptions/path` endpoint with `response_format=verbose_json` and `asr_provider=local` over loopback. It extracts a temporary audio track from video, normalizes segment/word timestamps into source-time milliseconds and saves a reviewable sidecar; MLX Whisper, Nemotron, model settings, cache and VAD remain owned by ClosedRoom. No copied/forked ASR code and no secondary Pausio ASR runtime.
+
+**Future:** if local API distribution is unsuitable, extract a reusable library **inside ClosedRoom** and version it for both consumers. Pin and contract-test any stable version before distributing. Live compatibility and source timing have not yet been verified with real A56 video.
+
 ## Unresolved
 
 - Choose Pausio repository license intentionally before inviting source reuse.
-- Pick ASR backend and model distribution/weights license; benchmark on Italian clips.
+- Validate ClosedRoom adapter and model/weight distribution policy; engine choice stays in ClosedRoom.
 - Determine UI technology (web local vs packaged desktop), safe-area templates and subtitles format.
 - Quantify performance on real Samsung video, VFR, rotation and audio drift.

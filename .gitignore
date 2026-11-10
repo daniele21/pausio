@@ -25,4 +25,5 @@ htmlcov/
 *.log
 .work/
 outputs/
+*.transcript.json
 models/

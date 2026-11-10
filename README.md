@@ -4,7 +4,7 @@
 
 A local-first toolkit for natural-sounding, talking-head social videos. Pausio is designed to make post-production **reviewable**, not fully automatic at the expense of speech or pacing.
 
-> **Status: early foundation (v0.1.0).** The current CLI inspects videos, suggests cuts using FFmpeg's signal-level silence detection, writes a human-editable JSON timeline, and exports a vertical 1080x1920 MP4. It **does not yet** transcribe speech, remove filler words, generate subtitles, denoise audio, or export CapCut projects.
+> **Status: early foundation (v0.1.0).** The current CLI inspects videos, suggests cuts using FFmpeg's signal-level silence detection, writes a human-editable JSON timeline, and exports a vertical 1080x1920 MP4. It can now request a transcript from the **existing, separately running ClosedRoom local ASR service**, but does not yet make semantic cuts, generate subtitles, denoise or export CapCut projects.
 
 ## Quickstart
 
@@ -19,11 +19,28 @@ python -m pip install -e .
 pausio doctor
 pausio inspect video.mp4
 pausio plan video.mp4 -o plan.json
+# Optional: ClosedRoom local server must already be running on 127.0.0.1:1236
+pausio transcribe video.mp4 -o outputs/video.transcript.json
 # Review and edit the JSON keep segments first.
 pausio render plan.json -o final.mp4
 ```
 
 The edit plan stores versioned integer-millisecond KEEP intervals. Editing decisions remain reversible; source video is never overwritten. Exports are padded 9:16, 30 fps H.264/AAC MP4. Use `pausio render plan.json -o final.mp4 --dry-run` to inspect the FFmpeg command.
+
+## Transcription: reuse ClosedRoom, do not rebuild ASR
+
+[ClosedRoom](https://github.com/daniele21/closedroom) already implements on-device MLX Whisper/Nemotron, VAD, model management, cache and transcription. Pausio only calls the **same-machine local API** on `127.0.0.1:1236` and adapts its response for editing. The integration follows the ClosedRoom `dev` endpoint `POST /v1/audio/transcriptions/path`.
+
+```bash
+# Start the existing ClosedRoom server using its own repository instructions.
+pausio transcribe video.mp4 -o outputs/video.transcript.json
+# Optional: --model mlx-community/whisper-large-v3-turbo
+# Optional: --closedroom-url http://127.0.0.1:1236
+```
+
+Pausio uses FFmpeg to extract a temporary mono WAV, requests ClosedRoom's `verbose_json` response with `asr_provider=local`, normalizes segments and available word timestamps to **source-time milliseconds**, and deletes the temporary audio. It rejects non-loopback destinations and HTTP redirects. No model is installed or started automatically by Pausio. Pre-provision your desired ClosedRoom model to avoid unexpected upstream download behavior.
+
+The output is a separate reviewable transcript JSON, **not yet wired into cut decisions or subtitle rendering**. If ClosedRoom returns no word-level alignment, the sidecar reports `word_timestamps_available: false`; it never invents word timings. A live ClosedRoom integration test with real recordings is still outstanding. See [ClosedRoom integration](docs/CLOSEDROOM_INTEGRATION.md).
 
 ## Project principles
 
@@ -48,14 +65,15 @@ CI tests Python 3.11–3.13 and synthetic FFmpeg E2E cases. Real Galaxy A56 foot
 
 Pausio ships **eight task-specific Agent Skills** under [`.agents/skills/`](.agents/skills/README.md), covering Python architecture, FFmpeg, natural editing, local speech AI, subtitles, test engineering, security/releases and PR review. Read [`AGENTS.md`](AGENTS.md) for repo invariants and [`docs/AGENT_SKILLS.md`](docs/AGENT_SKILLS.md) for task triggers, agent compatibility, source references, validation and evaluation prompts.
 
-These are guidance for coding agents, not runtime features. Adding them does not install WhisperX, Silero VAD or a graphical editor.
+These are guidance for coding agents, not runtime features. ClosedRoom is the sole ASR implementation; the optional local adapter does not install any transcription models.
 
 ## Current modules and documentation
 
 - `src/pausio/domain.py`: validated immutable edit-plan model.
 - `src/pausio/planner.py`: deterministic AI Natural cut policy.
 - `src/pausio/media.py`: FFprobe / FFmpeg adapters.
-- `src/pausio/cli.py`: `doctor`, `inspect`, `plan`, `render`.
+- `src/pausio/closedroom_asr.py`: existing ClosedRoom ASR API integration; no duplicate model stack.
+- `src/pausio/cli.py`: `doctor`, `inspect`, `plan`, `transcribe`, `render`.
 - [Architecture](docs/ARCHITECTURE.md) · [Decisions](docs/DECISIONS.md) · [Roadmap](docs/ROADMAP.md) · [Dependencies/licensing](docs/DEPENDENCIES.md).
 
 The source-license decision remains open: public repository visibility does not automatically grant reuse rights. See `docs/DEPENDENCIES.md`.

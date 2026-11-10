@@ -9,14 +9,15 @@ video.mp4 → inspect → analyze → propose **editable** timeline → review �
 - domain.py: Interval and EditPlan (schema_version=1, integer milliseconds, validated, portable serialisation).
 - planner.py: deterministic AI_NATURAL pause policy, completely independent of any ASR/vendor and unit-testable.
 - media.py: FFprobe adapter (metadata), FFmpeg silencedetect adapter, FFmpeg filter-based renderer.
+- closedroom_asr.py: localhost adapter to the **existing** ClosedRoom ASR service; source-time transcript sidecar (currently independent of edit planning).
 - cli.py: stateless command interface; no global settings, cloud credentials or hidden processing.
 
 ## Future boundaries
 
     input media (immutable)
       ├── probe adapter [ffprobe]
-      ├── silence/VAD adapters [ffmpeg; Silero optional]
-      ├── ASR adapter [faster-whisper/WhisperX optional]
+      ├── silence detector [ffmpeg; baseline signal-energy heuristic]
+      ├── ASR/VAD [ClosedRoom local API; existing implementation]
       └── denoise adapter [optional, never destructive]
              ↓
     analysis bundle (timestamps + confidence + provenance)

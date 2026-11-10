@@ -7,8 +7,12 @@ import json
 import shutil
 import sys
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from pausio import __version__
+from pausio.closedroom_asr import (
+    ClosedRoomError, DEFAULT_CLOSEDROOM_URL, transcribe_video_with_closedroom,
+)
 from pausio.domain import EditPlan, Interval
 from pausio.media import MediaError, detect_silences, probe, render
 from pausio.planner import AI_NATURAL, propose_segments
@@ -35,6 +39,16 @@ def build_parser() -> argparse.ArgumentParser:
     plan_cmd.add_argument("--output", "-o", type=Path, required=True)
     plan_cmd.add_argument("--noise-db", type=int, default=-35)
     plan_cmd.add_argument("--overwrite", action="store_true")
+
+    transcript_cmd = commands.add_parser(
+        "transcribe", help="Transcribe locally via an already running ClosedRoom ASR service"
+    )
+    transcript_cmd.add_argument("input", type=Path)
+    transcript_cmd.add_argument("--output", "-o", type=Path, required=True)
+    transcript_cmd.add_argument("--closedroom-url", default=DEFAULT_CLOSEDROOM_URL)
+    transcript_cmd.add_argument("--language", default="it")
+    transcript_cmd.add_argument("--model", default=None)
+    transcript_cmd.add_argument("--overwrite", action="store_true")
 
     render_cmd = commands.add_parser("render", help="Render an approved plan with FFmpeg")
     render_cmd.add_argument("plan", type=Path)
@@ -80,6 +94,31 @@ def main(argv: list[str] | None = None) -> int:
                 "note": "Silence-based suggestions only; inspect the JSON before rendering.",
             }), end="")
             return 0
+        if args.command == "transcribe":
+            source = args.input.resolve()
+            output = args.output.resolve()
+            if source == output:
+                raise ValueError("source video and transcript output must differ")
+            if output.exists() and not args.overwrite:
+                raise ValueError("transcript already exists; pass --overwrite")
+            transcript = transcribe_video_with_closedroom(
+                source, url=args.closedroom_url, language=args.language, model=args.model
+            )
+            output.parent.mkdir(parents=True, exist_ok=True)
+            with TemporaryDirectory(prefix=".pausio-", dir=output.parent) as temp:
+                staged = Path(temp) / "transcript.json"
+                staged.write_text(_json(transcript), encoding="utf-8")
+                if output.exists() and not args.overwrite:
+                    raise ValueError("transcript appeared during processing")
+                staged.replace(output)
+            print(_json({
+                "transcript_file": str(output),
+                "segments": len(transcript["segments"]),
+                "word_timestamps_available": transcript["word_timestamps_available"],
+                "provider": transcript["provider"],
+                "review_required": True,
+            }), end="")
+            return 0
         if args.command == "render":
             raw = json.loads(args.plan.read_text(encoding="utf-8"))
             plan = EditPlan.from_dict(raw)
@@ -101,7 +140,7 @@ def main(argv: list[str] | None = None) -> int:
             }), end="")
             return 0
         raise ValueError(f"unknown command: {args.command}")
-    except (MediaError, ValueError, OSError, json.JSONDecodeError) as exc:
+    except (MediaError, ClosedRoomError, ValueError, OSError, json.JSONDecodeError) as exc:
         print(f"pausio: {exc}", file=sys.stderr)
         return 2
 
