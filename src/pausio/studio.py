@@ -148,7 +148,7 @@ class StudioWorkspace:
             if self.source is None or self.info is None:
                 raise StudioError("Importa prima un video.")
             if kind == "render" and (self.plan is None or not self.approved):
-                raise StudioError("Analizza e rivedi i tagli prima dell'esportazione.")
+                raise StudioError("Conferma il montaggio prima dell'esportazione.")
             source = self.source
             info = self.info
             plan = self.plan

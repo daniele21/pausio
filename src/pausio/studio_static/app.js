@@ -167,7 +167,9 @@ function drawTranscript(){
 }
 function drawTimeline(){
   const parts=el("timeline-regions");parts.replaceChildren();if(!project?.media)return;
-  const duration=project.media.duration_ms,keep=segments().length?segments():[{start_ms:0,end_ms:duration}];
+  const duration=project.media.duration_ms,keep=segments();
+  parts.classList.toggle("unanalysed", !project.plan);
+  if(!project.plan) return;
   for(const s of keep){
     const div=document.createElement("div");div.className="timeline-region";
     div.style.left=(s.start_ms/duration*100).toFixed(4)+"%";

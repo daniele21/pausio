@@ -14,7 +14,7 @@
   --ink: #f1f0ee;
   --ink-secondary: #bac4cd;
   --muted: #8997a7;
-  --faint: #647387;
+  --faint: #7c8b9e;
   --accent: #f4ad7b;
   --accent-bright: #ffc69f;
   --accent-dark: #6a3d28;
@@ -357,3 +357,6 @@ a { color: inherit; text-decoration: none; }
 @media (prefers-reduced-motion: reduce) {
   *, *:before, *:after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
+
+#approve-action { margin-top: 15px; margin-bottom: 12px; }
+.timeline-regions.unanalysed { background: #263647; }
