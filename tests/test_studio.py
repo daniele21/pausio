@@ -69,7 +69,7 @@ class StudioHttpTests(unittest.TestCase):
         for path, snippet in (
             ("/", b"Studio"),
             ("/styles.css", b"focus-visible"),
-            ("/app.js", b"/api/plan"),
+            ("/app.js", b"/api/command"),
         ):
             status, headers, content = self.request("GET", path)
             self.assertEqual(status, 200)
