@@ -20,6 +20,16 @@
 - [ ] Editable subtitles using **actual** ClosedRoom word timestamps when available, otherwise segment-level review; safe-area previews.
 - [ ] Test natural pacing vs aggressive auto cuts using three real clips.
 
+## Studio UI testing milestone
+
+- [x] Local web UI via `pausio studio` with video import, preview and graphical KEEP timeline.
+- [x] Editable source-time ranges, restore decisions, original vs edited simulated preview, explicit approval and MP4 export.
+- [x] Optional ClosedRoom transcript panel; existing ASR stack remains upstream.
+- [x] Four tailored Studio UX/UI Agent Skills and automated HTTP/workflow tests.
+- [ ] Validate real browser UX and accessibility on macOS at desktop/tablet/mobile widths.
+- [ ] Run real Samsung A56 videos through the full preview and export; inspect VFR, rotation, codec and A/V sync.
+- [ ] Add waveform extraction, frame-accurate edited preview and audio transitions.
+
 ## Phase 2 — Quality and UX
 
 - [ ] Optional DeepFilterNet/RNNoise audio-cleanup adapter; voice naturalness A/B tests.

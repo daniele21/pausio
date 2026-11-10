@@ -18,6 +18,17 @@ Pausio uses the portable [Agent Skills specification](https://agentskills.io/spe
 
 Tasks may use two relevant skills; avoid loading the entire catalog by default.
 
+## Pausio Studio UX/UI skills
+
+| Skill | What it addresses |
+| --- | --- |
+| [pausio-product-ux](../.agents/skills/pausio-product-ux/SKILL.md) | Creator journey, states, clear confirmation before export |
+| [pausio-ui-design-system](../.agents/skills/pausio-ui-design-system/SKILL.md) | UI tokens, brand direction, hierarchy, accessibility |
+| [pausio-video-interaction-ux](../.agents/skills/pausio-video-interaction-ux/SKILL.md) | Preview, timeline, scrubbing, source/output time |
+| [pausio-ui-quality](../.agents/skills/pausio-ui-quality/SKILL.md) | UI regressions, browser/keyboard/responsive QA |
+
+These are original Pausio-specific instructions inspired by [Anthropic Frontend Design](https://github.com/anthropics/skills/blob/main/skills/frontend-design/SKILL.md), [Vercel Web Interface Guidelines](https://github.com/vercel-labs/agent-skills/blob/main/skills/web-design-guidelines/SKILL.md) and [UI/UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill). We reuse their *design principles*, not upstream code, scripts or skill bodies. Skills are not a substitute for testing the real UI.
+
 ## Agent compatibility
 
 **Codex:** repository skills in `.agents/skills` are supported; explicit invocation uses `$pausio-media-ffmpeg` (when available in the client). [Codex guide](https://learn.chatgpt.com/docs/build-skills).

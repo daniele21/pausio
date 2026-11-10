@@ -6,6 +6,26 @@ A local-first toolkit for natural-sounding, talking-head social videos. Pausio i
 
 > **Status: early foundation (v0.1.0).** The current CLI inspects videos, suggests cuts using FFmpeg's signal-level silence detection, writes a human-editable JSON timeline, and exports a vertical 1080x1920 MP4. It can now request a transcript from the **existing, separately running ClosedRoom local ASR service**, but does not yet make semantic cuts, generate subtitles, denoise or export CapCut projects.
 
+## Pausio Studio — interfaccia per test reali
+
+Un editor web locale senza npm, cloud o account. L'area di lavoro offre anteprima 9:16, timeline dei tagli, intervalli modificabili, trascrizione ClosedRoom opzionale e download MP4.
+
+```bash
+brew install ffmpeg
+git clone https://github.com/daniele21/pausio.git
+cd pausio
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
+pausio studio
+```
+
+Il browser si apre su **http://127.0.0.1:8765**. Altre opzioni: `pausio studio --port 8877 --no-open`. Il server usa solo loopback, conserva i file in uno spazio temporaneo sul Mac, e li elimina al termine del processo. Supporta MP4/MOV/MKV/WebM fino a 2 GiB. Importa, analizza le pause, rivedi gli intervalli da mantenere, **conferma il montaggio** ed esporta.
+
+La preview "Montaggio" simula i tagli tramite seek tra gli intervalli dell'originale: non è frame-accurate né sostituisce il controllo del MP4 finale. La riproduzione nel browser richiede codec compatibili (consigliato MP4 H.264). La trascrizione richiede ClosedRoom già in esecuzione. Restano da costruire sottotitoli, audio cleanup, waveform e tagli semantici.
+
+Vedi [Guida Pausio Studio](docs/STUDIO_UI.md) per workflow, shortcut, privacy e limiti.
+
 ## Quickstart
 
 Requires Python 3.11+, FFmpeg and FFprobe executables on PATH (on macOS: `brew install ffmpeg`).
@@ -63,7 +83,7 @@ CI tests Python 3.11–3.13 and synthetic FFmpeg E2E cases. Real Galaxy A56 foot
 
 ### Agent skills for contributors
 
-Pausio ships **eight task-specific Agent Skills** under [`.agents/skills/`](.agents/skills/README.md), covering Python architecture, FFmpeg, natural editing, local speech AI, subtitles, test engineering, security/releases and PR review. Read [`AGENTS.md`](AGENTS.md) for repo invariants and [`docs/AGENT_SKILLS.md`](docs/AGENT_SKILLS.md) for task triggers, agent compatibility, source references, validation and evaluation prompts.
+Pausio ships **twelve task-specific Agent Skills** under [`.agents/skills/`](.agents/skills/README.md), covering Python architecture, FFmpeg, natural editing, local speech AI, subtitles, test engineering, security/releases and PR review. Read [`AGENTS.md`](AGENTS.md) for repo invariants and [`docs/AGENT_SKILLS.md`](docs/AGENT_SKILLS.md) for task triggers, agent compatibility, source references, validation and evaluation prompts.
 
 These are guidance for coding agents, not runtime features. ClosedRoom is the sole ASR implementation; the optional local adapter does not install any transcription models.
 

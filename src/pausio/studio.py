@@ -46,6 +46,8 @@ class StudioWorkspace:
         self.directory = Path(self._tmp.name)
         self.lock = threading.RLock()
         self.importing = False
+        self.approved = False
+        self.media_id: str | None = None
         self.source: Path | None = None
         self.filename: str | None = None
         self.info: MediaInfo | None = None
@@ -67,6 +69,8 @@ class StudioWorkspace:
             return {
                 "version": __version__,
                 "file": self.filename,
+                "media_id": self.media_id,
+                "approved": self.approved,
                 "media": self.info.as_dict() if self.info else None,
                 "plan": self.plan.as_dict() if self.plan else None,
                 "suggested_plan": self.suggested_plan.as_dict() if self.suggested_plan else None,
@@ -93,6 +97,8 @@ class StudioWorkspace:
                     old_source = self.source
                     self.source = candidate
                     self.filename = label
+                    self.media_id = uuid.uuid4().hex
+                    self.approved = False
                     self.info = info
                     self.plan = None
                     self.suggested_plan = None
@@ -123,8 +129,16 @@ class StudioWorkspace:
             except (TypeError, ValueError) as exc:
                 raise StudioError(f"Intervalli non validi: {exc}") from exc
             self.plan = plan
+            self.approved = False
             self.export_ready = False
             (self.directory / "export.mp4").unlink(missing_ok=True)
+
+    def approve_plan(self) -> None:
+        with self.lock:
+            self._ensure_unlocked()
+            if self.plan is None:
+                raise StudioError("Analizza un video prima di confermare il montaggio.")
+            self.approved = True
 
     def start_job(self, kind: str) -> None:
         if kind not in {"analyze", "render", "transcribe"}:
@@ -133,7 +147,7 @@ class StudioWorkspace:
             self._ensure_unlocked()
             if self.source is None or self.info is None:
                 raise StudioError("Importa prima un video.")
-            if kind == "render" and self.plan is None:
+            if kind == "render" and (self.plan is None or not self.approved):
                 raise StudioError("Analizza e rivedi i tagli prima dell'esportazione.")
             source = self.source
             info = self.info
@@ -156,6 +170,7 @@ class StudioWorkspace:
                     with self.lock:
                         self.plan = proposal
                         self.suggested_plan = proposal
+                        self.approved = False
                         self.export_ready = False
                         (self.directory / "export.mp4").unlink(missing_ok=True)
                 elif kind == "transcribe":
@@ -267,6 +282,10 @@ class StudioHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/plan":
                 self.server.workspace.save_plan(self._read_json().get("segments"))
+                self._json(200, self.server.workspace.snapshot())
+                return
+            if path == "/api/approve":
+                self.server.workspace.approve_plan()
                 self._json(200, self.server.workspace.snapshot())
                 return
             if path == "/api/jobs":

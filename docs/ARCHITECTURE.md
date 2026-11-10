@@ -10,7 +10,9 @@ video.mp4 → inspect → analyze → propose **editable** timeline → review �
 - planner.py: deterministic AI_NATURAL pause policy, completely independent of any ASR/vendor and unit-testable.
 - media.py: FFprobe adapter (metadata), FFmpeg silencedetect adapter, FFmpeg filter-based renderer.
 - closedroom_asr.py: localhost adapter to the **existing** ClosedRoom ASR service; source-time transcript sidecar (currently independent of edit planning).
-- cli.py: stateless command interface; no global settings, cloud credentials or hidden processing.
+- cli.py: CLI entrypoint, including `pausio studio`.
+- studio.py: local HTTP server, private temporary workspace, asynchronous jobs and mandatory approval before export; delegates to existing modules.
+- studio_static/: offline HTML/CSS/JS workspace with video preview, graphical timeline, editable KEEP intervals, ClosedRoom transcript, and MP4 download. Python remains the plan's source of truth.
 
 ## Future boundaries
 
