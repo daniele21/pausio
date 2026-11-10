@@ -584,6 +584,22 @@ el("timeline-zoom").addEventListener("change",event=>{
 el("timeline-surface").addEventListener("scroll",()=>{
   el("timeline-ruler").scrollLeft=el("timeline-surface").scrollLeft;
 });
-window.addEventListener("resize",resizeTimeline);
+/* Keep visual, keyboard and screen-reader navigation order consistent. */
+function syncTimelineOrder(){
+  const timeline=document.querySelector(".timeline-panel");
+  const workbench=document.querySelector(".workbench");
+  const inspector=document.querySelector(".inspector");
+  if(window.matchMedia("(max-width: 650px)").matches){
+    if(timeline.parentElement!==workbench || timeline.nextElementSibling!==inspector)
+      inspector.before(timeline);
+  }else if(timeline.parentElement===workbench){
+    workbench.after(timeline);
+  }
+}
+window.addEventListener("resize",()=>{
+  syncTimelineOrder();
+  resizeTimeline();
+});
+syncTimelineOrder();
 resizeTimeline();
 

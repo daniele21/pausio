@@ -481,3 +481,24 @@ a { color: inherit; text-decoration: none; }
     justify-self: end; white-space: nowrap;
   }
 }
+
+
+/* Playwright audit: a creator must always see the approval action.
+   Keep it outside the inspector's scrollable list of segments. */
+.inspector-bottom #approve-action {
+  display: block; width: 100%; margin: 0 0 13px;
+  min-height: 40px;
+}
+.inspector-bottom { background: var(--bg); }
+
+/* On small screens the timeline belongs directly below the video, not
+   below all review cards. Avoid nested scrolling that hides approval. */
+@media (max-width: 650px) {
+  .workbench { display: contents; }
+  .rail { order: 1; }
+  .stage { order: 2; }
+  .timeline-panel { order: 3; }
+  .inspector { order: 4; max-height: none; min-height: 0; }
+  .inspector-body { max-height: none; overflow: visible; }
+  .has-media .rail-intro { display: none; }
+}

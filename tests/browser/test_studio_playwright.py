@@ -42,7 +42,8 @@ def metrics(page):
         timelineActions:rect('.timeline-actions'),video:rect('#video-workspace'),
         empty:rect('#empty-state'),import:rect('#import-action'),
         preview:rect('#preview-action'),export:rect('#export-action'),
-        track:rect('#timeline-track'),trim:rect('.trim-handle.end')};
+        track:rect('#timeline-track'),trim:rect('.trim-handle.end'),
+        approve:rect('#approve-action')};
     }""")
 
 class StudioPlaywrightAudit(unittest.TestCase):
@@ -142,6 +143,16 @@ class StudioPlaywrightAudit(unittest.TestCase):
             key=f"analyzed-{width}x{height}"
             info=metrics(self.page)
             self.record(key,info);self.shot(key)
+            self.assertLessEqual(info["scrollWidth"],width+3,
+                                 f"Editing overflow at {width}px: {info}")
+            if width>=1024:
+                self.assertLessEqual(info["timeline"]["bottom"],height+2,
+                                     "Timeline must stay with desktop video")
+                self.assertLessEqual(info["approve"]["bottom"],height+2,
+                                     "Approval must stay visible on desktop")
+            if width<=390:
+                self.assertLessEqual(info["timeline"]["bottom"],info["inspector"]["y"]+2,
+                                     "Mobile timeline should precede inspector")
         self.page.set_viewport_size({"width":1440,"height":900})
         self.page.locator("#timeline-zoom").select_option("4")
         sizes=self.page.evaluate("""() => ({
