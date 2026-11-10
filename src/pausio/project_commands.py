@@ -169,8 +169,8 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
             approved = False
         elif kind == "segment.insert":
             _object(payload, {"segment"}, kind)
-            row = _object(payload["segment"], {"id", "start_ms", "end_ms"}, "segment")
-            current = sorted([*current, copy.deepcopy(row)], key=lambda s: s["start_ms"])
+            row = _segments([payload["segment"]], duration)[0]
+            current = sorted([*current, row], key=lambda s: s["start_ms"])
             _segments(current, duration)
             approved = False
         elif kind == "timeline.restore_suggestion":

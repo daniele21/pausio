@@ -144,6 +144,10 @@ class ProjectReplayTests(unittest.TestCase):
             tape.append("segment.insert", {"segment": {
                 **segment(100, 200), "unexpected": True
             }})
+        with self.assertRaises(ProjectFormatError):
+            tape.append("segment.insert", {"segment": {
+                **segment(2100, 2300), "start_ms": "not a timestamp"
+            }})
 
     def test_invalid_actions_do_not_mutate_older_project(self):
         tape = analyze(ProjectTape(media()))
