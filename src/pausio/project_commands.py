@@ -16,8 +16,10 @@ from typing import Any
 from pausio.domain import EditPlan, Interval
 
 FORMAT = "pausio.project"
-VERSION = 1
+VERSION = 2
+LEGACY_VERSION = 1
 MAX_COMMANDS = 2000
+MAX_REVISION = 2_147_483_647
 MAX_SEGMENTS = 200
 _MAX_NAME = 160
 _HEX = re.compile(r"^[0-9a-f]{64}$")
@@ -197,28 +199,86 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
 
 
 class ProjectTape:
-    """Validated immutable-by-convention project with event replay and media binding."""
+    """Event history + active cursor; redo tail is preserved in exported v2 projects.
 
-    def __init__(self, media: dict, commands: list[dict] | tuple[dict, ...] = ()) -> None:
+    Undo/redo are structured history operations. Moving the cursor never rewrites
+    an existing event, while a new edit after undo forks and discards only the
+    inactive redo tail. Revision is a monotonic concurrency token independent
+    of command count and cursor.
+    """
+
+    def __init__(
+        self,
+        media: dict,
+        commands: list[dict] | tuple[dict, ...] = (),
+        *,
+        history_cursor: int | None = None,
+        revision: int | None = None,
+    ) -> None:
         self.media = _validate_media(media)
         if not isinstance(commands, (list, tuple)) or len(commands) > MAX_COMMANDS:
             raise ProjectFormatError(f"commands must be an array of at most {MAX_COMMANDS}")
         self.commands = tuple(copy.deepcopy(list(commands)))
-        self.view = _replay(self.media, self.commands)
+        cursor = len(self.commands) if history_cursor is None else history_cursor
+        if type(cursor) is not int or not 0 <= cursor <= len(self.commands):
+            raise ProjectFormatError("history_cursor must be inside the command history")
+        rev = len(self.commands) if revision is None else revision
+        if type(rev) is not int or not len(self.commands) <= rev <= MAX_REVISION:
+            raise ProjectFormatError("revision must be monotonic and >= command count")
+        # Validate the entire redo tail as well as the active prefix, even if
+        # a damaged event is currently invisible on the timeline.
+        _replay(self.media, self.commands)
+        self.history_cursor = cursor
+        self.revision = rev
+        self.view = _replay(self.media, self.commands[:cursor])
 
     @property
-    def revision(self) -> int:
-        return len(self.commands)
+    def can_undo(self) -> bool:
+        return self.history_cursor > 0
+
+    @property
+    def can_redo(self) -> bool:
+        return self.history_cursor < len(self.commands)
+
+    @property
+    def active_command(self) -> dict | None:
+        if self.history_cursor == 0:
+            return None
+        return copy.deepcopy(self.commands[self.history_cursor - 1])
+
+    def _move(self, target: int) -> ProjectTape:
+        if self.revision >= MAX_REVISION:
+            raise ProjectFormatError("project revision limit reached")
+        return ProjectTape(
+            self.media, self.commands,
+            history_cursor=target, revision=self.revision + 1,
+        )
+
+    def undo(self) -> ProjectTape:
+        if not self.can_undo:
+            raise ProjectFormatError("non ci sono altre modifiche da annullare")
+        return self._move(self.history_cursor - 1)
+
+    def redo(self) -> ProjectTape:
+        if not self.can_redo:
+            raise ProjectFormatError("non ci sono altre modifiche da ripristinare")
+        return self._move(self.history_cursor + 1)
 
     def append(self, kind: str, payload: dict, *, event_id: str | None = None) -> ProjectTape:
-        if len(self.commands) >= MAX_COMMANDS:
+        if self.history_cursor >= MAX_COMMANDS or self.revision >= MAX_REVISION:
             raise ProjectFormatError("command history limit reached; create a new project")
-        if kind not in _TYPES:
+        if not isinstance(kind, str) or kind not in _TYPES:
             raise ProjectFormatError(f"unsupported command type: {kind}")
+        if not isinstance(payload, dict):
+            raise ProjectFormatError("command payload must be an object")
+        new_commands = (
+            *self.commands[:self.history_cursor],
+            {"id": event_id or uuid.uuid4().hex, "type": kind,
+             "payload": copy.deepcopy(payload)},
+        )
         return ProjectTape(
-            self.media,
-            (*self.commands, {"id": event_id or uuid.uuid4().hex, "type": kind,
-                              "payload": copy.deepcopy(payload)}),
+            self.media, new_commands,
+            history_cursor=len(new_commands), revision=self.revision + 1,
         )
 
     def edit_plan(self, source: str) -> EditPlan | None:
@@ -237,14 +297,36 @@ class ProjectTape:
             "schema_version": VERSION,
             "media": copy.deepcopy(self.media),
             "commands": copy.deepcopy(list(self.commands)),
+            "history_cursor": self.history_cursor,
+            "revision": self.revision,
         }
 
     @classmethod
     def from_dict(cls, document: Any) -> ProjectTape:
-        obj = _object(document, {"format", "schema_version", "media", "commands"}, "project")
-        if obj["format"] != FORMAT or type(obj["schema_version"]) is not int or obj["schema_version"] != VERSION:
-            raise ProjectFormatError("unsupported project format or schema version")
-        return cls(obj["media"], obj["commands"])
+        if not isinstance(document, dict) or document.get("format") != FORMAT:
+            raise ProjectFormatError("unsupported project format")
+        version = document.get("schema_version")
+        if type(version) is not int:
+            raise ProjectFormatError("project schema_version must be an integer")
+        if version == LEGACY_VERSION:
+            obj = _object(
+                document, {"format", "schema_version", "media", "commands"}, "legacy project"
+            )
+            # V1 files are intentionally read-only inputs; exporting always
+            # upgrades to V2 with cursor at the end and preserved event IDs.
+            return cls(obj["media"], obj["commands"])
+        if version == VERSION:
+            obj = _object(
+                document,
+                {"format", "schema_version", "media", "commands",
+                 "history_cursor", "revision"},
+                "project",
+            )
+            return cls(
+                obj["media"], obj["commands"],
+                history_cursor=obj["history_cursor"], revision=obj["revision"],
+            )
+        raise ProjectFormatError("unsupported project format or schema version")
 
     def require_media(self, *, sha256: str, duration_ms: int, has_audio: bool) -> None:
         if (
