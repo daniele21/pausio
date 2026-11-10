@@ -16,6 +16,7 @@ from pausio.closedroom_asr import (
 from pausio.domain import EditPlan, Interval
 from pausio.media import MediaError, detect_silences, probe, render
 from pausio.planner import AI_NATURAL, propose_segments
+from pausio.studio import run_studio
 
 
 def _json(value: object) -> str:
@@ -30,6 +31,9 @@ def build_parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
 
     commands.add_parser("doctor", help="Check FFmpeg/FFprobe availability")
+    studio_cmd = commands.add_parser("studio", help="Open the local Pausio Studio UI")
+    studio_cmd.add_argument("--port", type=int, default=8765)
+    studio_cmd.add_argument("--no-open", action="store_true")
 
     inspect_cmd = commands.add_parser("inspect", help="Inspect an input video with ffprobe")
     inspect_cmd.add_argument("input", type=Path)
@@ -61,6 +65,9 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
+        if args.command == "studio":
+            run_studio(port=args.port, open_browser=not args.no_open)
+            return 0
         if args.command == "doctor":
             found = {name: shutil.which(name) for name in ("ffmpeg", "ffprobe")}
             print(_json({"version": __version__, "binaries": found, "ready": all(found.values())}), end="")

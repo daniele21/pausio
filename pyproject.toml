@@ -23,6 +23,9 @@ pausio = "pausio.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+pausio = ["studio_static/*.html", "studio_static/*.css", "studio_static/*.js"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 

@@ -4,11 +4,13 @@ Pausio is a local-first, reviewable editor for natural talking-head videos. Read
 
 ## Non-negotiable product contracts
 
+- **UI tests must exercise real behavior:** import, analyze, edit KEEP spans, approve explicitly, render and download—never decorative mock controls.
 - **Models propose, humans approve, deterministic rendering executes.** Do not automatically render proposed edits without a user-controlled review step.
 - Input media is immutable. Do not overwrite raw files; require explicit overwrite for outputs.
 - Keep `src/pausio/domain.py` and `src/pausio/planner.py` independent of FFmpeg, ML frameworks, and UI.
 - All edit-plan times are integer **milliseconds**. Intervals are half-open [start_ms, end_ms), sorted, non-overlapping, and validated. Preserve the versioned schema or write an explicit migration and tests.
 - **ClosedRoom is the source of truth for transcription.** Reuse the working ASR in `daniele21/closedroom` (`dev`) via a narrow adapter. Never implement a parallel Whisper, faster-whisper, WhisperX, Nemotron or Silero ASR/VAD stack inside Pausio. If reusable engine extraction is needed, do it upstream in ClosedRoom.
+- Studio binds exclusively to loopback; browser imports remain local ephemeral files. Preserve CSRF safeguards, keyboard navigation and accessible state.
 - Local-first means no implicit upload, telemetry, remote models or auto-downloading weights. Any network-dependent feature needs user opt-in.
 - Do not vendor third-party media/editor code or distribute binaries/weights without documented licensing approval.
 - Reject destructive changes, unstated fallback behaviors, silent speech removal and unreviewed AI decisions.
@@ -27,6 +29,10 @@ Skills follow the [Agent Skills specification](https://agentskills.io/specificat
 | Test changes, CI, regression fixtures, benchmarks | `pausio-test-engineering` |
 | Privacy, dependencies, permissions, licenses, release | `pausio-security-release` |
 | Bug diagnosis, code review, PR readiness | `pausio-pr-review` |
+| User journey, step flow, review and helpful empty/error states | `pausio-product-ux` |
+| Tokens, hierarchy, contrast, responsive layouts | `pausio-ui-design-system` |
+| Video preview, scrubbing, jump-cut timeline and keyboard | `pausio-video-interaction-ux` |
+| Browser QA, accessibility and regressions | `pausio-ui-quality` |
 
 ## Workflow and evidence
 
