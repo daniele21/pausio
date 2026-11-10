@@ -48,7 +48,7 @@ async function refresh(){
   update(await res.json());
 }
 function busyLabel(kind){
-  return ({analyze:"Analisi delle pause in corso…",render:"Creazione MP4 in corso…",
+  return ({analyze:"Analisi delle pause in corso…",preview:"Rendering anteprima FFmpeg…",render:"Creazione MP4 in corso…",
     transcribe:"ClosedRoom sta trascrivendo sul tuo Mac…"})[kind]||"Elaborazione…";
 }
 function update(next){
@@ -105,6 +105,10 @@ function update(next){
   el("transcript-content").hidden=!next.transcript;
   el("timeline-subtitle").textContent=!has?"Nessun video importato":!plan?"Originale • da analizzare":
     next.plan.segments.length+" intervalli mantenuti";
+  el("waveform-state").textContent=!has?"":next.waveform_status==="running"?
+    "Waveform in elaborazione…":next.waveform_status==="failed"?
+    (next.waveform_error||"Waveform non disponibile"):next.waveform_status==="ready"?
+    (next.media.has_audio?"Waveform audio reale":"Video senza audio"):"";
   el("timeline-caption").textContent=ready?"Video finale generato, pronto da scaricare.":
     approved?"Montaggio confermato. Puoi esportare il MP4.":
     plan?"Anteprima dei tagli: controlla e poi conferma il montaggio.":
@@ -161,7 +165,7 @@ function update(next){
       lastJobNotice=signature;
       if(next.job.status==="failed")toast(next.job.error||"Elaborazione fallita.","error");
       else{
-        toast(({analyze:"Analisi completata. Rivedi i tagli.",render:"MP4 pronto da scaricare.",
+        toast(({analyze:"Analisi completata. Rivedi i tagli.",preview:"Anteprima FFmpeg pronta. Ascolta gli stacchi prima di confermare.",render:"MP4 pronto da scaricare.",
           transcribe:"Trascrizione disponibile nel pannello Testo."})[next.job.kind]||"Operazione completata.");
         if(next.job.kind==="transcribe")tab("transcript");
         if(next.job.kind==="preview")changeMode("rendered");
