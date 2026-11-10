@@ -107,6 +107,8 @@ class StudioPlaywrightAudit(unittest.TestCase):
             lambda: "audit-video.mp4" in self.page.locator("#project-title").inner_text(),
             timeout=30000)
         self.wait_state("waveform","ready",timeout=30000)
+        self.wait_condition(lambda: "Waveform" in self.page.locator("#waveform-state").inner_text(),
+                            timeout=12000)
         self.page.locator("#analyze-action").click()
         result=self.wait_state("analyze","completed")
         self.wait_condition(lambda: self.page.locator(".segment-card").count()>=2,
@@ -126,6 +128,8 @@ class StudioPlaywrightAudit(unittest.TestCase):
         for name,item in results.items():
             self.assertLessEqual(item["scrollWidth"],item["width"]+3,
                                  "horizontal overflow "+name+": "+str(item))
+        self.assertLessEqual(results["empty-1440x900"]["timeline"]["bottom"],902,
+                             "Desktop timeline should remain visible with player")
         self.assertTrue(self.page.locator("#empty-import").is_visible())
         self.assertTrue(self.page.locator("#export-action").is_disabled())
 

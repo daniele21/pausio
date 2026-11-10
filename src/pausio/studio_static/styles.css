@@ -439,3 +439,45 @@ a { color: inherit; text-decoration: none; }
 .timeline-regions.unanalysed { background: rgba(38,54,71,.28); }
 .waveform-state { color: var(--muted); font-size: 10px; max-width: 200px; overflow-wrap: anywhere; }
 @media (max-width: 1100px) { .waveform-state { display: none; } }
+
+
+/* Editor ergonomics: keep player and timeline visible together on desktop.
+   Side rails scroll independently; video still preserves its 9:16 aspect. */
+@media (min-width: 1001px) and (min-height: 700px) {
+  .app-shell { height: 100vh; min-height: 700px; }
+  .workbench { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+  .rail, .inspector { min-height: 0; overflow-y: auto; }
+  .stage { min-height: 0; }
+  .video-stage, .video-workspace { min-height: 0; }
+  .aspect-canvas { max-height: 100%; }
+  .timeline-panel { flex: 0 0 auto; }
+}
+
+/* The third preview mode made the previous two-column mobile toolbar
+   wider than 320px. Place modes above transport rather than squeezing them. */
+@media (max-width: 650px) {
+  .playback-toolbar {
+    height: auto; min-height: 96px;
+    grid-template-columns: minmax(0,1fr) minmax(0,1fr);
+    grid-template-rows: auto auto;
+    gap: 5px 8px; padding-top: 8px; padding-bottom: 8px;
+  }
+  .mode-switch {
+    grid-column: 1 / -1; grid-row: 1;
+    justify-self: stretch; justify-content: stretch;
+    width: 100%; min-width: 0;
+  }
+  .mode {
+    flex: 1 1 0; min-width: 0;
+    padding: 8px 4px; line-height: 1.2;
+    white-space: normal; text-align: center;
+  }
+  .player-controls {
+    grid-column: 1; grid-row: 2;
+    justify-self: start; gap: 7px;
+  }
+  .time-readout {
+    grid-column: 2; grid-row: 2;
+    justify-self: end; white-space: nowrap;
+  }
+}

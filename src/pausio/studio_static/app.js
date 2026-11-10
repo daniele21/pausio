@@ -562,7 +562,8 @@ document.addEventListener("keydown",event=>{
   if(event.code==="ArrowRight"){event.preventDefault();jump(5);}
 });
 setInterval(()=>{
-  if(project?.job?.status==="running"||project?.importing)refresh().catch(()=>{});
+  if(project?.job?.status==="running"||project?.importing||
+     project?.waveform_status==="running")refresh().catch(()=>{});
 },850);
 refresh().catch(error=>toast(error.message,"error"));
 function resizeTimeline(){
