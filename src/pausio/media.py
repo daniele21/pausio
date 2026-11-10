@@ -231,7 +231,8 @@ def waveform_envelope(
         raise MediaError(f"source not found: {source}")
     command = [
         require_binary("ffmpeg"), "-hide_banner", "-nostdin", "-v", "error",
-        "-i", str(source), "-map", "0:a:0", "-vn", "-ac", "1",
+        "-i", str(source), "-t", f"{duration_ms / 1000:.3f}",
+        "-map", "0:a:0", "-vn", "-ac", "1",
         "-ar", "2000", "-f", "s16le", "-c:a", "pcm_s16le", "-",
     ]
     # 15 minutes at 2 kHz mono 16-bit PCM = under 4 MB of stdout.
