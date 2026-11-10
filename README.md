@@ -8,7 +8,7 @@ A local-first toolkit for natural-sounding, talking-head social videos. Pausio i
 
 ## Pausio Studio — interfaccia per test reali
 
-Un editor web locale senza npm, cloud o account. L'area di lavoro offre anteprima 9:16, timeline dei tagli, intervalli modificabili, trascrizione ClosedRoom opzionale e download MP4.
+Un editor web locale senza npm, cloud o account. L'area di lavoro offre anteprima 9:16, **waveform reale, zoom timeline, maniglie di trim modificabili con mouse/tastiera, preview FFmpeg a 540×960**, trascrizione ClosedRoom opzionale e download MP4.
 
 ```bash
 brew install ffmpeg
@@ -22,7 +22,7 @@ pausio studio
 
 Il browser si apre su **http://127.0.0.1:8765**. Altre opzioni: `pausio studio --port 8877 --no-open`. Il server usa solo loopback e **salva automaticamente la sessione sul Mac**, inclusa una copia privata del video importato, per permettere il recupero dopo la chiusura o un'interruzione. La sezione Progetto offre **Annulla / Ripeti**, scorciatoie ⌘Z / ⌘⇧Z e **Elimina dati locali**. Il percorso predefinito su macOS è `~/Library/Application Support/Pausio/Studio`; puoi personalizzarlo con `pausio studio --data-dir /percorso/privato`. Chiudere Pausio **non elimina** il video salvato: usa esplicitamente «Elimina dati locali» per rimuoverlo. **Importa progetto / Esporta progetto** salva o ricostruisce i tagli come comandi versionati in un file `.pausio.json` **v2**, senza includere il video. I file v1 sono importabili e vengono convertiti automaticamente in memoria. Undo/Redo conserva l'eventuale cronologia futura nel progetto portabile. Reimporta prima il video originale: il sistema verifica il suo SHA-256. Supporta MP4/MOV/MKV/WebM fino a 2 GiB. Importa, analizza le pause, rivedi gli intervalli da mantenere, **conferma il montaggio** ed esporta.
 
-La preview "Montaggio" simula i tagli tramite seek tra gli intervalli dell'originale: non è frame-accurate né sostituisce il controllo del MP4 finale. La riproduzione nel browser richiede codec compatibili (consigliato MP4 H.264). La trascrizione richiede ClosedRoom già in esecuzione. Restano da costruire sottotitoli, audio cleanup, waveform e tagli semantici.
+La modalità **Simulazione** salta tra gli intervalli dell'originale, e può essere imprecisa. Con **Genera preview** produci invece un MP4 a 540×960 tramite lo stesso pipeline FFmpeg dell'export finale per ascoltare e verificare gli stacchi, prima di confermare il montaggio. Le maniglie sulla timeline salvano modifiche strutturate nel progetto e invalidano la preview precedente. La riproduzione nel browser richiede codec compatibili (consigliato MP4 H.264). La trascrizione richiede ClosedRoom già in esecuzione. Restano da costruire sottotitoli, audio cleanup, waveform e tagli semantici.
 
 Vedi [Guida Pausio Studio](docs/STUDIO_UI.md) per workflow, shortcut, privacy e limiti.
 

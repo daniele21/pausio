@@ -1,6 +1,6 @@
 """Playwright Studio UI audit with real Chromium and synthetic FFmpeg footage."""
 from __future__ import annotations
-import json, math, os, struct, subprocess, tempfile, threading, unittest, wave
+import json, math, os, struct, subprocess, tempfile, threading, time, unittest, wave
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 from pausio.studio import StudioWorkspace, create_server
@@ -83,25 +83,34 @@ class StudioPlaywrightAudit(unittest.TestCase):
     def state(self):
         return self.page.evaluate("() => fetch('/api/state').then(r=>r.json())")
 
+    def wait_condition(self,predicate,timeout=30000):
+        deadline=time.monotonic()+timeout/1000
+        while time.monotonic()<deadline:
+            if predicate():
+                return
+            self.page.wait_for_timeout(120)
+        self.fail("Timeout waiting for UI condition; state="+repr(self.state())+
+                  "; browser errors="+repr(self.errors))
+
     def wait_state(self,kind,value,timeout=90000):
-        self.page.wait_for_function("""async ({kind,value})=>{
-          let state=await fetch('/api/state').then(r=>r.json());
-          if(kind==='revision')return state.project_revision>=value;
-          if(kind==='waveform')return state.waveform_status===value;
-          return state.job?.kind===kind&&state.job?.status===value;
-        }""",{"kind":kind,"value":value},timeout=timeout)
+        def ok():
+            state=self.state()
+            if kind=="revision": return state["project_revision"]>=value
+            if kind=="waveform": return state["waveform_status"]==value
+            return state["job"]["kind"]==kind and state["job"]["status"]==value
+        self.wait_condition(ok,timeout=timeout)
         return self.state()
 
     def upload_analyze(self):
         self.page.locator("#file-input").set_input_files(str(sample_video(self.root)))
-        self.page.wait_for_function(
-            "document.querySelector('#project-title').textContent.includes('audit-video.mp4')",
+        self.wait_condition(
+            lambda: "audit-video.mp4" in self.page.locator("#project-title").inner_text(),
             timeout=30000)
         self.wait_state("waveform","ready",timeout=30000)
         self.page.locator("#analyze-action").click()
         result=self.wait_state("analyze","completed")
-        self.page.wait_for_function("document.querySelectorAll('.segment-card').length>=2",
-                                    timeout=30000)
+        self.wait_condition(lambda: self.page.locator(".segment-card").count()>=2,
+                            timeout=30000)
         return result
 
     def test_layout_across_five_viewports(self):
@@ -158,9 +167,8 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.page.locator("#preview-action").click()
         draft=self.wait_state("preview","completed",timeout=120000)
         self.assertTrue(draft["preview_ready"])
-        self.page.wait_for_function(
-          "document.querySelector('#canvas-badge').textContent.includes('FFmpeg')",
-          timeout=30000)
+        self.wait_condition(lambda: "FFmpeg" in self.page.locator("#canvas-badge").inner_text(),
+                            timeout=30000)
         self.shot("rendered-draft")
         self.page.locator("#approve-action").click()
         approved=self.wait_state("revision",redone["project_revision"]+1)
@@ -168,8 +176,8 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.page.locator("#export-action").click()
         final=self.wait_state("render","completed",timeout=120000)
         self.assertTrue(final["export_ready"])
-        self.page.wait_for_function("!document.querySelector('#download-action').hidden",
-                                   timeout=30000)
+        self.wait_condition(lambda: self.page.locator("#download-action").is_visible(),
+                            timeout=30000)
         self.shot("export-ready")
         self.record("editing-flow",{
           "source_ms":initial["media"]["duration_ms"],

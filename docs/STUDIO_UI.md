@@ -21,9 +21,19 @@ With Python 3.11+, FFmpeg and FFprobe on PATH, install once (`pip install -e .`)
 - **Left:** four-step flow, selected video metadata and real action buttons.
 - **Center:** large vertical preview and direct playback controls. Desktop / mobile responsive layout.
 - **Right:** decision inspector showing every KEEP interval, editable numeric boundaries and explicit confirmation; optional transcript tab.
-- **Bottom:** timeline synchronized to source time, with distinct kept/excluded regions and playhead, direct export/download.
+- **Bottom:** waveform extracted locally from the actual audio track, kept/excluded source-time regions, draggable and keyboard-adjustable cut handles, zoom 1×–8× and a synchronized playhead. Edits always dispatch one validated `segment.update` command and invalidate stale preview/export. Direct export/download remains approval-gated.
 
 Design language: cinematic neutral ink surfaces, warm amber action, mint kept spans, clear typography and persistent state text. The visual palette is encoded as semantic variables in `studio_static/styles.css`, not scattered hardcoded colors.
+
+## Precise review options
+
+- **Originale** plays the imported clip.
+- **Simulazione** skips excluded segments using browser seeks; this is fast but can jump at keyframes and should not be used for final audio decisions.
+- **Genera preview** uses **the exact same FFmpeg trim/atrim/concat timeline as the master render**, encoded at 540×960 for faster iteration. It does **not** need approval and does **not** modify the project. Once rendered, select **Preview FFmpeg** to hear actual transitions. Source and output playback clocks are mapped to the same source-time cut timeline.
+- Waveform is computed asynchronously after import, from downsampled local audio. It never uploads content or invokes ClosedRoom; it is a media visualization only. For clips longer than 15 minutes, waveform is unavailable instead of scanning unbounded recordings. If no audio exists, the waveform is blank.
+- Drag the **left/right grip** of a green retained interval to change its original-time boundaries. Keyboard users can focus a grip and use Left/Right for ±100 ms, Shift+Left/Right for ±500 ms. Adjacent intervals cannot overlap; a minimum 50 ms interval is maintained.
+- Use **Zoom 1×, 2×, 4× or 8×** for detailed review. Zoom and playback position are viewing state only, not output-affecting project commands.
+- Every trim is saved as a typed `segment.update` event in `.pausio.json`; Undo/Redo and local autosave apply as before. Preview files and waveform are derived caches, not canonical editing data.
 
 ## Shortcuts and accessibility
 

@@ -386,3 +386,56 @@ a { color: inherit; text-decoration: none; }
   text-decoration: underline; text-underline-offset: 3px;
 }
 .clear-session-action:not(:disabled):hover { color: var(--danger); }
+
+
+/* Source-time waveform + true trim controls, without introducing UI-only edits */
+.timeline-zoom-label {
+  color: var(--ink-secondary); display: flex; align-items: center;
+  gap: 6px; font-size: 11px; white-space: nowrap;
+}
+.timeline-zoom-label select {
+  border: 1px solid var(--border); background: var(--surface-raised);
+  color: var(--ink); border-radius: 6px; padding: 6px 8px; font: inherit;
+}
+.timeline-preview-action { min-height: 34px; padding: 6px 10px; white-space: nowrap; font-size: 11px; }
+.timeline-surface { overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; scrollbar-color: var(--keep) var(--surface); }
+.timeline-track { width: calc(100% - 16px); min-width: 200px; }
+.timeline-ruler { overflow: hidden; }
+.timeline-ruler-content {
+  display: flex; align-items: center; justify-content: space-between;
+  width: calc(100% - 16px); margin: 0 8px;
+}
+.waveform-canvas {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 1; opacity: .96;
+}
+.timeline-regions { z-index: 2; }
+.timeline-region { background: rgba(58, 134, 124, .36); pointer-events: none; }
+.timeline-region:after { opacity: .14; pointer-events: none; }
+.trim-handle {
+  position: absolute; top: 0; bottom: 0; z-index: 4;
+  width: 16px; min-width: 16px; border: 1px solid rgba(244, 250, 246, .8);
+  border-radius: 4px; background: var(--keep); color: #14221f;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0; cursor: ew-resize; pointer-events: auto; touch-action: none;
+}
+.trim-handle.start { left: -8px; }
+.trim-handle.end { right: -8px; }
+.trim-handle:before { content: "⋮"; font-weight: 800; font-size: 14px; line-height: 1; }
+.trim-handle:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.trim-handle:disabled { opacity: .65; cursor: not-allowed; }
+.trim-handle.dragging { background: var(--accent); border-color: var(--ink); }
+.trim-handle:hover:not(:disabled) { background: #b3ece1; }
+.timeline-region.drag-preview { background: rgba(244,173,123,.3); }
+.waveform-status { color: var(--muted); }
+@media (max-width: 850px) {
+  .timeline-zoom-label { font-size: 10px; }
+  .timeline-preview-action { padding: 7px 8px; }
+  .mode { padding: 8px 7px; font-size: 10px; }
+}
+
+.timeline-ruler-content { flex: none; min-width: 200px; }
+
+.timeline-regions.unanalysed { background: rgba(38,54,71,.28); }
+.waveform-state { color: var(--muted); font-size: 10px; max-width: 200px; overflow-wrap: anywhere; }
+@media (max-width: 1100px) { .waveform-state { display: none; } }
