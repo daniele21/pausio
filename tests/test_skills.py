@@ -23,7 +23,7 @@ class SkillsTests(unittest.TestCase):
             folder = Path(tmp) / "test-skill"
             folder.mkdir()
             (folder / "SKILL.md").write_text(
-                "---\nname: invalid_name\nname: second\n"
+                "---\nname: second\nname: invalid_name\n"
                 "description: Use when testing invalid agent skill metadata.\n---\n"
                 "# Bad example\n"
                 "Always inspect requirements first, write tests for regressions, "
