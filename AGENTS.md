@@ -1,0 +1,38 @@
+# Instructions for coding agents working on Pausio
+
+Pausio is a local-first, reviewable editor for natural talking-head videos. Read `README.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md` and `docs/ROADMAP.md` before architectural changes.
+
+## Non-negotiable product contracts
+
+- **Models propose, humans approve, deterministic rendering executes.** Do not automatically render proposed edits without a user-controlled review step.
+- Input media is immutable. Do not overwrite raw files; require explicit overwrite for outputs.
+- Keep `src/pausio/domain.py` and `src/pausio/planner.py` independent of FFmpeg, ML frameworks, and UI.
+- All edit-plan times are integer **milliseconds**. Intervals are half-open [start_ms, end_ms), sorted, non-overlapping, and validated. Preserve the versioned schema or write an explicit migration and tests.
+- Local-first means no implicit upload, telemetry, remote models or auto-downloading weights. Any network-dependent feature needs user opt-in.
+- Do not vendor third-party media/editor code or distribute binaries/weights without documented licensing approval.
+- Reject destructive changes, unstated fallback behaviors, silent speech removal and unreviewed AI decisions.
+
+## Relevant local agent skills
+
+Skills follow the [Agent Skills specification](https://agentskills.io/specification). Use the narrowest matching `.agents/skills/*/SKILL.md`; read its references only when needed. Skills are **engineering guidance**, not proof that a feature is implemented.
+
+| Task | Skill |
+| --- | --- |
+| Python modules, domain contracts, refactoring or CLI | `pausio-python-architecture` |
+| FFmpeg, FFprobe, encoding, timestamps or A/V sync | `pausio-media-ffmpeg` |
+| Silence policies, jump cuts, creator pacing, human approval | `pausio-natural-editing` |
+| ASR, word alignment, VAD, ML inference | `pausio-speech-ai` |
+| Caption segmentation, SRT/ASS, visual safe areas | `pausio-subtitles` |
+| Test changes, CI, regression fixtures, benchmarks | `pausio-test-engineering` |
+| Privacy, dependencies, permissions, licenses, release | `pausio-security-release` |
+| Bug diagnosis, code review, PR readiness | `pausio-pr-review` |
+
+## Workflow and evidence
+
+1. Inspect the current implementation and identify the smallest scope.
+2. State expected behavior, edge cases, and the test oracle; prefer a failing regression test for bugs.
+3. Make a narrowly scoped change behind stable interfaces. Do not invent a capability absent from the code.
+4. Run `python -m unittest discover -s tests -v`, `python -m compileall -q src` and `python scripts/validate_skills.py` where relevant. Run FFmpeg E2E and manual listening/video inspection for media changes.
+5. Report exactly what was tested and what remains unverified. No claims of perfect fidelity without real recorded footage.
+
+Use feature branches / PRs for substantive changes. Document architectural decisions in `docs/DECISIONS.md`. No raw video or transcripts in Git.
