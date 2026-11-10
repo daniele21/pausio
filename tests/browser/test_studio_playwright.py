@@ -137,7 +137,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
     def test_real_edit_preview_export_and_project_commands(self):
         initial=self.upload_analyze()
         self.assertGreaterEqual(len(initial["editor_segments"]),2)
-        for width,height in [(1440,900),(1024,768),(390,844)]:
+        for width,height in [(1440,900),(1024,768),(390,844),(320,700)]:
             self.page.set_viewport_size({"width":width,"height":height})
             self.page.wait_for_timeout(250)
             key=f"analyzed-{width}x{height}"
