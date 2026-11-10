@@ -151,6 +151,8 @@ class StudioPlaywrightAudit(unittest.TestCase):
                 self.assertLessEqual(info["approve"]["bottom"],height+2,
                                      "Approval must stay visible on desktop")
             if width<=390:
+                self.assertTrue(self.page.locator(".rail-intro").is_hidden(),
+                                "After importing, the mobile workflow introduction must collapse")
                 self.assertLessEqual(info["timeline"]["bottom"],info["inspector"]["y"]+2,
                                      "Mobile timeline should precede inspector")
         self.page.set_viewport_size({"width":1440,"height":900})

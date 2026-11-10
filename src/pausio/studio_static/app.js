@@ -54,6 +54,7 @@ function busyLabel(kind){
 function update(next){
   project=next;
   const has=!!next.file, plan=!!next.plan, approved=!!next.approved, ready=!!next.export_ready, busy=working();
+  document.body.classList.toggle("has-media",has);
   if(next.media_id && mediaKey!==next.media_id){
     mediaKey=next.media_id;mode="original";previewSourceMode="original";
     waveformData=null;waveformRequestedFor=null;
