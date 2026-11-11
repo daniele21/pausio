@@ -148,7 +148,8 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertAlmostEqual(geometry["source"]["right"], geometry["fx"]["right"], delta=2)
         self.assertGreater(geometry["fx"]["top"], geometry["source"]["bottom"])
         self.assertGreaterEqual(geometry["playhead"]["bottom"], geometry["fx"]["bottom"]-4)
-        self.assertEqual(self.page.locator("#fx-lane .fx-clip-mark").count(), 1)
+        # An FX crossing an excluded source range is split on the *source* ruler.
+        self.assertGreaterEqual(self.page.locator("#fx-lane .fx-clip-mark").count(), 1)
         self.assertEqual(self.page.locator("#fx-panel #fx-lane").count(), 0)
         # The waveform must come from decoded audio rather than decorative CSS.
         self.wait_condition(lambda: self.page.evaluate("""() => {
