@@ -165,6 +165,7 @@ def render(
     captions: list[dict] | None = None, caption_style: str = "social",
     caption_config: dict | None = None,
     audio_fx: list[tuple[Path, dict]] | None = None,
+    audio_mix: dict | None = None,
 ) -> list[str]:
     """Render ordered intervals in one re-encode; preserve aspect ratio with padding.
 
@@ -183,6 +184,8 @@ def render(
         raise MediaError(f"output exists: {output}; pass --overwrite to replace")
     if audio_fx and (len(audio_fx) > 16 or any(not path.is_file() for path, _ in audio_fx)):
         raise MediaError("Audio effects missing or exceed the 16-track limit.")
+    from pausio.project_commands import default_audio_mix, validate_audio_mix
+    mix = validate_audio_mix(audio_mix) if audio_mix is not None else default_audio_mix()
     if captions is not None and not isinstance(captions, list):
         raise MediaError("captions must be a list or None")
     # Validate subtitle text/style for both preview and final output.
@@ -221,10 +224,16 @@ def render(
             filters.append(f"[basev]ass=filename={path.as_posix()}[outv]")
 
         effects = audio_fx or []
-        if effects:
+        # Even projects with no imported FX can modify the voice level.
+        mixing = bool(effects) or mix != default_audio_mix()
+        if mixing:
             output_duration = sum(s.end_ms - s.start_ms for s in segments) / 1000
             if has_audio:
-                filters.append("[joineda]aresample=48000,aformat=channel_layouts=stereo[voice]")
+                voice_volume = "0" if mix["voice_muted"] else f'{mix["voice_gain_db"]}dB'
+                filters.append(
+                    "[joineda]aresample=48000,aformat=channel_layouts=stereo,"
+                    f"volume={voice_volume}[voice]"
+                )
             else:
                 filters.append(
                     f"anullsrc=r=48000:cl=stereo,atrim=duration={output_duration:.3f}[voice]"
@@ -235,10 +244,12 @@ def render(
                 if start_ms >= round(output_duration * 1000):
                     continue
                 length = min(clip["duration_ms"], round(output_duration * 1000) - start_ms)
+                is_muted = mix["fx_muted"] or clip.get("muted", False)
+                volume = "0" if is_muted else f'{clip["gain_db"] + mix["fx_gain_db"]}dB'
                 filters.append(
                     f"[{i+1}:a:0]aresample=48000,aformat=channel_layouts=stereo,"
                     f"atrim=duration={length/1000:.3f},asetpts=PTS-STARTPTS,"
-                    f"volume={clip['gain_db']}dB,adelay={start_ms}:all=1[fx{i}]"
+                    f"volume={volume},adelay={start_ms}:all=1[fx{i}]"
                 )
                 labels.append(f"[fx{i}]")
             if len(labels) > 1:
@@ -248,14 +259,14 @@ def render(
                     f"alimiter=limit=0.95[outa]"
                 )
             else:
-                filters.append("[voice]anull[outa]")
+                filters.append("[voice]alimiter=limit=0.95[outa]")
         args = [require_binary("ffmpeg"), "-hide_banner", "-nostdin", "-y",
                 "-i", str(source)]
         for path, _ in effects:
             args.extend(["-i", str(path)])
         args.extend(["-filter_complex", ";".join(filters), "-map", "[outv]"])
         if has_audio or effects:
-            args.extend(["-map", "[outa]" if effects else "[joineda]",
+            args.extend(["-map", "[outa]" if mixing else "[joineda]",
                          "-c:a", "aac", "-b:a", "160k"])
         args.extend([
             "-c:v", "libx264", "-preset", "veryfast", "-crf", "22",
