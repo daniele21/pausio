@@ -706,6 +706,9 @@ class StudioHandler(BaseHTTPRequestHandler):
             if path == "/api/import":
                 self._import()
                 return
+            if path == "/api/audio/import":
+                self._import_audio()
+                return
             if path == "/api/plan":
                 self.server.workspace.save_plan(self._read_json().get("segments"))
                 self._json(200, self.server.workspace.snapshot())
@@ -745,6 +748,42 @@ class StudioHandler(BaseHTTPRequestHandler):
             self._failed(409 if "in corso" in str(exc) or "Versione" in str(exc) else 400, str(exc))
         except Exception:
             self._failed(500, "Errore interno. Controlla il terminale di Pausio.")
+
+    def _import_audio(self) -> None:
+        if self.headers.get("Content-Type") != "application/octet-stream":
+            raise StudioError("Caricamento audio non valido.")
+        size = self._content_length(MAX_AUDIO_BYTES)
+        filename = unquote(self.headers.get("X-Filename", ""))
+        try:
+            revision = int(self.headers.get("X-Pausio-Revision", ""))
+            start_ms = int(self.headers.get("X-Pausio-Start-Ms", "0"))
+        except ValueError as exc:
+            raise StudioError("Posizione o versione del progetto non valida.") from exc
+        destination, label = self.server.workspace.begin_audio_import(filename, revision)
+        completed = False
+        digest = hashlib.sha256()
+        try:
+            fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "wb") as target:
+                remaining = size
+                while remaining:
+                    chunk = self.rfile.read(min(1024 * 1024, remaining))
+                    if not chunk:
+                        raise StudioError("Caricamento audio interrotto.")
+                    target.write(chunk)
+                    digest.update(chunk)
+                    remaining -= len(chunk)
+                target.flush()
+                os.fsync(target.fileno())
+            duration_ms = probe_audio(destination)
+            self.server.workspace.finish_audio_import(
+                destination, label, duration_ms, digest.hexdigest(), revision, start_ms
+            )
+            completed = True
+            self._json(200, self.server.workspace.snapshot())
+        finally:
+            if not completed:
+                self.server.workspace.abort_import(destination)
 
     def _import(self) -> None:
         if self.headers.get("Content-Type") != "application/octet-stream":
@@ -815,6 +854,9 @@ class StudioHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(content)
             return
+        if path.startswith("/api/audio/"):
+            self._media(False, False, audio_sha=path.removeprefix("/api/audio/"))
+            return
         if path == "/api/media":
             self._media(False, False)
             return
@@ -832,23 +874,45 @@ class StudioHandler(BaseHTTPRequestHandler):
             self._headers(204, 0, "image/x-icon")
             self.end_headers()
             return
-        if path in {"/api/media", "/api/export", "/api/preview"}:
+        if path.startswith("/api/audio/"):
+            self._media(False, True, audio_sha=path.removeprefix("/api/audio/"))
+        elif path in {"/api/media", "/api/export", "/api/preview"}:
             self._media(path == "/api/export", True, preview=path == "/api/preview")
         else:
             self._failed(404, "Risorsa non trovata.")
 
-    def _media(self, exported: bool, headers_only: bool, *, preview: bool = False) -> None:
+    def _media(
+        self, exported: bool, headers_only: bool, *,
+        preview: bool = False, audio_sha: str | None = None
+    ) -> None:
+        audio_mime = None
         with self.server.workspace.lock:
-            path = (
+            if audio_sha is not None:
+                clip = next(
+                    (c for c in (self.server.workspace.tape.view.audio_clips
+                     if self.server.workspace.tape else ())
+                     if c["asset_sha256"] == audio_sha), None
+                )
+                if clip is None:
+                    self._failed(404, "Audio non disponibile.")
+                    return
+                path = self.server.workspace._audio_path(audio_sha)
+                audio_mime = {
+                    ".mp3": "audio/mpeg", ".wav": "audio/wav",
+                    ".m4a": "audio/mp4", ".aac": "audio/aac",
+                    ".flac": "audio/flac", ".ogg": "audio/ogg",
+                }.get(Path(clip["filename"]).suffix.lower(), "application/octet-stream")
+            else:
+                path = (
                 self.server.workspace.directory / "preview.mp4" if preview
                 else self.server.workspace.directory / "export.mp4" if exported
                 else self.server.workspace.source
             )
-            if (exported and not self.server.workspace.export_ready) or (
+            if audio_sha is None and ((exported and not self.server.workspace.export_ready) or (
                 preview and not self.server.workspace.preview_ready
-            ):
+            )):
                 path = None
-            if path is None or not path.is_file():
+            if path is None or path.is_symlink() or not path.is_file():
                 self._failed(404, "Video non disponibile.")
                 return
             total = path.stat().st_size
@@ -877,7 +941,7 @@ class StudioHandler(BaseHTTPRequestHandler):
                 return
             end = min(end, total - 1)
         size = end - begin + 1
-        mime = "video/mp4" if preview or exported or path.suffix.lower() in {".mp4", ".m4v", ".mov"} else "video/webm"
+        mime = audio_mime or ("video/mp4" if preview or exported or path.suffix.lower() in {".mp4", ".m4v", ".mov"} else "video/webm")
         self._headers(206 if requested else 200, size, mime)
         self.send_header("Accept-Ranges", "bytes")
         if requested:
