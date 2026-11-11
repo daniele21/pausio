@@ -275,6 +275,31 @@ class StudioPlaywrightAudit(unittest.TestCase):
             "() => document.querySelector('#preview-video').currentTime>=1.85"))
         self.assertFalse(self.errors,self.errors)
 
+    def test_standalone_asr_ui_transcribes_without_closedroom_server(self):
+        from unittest.mock import patch
+        self.upload_analyze()
+        self.assertFalse(self.page.locator("#asr-download").is_checked())
+        self.assertEqual(self.page.locator("#asr-language").input_value(),"it")
+        self.page.locator("#asr-model").select_option(
+            "mlx-community/whisper-large-v3-turbo"
+        )
+        result={
+            "schema_version":1, "provider":"pausio-local", "backend":"mlx-whisper",
+            "model":"mlx-community/whisper-large-v3-turbo",
+            "language":"it", "text":"Ciao AI", "segments":[
+                {"start_ms":100,"end_ms":800,"text":"Ciao AI"}],
+            "word_timestamps_available":False, "warnings":["word_alignment_unavailable"]
+        }
+        with patch("pausio.studio.transcribe_video_local",return_value=result) as run:
+            self.page.locator("#transcribe-action").click()
+            state=self.wait_state("transcribe","completed")
+            self.assertEqual(state["transcript"]["provider"],"pausio-local")
+            self.assertFalse(run.call_args.kwargs["allow_model_download"])
+            self.assertEqual(run.call_args.kwargs["language"],"it")
+        self.wait_condition(lambda:"Pausio ASR" in self.page.locator(
+            ".transcript-source").inner_text())
+        self.assertFalse(self.errors,self.errors)
+
     def test_pointer_trim_is_single_edit(self):
         self.upload_analyze()
         self.page.locator("#timeline-zoom").select_option("2")

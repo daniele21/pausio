@@ -11,7 +11,6 @@ explicit per-operation user opt-in.
 from __future__ import annotations
 
 import platform
-import re
 import sys
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -78,26 +77,38 @@ def _local_model_directory(model: str, *, allow_download: bool) -> Path:
                 "ASR non installato: esegui python -m pip install -e '.[asr]' "
                 "in un ambiente Python 3.11–3.13."
             ) from exc
+        def complete(path: Path) -> bool:
+            return (path / "config.json").is_file() and (
+                any(path.glob("*.safetensors")) or any(path.glob("*.npz"))
+            )
+
         try:
-            # False = disk cache only, no HTTP and no hidden model downloads.
-            # True = deliberate UI checkbox or --allow-model-download flag.
+            # Always check the disk cache first: the opt-in permission must
+            # not cause network calls when the full model already exists.
             resolved = Path(snapshot_download(
-                repo_id=model, local_files_only=not allow_download
+                repo_id=model, local_files_only=True
             )).resolve()
+            if not complete(resolved):
+                raise LocalASRError("Snapshot locale incompleto.")
         except Exception as exc:
             if not allow_download:
                 raise LocalASRError(
-                    "Modello non presente nella cache locale. "
-                    "In Studio abilita «Scarica modello (una volta)» "
+                    "Modello non presente o incompleto nella cache locale. "
+                    "In Studio abilita «Scarica il modello se assente» "
                     "oppure usa --allow-model-download nella CLI."
                 ) from exc
-            raise LocalASRError(
-                "Impossibile scaricare il modello MLX selezionato. "
-                "Controlla rete, spazio disco e disponibilità del modello."
-            ) from exc
-    if not (resolved / "config.json").is_file() or not any(
-        resolved.glob("*.safetensors")
-    ) and not any(resolved.glob("*.npz")):
+            try:
+                resolved = Path(snapshot_download(
+                    repo_id=model, local_files_only=False
+                )).resolve()
+            except Exception as download_exc:
+                raise LocalASRError(
+                    "Impossibile scaricare il modello MLX selezionato. "
+                    "Controlla rete, spazio disco e disponibilità del modello."
+                ) from download_exc
+    if not (resolved / "config.json").is_file() or not (
+        any(resolved.glob("*.safetensors")) or any(resolved.glob("*.npz"))
+    ):
         raise LocalASRError("Modello locale incompleto: config e pesi MLX necessari.")
     return resolved
 

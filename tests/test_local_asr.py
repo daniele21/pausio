@@ -65,8 +65,26 @@ class TestStandaloneLocalASR(unittest.TestCase):
                 "repo_id": DEFAULT_ASR_MODEL, "local_files_only": True
             })
             self.assertEqual(calls[1], {
-                "repo_id": DEFAULT_ASR_MODEL, "local_files_only": False
+                "repo_id": DEFAULT_ASR_MODEL, "local_files_only": True
             })
+            self.assertEqual(len(calls), 2, "Cached model must not call the network")
+
+    def test_explicit_permission_downloads_only_on_cache_miss(self):
+        with tempfile.TemporaryDirectory() as d:
+            folder=Path(d)
+            (folder/"config.json").write_text("{}",encoding="utf-8")
+            (folder/"weights.safetensors").touch()
+            calls=[]
+            def loader(**kwargs):
+                calls.append(kwargs["local_files_only"])
+                if kwargs["local_files_only"]:
+                    raise FileNotFoundError("uncached")
+                return str(folder)
+            with patch.dict(sys.modules, {"huggingface_hub":
+                  types.SimpleNamespace(snapshot_download=loader)}):
+                resolved=_local_model_directory(DEFAULT_ASR_MODEL,allow_download=True)
+            self.assertEqual(resolved,folder.resolve())
+            self.assertEqual(calls,[True,False])
 
     def test_cache_miss_fails_without_model_download(self):
         def missing(**kwargs):
