@@ -80,6 +80,10 @@ Upstream design inspirations (our implementation and four UI skills are original
 - https://github.com/vercel-labs/agent-skills/blob/main/skills/web-design-guidelines/SKILL.md
 - https://github.com/nextlevelbuilder/ui-ux-pro-max-skill
 
+## Ascolto live degli effetti nella preview del video
+
+La presenza della waveform viola **non basta** a far ascoltare un riser: ora il player sovrappone l'audio importato alla voce originale durante Play in modalità **Originale** o **Simulazione**, senza dover creare ogni volta un MP4. Il controllo **♫ FX attivi/spenti** disabilita soltanto l'ascolto live, **non** rimuove l'effetto dal rendering. Le clip FX rispettano posizione, durata, guadagno in dB, velocità, play/pause e seek del video, oltre ai tagli esclusi. In modalità **Preview FFmpeg** il monitor FX è disabilitato per evitare il raddoppio dei suoni: l'MP4 renderizzato ha già il mix incorporato. Un formato non riproducibile nel browser viene segnalato con indicazione di generare una preview FFmpeg. Per decidere il volume finale, ascolta sempre la preview renderizzata, non soltanto l'ascolto live che può avere piccoli ritardi alle transizioni.
+
 ## FX audio locali
 
 La traccia FX opzionale permette di importare riser e altri effetti in MP3/WAV/M4A/AAC/FLAC/OGG (60 MB e 3 minuti massimo). Un effetto è aggiunto al momento del playhead (la fine si allinea al punto selezionato), e può essere ascoltato isolatamente, spostato in secondi, modificato in dB o rimosso. Preview e export FFmpeg mixano la voce originale e gli effetti. Undo/Redo e l'export `.pausio.json` conservano i comandi, ma non i byte degli audio. Alla riapertura sulla stessa macchina i file privati sono recuperati; su un altro Mac occorre reimportare lo stesso audio, verificato tramite SHA-256. Render bloccato per file mancanti o alterati.
