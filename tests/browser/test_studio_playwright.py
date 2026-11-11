@@ -373,6 +373,12 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.page.locator('[data-caption-setting="text_color"]').fill("#FFCC00")
         recolored=self.wait_state("revision",keyed["project_revision"]+1)
         self.assertEqual(recolored["caption_config"]["text_color"],"#FFCC00")
+        self.page.locator("#caption-font-family").select_option("Georgia")
+        selected=self.wait_state("revision",recolored["project_revision"]+1)
+        self.assertEqual(selected["caption_config"]["font_family"],"Georgia")
+        self.assertEqual(selected["caption_style"],"custom")
+        self.wait_condition(lambda:"Georgia" in self.page.locator(
+            "#caption-overlay").evaluate("(node) => node.style.fontFamily"))
         for width,height in [(1440,900),(390,844),(320,700)]:
             self.page.set_viewport_size({"width":width,"height":height})
             self.page.wait_for_timeout(140)
@@ -394,6 +400,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertIn("caption.correct",[c["type"] for c in commands])
         self.assertIn("caption.configure",[c["type"] for c in commands])
         self.assertEqual(commands[-1]["payload"]["config"]["text_color"],"#FFCC00")
+        self.assertEqual(commands[-1]["payload"]["config"]["font_family"],"Georgia")
         self.assertFalse(self.errors,self.errors)
 
     def test_pointer_trim_is_single_edit(self):

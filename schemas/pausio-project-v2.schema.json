@@ -673,6 +673,19 @@
                     },
                     "background": {
                       "type": "boolean"
+                    },
+                    "font_family": {
+                      "type": "string",
+                      "enum": [
+                        "Arial",
+                        "Helvetica Neue",
+                        "Avenir Next",
+                        "Verdana",
+                        "Georgia",
+                        "Courier New",
+                        "Impact",
+                        "Times New Roman"
+                      ]
                     }
                   }
                 }

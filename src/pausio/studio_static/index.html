@@ -287,6 +287,12 @@
                 <summary>Posizione e aspetto <span aria-hidden="true">↗</span></summary>
                 <p class="caption-hint">Sposta tutti i sottotitoli insieme, con la stessa posizione nel video esportato.</p>
                 <div class="caption-config-grid">
+                  <label for="caption-font-family">Font dei sottotitoli
+                    <select id="caption-font-family" data-caption-setting="font_family" aria-label="Font dei sottotitoli">
+                      <option value="Arial">Arial</option>
+                    </select>
+                  </label>
+                  <p class="caption-font-hint">Font del sistema: per verificare la resa esatta nell'MP4 usa «Genera preview». Se il font non è installato, FFmpeg può sostituirlo.</p>
                   <label>Orizzontale <output id="caption-x-output">50%</output>
                     <input type="range" data-caption-setting="x_pct" min="15" max="85" step="1" value="50">
                   </label>

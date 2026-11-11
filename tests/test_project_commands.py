@@ -135,6 +135,39 @@ class ProjectReplayTests(unittest.TestCase):
         with self.assertRaises(ProjectFormatError):
             analyze(ProjectTape(media())).append("caption.configure",{"config":cfg})
 
+    def test_font_choice_is_portable_and_old_config_restores_arial(self):
+        from pausio.captions import default_caption_config
+        tape = analyze(ProjectTape(media())).append("caption.set", {
+            "style": "social", "cues": [
+                {"id": "a"*32, "start_ms":100, "end_ms":1300, "text":"Video AI"}
+            ]
+        })
+        customized = {
+            **default_caption_config(), "preset": "custom",
+            "font_family": "Georgia",
+        }
+        tape = tape.append("timeline.approve", {})
+        tape = tape.append("caption.configure", {"config": customized})
+        self.assertFalse(tape.view.approved)
+        self.assertEqual(tape.view.caption_config["font_family"], "Georgia")
+        project = json.loads(json.dumps(tape.as_dict()))
+        restored = ProjectTape.from_dict(project)
+        self.assertEqual(restored.view.caption_config, tape.view.caption_config)
+        before_font_change = restored.undo()
+        self.assertEqual(before_font_change.view.caption_config["font_family"], "Arial")
+        self.assertEqual(before_font_change.redo().view.caption_config["font_family"], "Georgia")
+        # Simulate the exact older event representation without a font field.
+        legacy_project = json.loads(json.dumps(project))
+        legacy_project["commands"][-1]["payload"]["config"].pop("font_family")
+        legacy = ProjectTape.from_dict(legacy_project)
+        self.assertEqual(legacy.view.caption_config["font_family"], "Arial")
+        self.assertEqual(legacy.view.caption_style, "custom")
+        for name in ("Unknown", "Arial,Injected"):
+            with self.assertRaises(ProjectFormatError):
+                tape.append("caption.configure", {"config": {
+                    **customized, "font_family": name
+                }})
+
     def test_precise_commands_replay_to_same_edit_plan_after_json_import(self):
         tape = analyze(ProjectTape(media()))
         first, second = tape.view.segments

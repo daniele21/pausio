@@ -558,7 +558,7 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         # Config is a typed command, with an actual ASS change in the rendered MP4.
         settings={**corrected["caption_presets"]["social"],
                   "preset":"custom","x_pct":62,"y_pct":56,
-                  "font_size":86}
+                  "font_size":86,"font_family":"Georgia"}
         status,_,data=self.post("/api/command",{
             "revision":corrected["project_revision"],"type":"caption.configure",
             "payload":{"config":settings}
@@ -566,6 +566,7 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         self.assertEqual(status,200,data)
         configured=json.loads(data)
         self.assertEqual(configured["caption_config"],settings)
+        self.assertEqual(configured["caption_config"]["font_family"],"Georgia")
         self.assertFalse(configured["approved"])
         # Preview requires an edit plan, and the same captions as final export.
         status,_,data=self.post("/api/jobs",{"kind":"analyze"})

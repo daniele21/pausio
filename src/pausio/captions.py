@@ -12,14 +12,25 @@ from typing import Any
 from pausio.domain import Interval
 
 CAPTION_STYLES = ("social", "minimal", "boxed")
+# Explicit allowlist is shared by the Studio UI and ASS renderer. Model/ASR
+# cannot inject arbitrary ASS font-name delimiters or escape sequences.
+# FFmpeg/libass resolves these families from fonts installed on the device.
+CAPTION_FONTS = (
+    "Arial", "Helvetica Neue", "Avenir Next", "Verdana",
+    "Georgia", "Courier New", "Impact", "Times New Roman",
+)
+DEFAULT_CAPTION_FONT = "Arial"
 CAPTION_PRESETS = {
     "social": {"preset": "social", "x_pct": 50, "y_pct": 80, "font_size": 64,
+               "font_family": DEFAULT_CAPTION_FONT,
                "text_color": "#FFFFFF", "outline_color": "#000000",
                "outline_size": 4, "background": False, "background_color": "#000000"},
     "minimal": {"preset": "minimal", "x_pct": 50, "y_pct": 82, "font_size": 48,
+                "font_family": DEFAULT_CAPTION_FONT,
                 "text_color": "#FFFFFF", "outline_color": "#000000",
                 "outline_size": 3, "background": False, "background_color": "#000000"},
     "boxed": {"preset": "boxed", "x_pct": 50, "y_pct": 76, "font_size": 56,
+              "font_family": DEFAULT_CAPTION_FONT,
               "text_color": "#FFFFFF", "outline_color": "#000000",
               "outline_size": 3, "background": True, "background_color": "#161616"},
 }
@@ -33,22 +44,31 @@ _COLOR_RE = re.compile(r"^#[0-9A-F]{6}$")
 
 def validate_caption_config(raw: object) -> dict[str, Any]:
     """Strictly validate normalized style data for project replay and FFmpeg."""
-    if not isinstance(raw, dict) or set(raw) != CAPTION_CONFIG_FIELDS:
+    # Projects created before font selection did not contain font_family.
+    # Normalize only this known legacy omission. Other unknown/missing fields
+    # remain rejected; replay of older .pausio.json stays deterministic.
+    old_fields = CAPTION_CONFIG_FIELDS - {"font_family"}
+    if not isinstance(raw, dict) or set(raw) not in (
+        CAPTION_CONFIG_FIELDS, old_fields
+    ):
         raise ValueError("Configurazione sottotitoli incompleta o non valida.")
-    preset = raw["preset"]
+    config = {"font_family": DEFAULT_CAPTION_FONT, **raw}
+    preset = config["preset"]
     if not isinstance(preset, str) or preset not in (*CAPTION_STYLES, "custom"):
         raise ValueError("Preset sottotitoli sconosciuto.")
     for key, (minimum, maximum) in CAPTION_CONFIG_RANGES.items():
-        if type(raw[key]) is not int or not minimum <= raw[key] <= maximum:
+        if type(config[key]) is not int or not minimum <= config[key] <= maximum:
             raise ValueError(f"{key}: inserisci un intero tra {minimum} e {maximum}.")
     for key in ("text_color", "outline_color", "background_color"):
-        if not isinstance(raw[key], str) or not _COLOR_RE.fullmatch(raw[key]):
+        if not isinstance(config[key], str) or not _COLOR_RE.fullmatch(config[key]):
             raise ValueError(f"{key}: usa un colore esadecimale #RRGGBB.")
-    if type(raw["background"]) is not bool:
+    if type(config["background"]) is not bool:
         raise ValueError("Il valore di sfondo deve essere vero o falso.")
-    if preset != "custom" and raw != CAPTION_PRESETS[preset]:
+    if not isinstance(config["font_family"], str) or config["font_family"] not in CAPTION_FONTS:
+        raise ValueError("Font sottotitoli non supportato. Scegli uno dei font disponibili.")
+    if preset != "custom" and config != CAPTION_PRESETS[preset]:
         raise ValueError("Modifiche al preset richiedono Personalizzato.")
-    return dict(raw)
+    return dict(config)
 
 
 def default_caption_config(preset: str = "social") -> dict[str, Any]:
@@ -213,6 +233,7 @@ def ass_document(
         settings if settings is not None else default_caption_config(style)
     )
     font_size = config["font_size"]
+    font_family = config["font_family"]
     outline = config["outline_size"]
     x = round(config["x_pct"] * 1080 / 100)
     y = round(config["y_pct"] * 1920 / 100)
@@ -229,7 +250,7 @@ def ass_document(
         "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, "
         "ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, "
         "MarginL, MarginR, MarginV, Encoding\n"
-        f"Style: Caption,Arial,{font_size},{foreground},{foreground},"
+        f"Style: Caption,{font_family},{font_size},{foreground},{foreground},"
         f"{stroke},{background},-1,0,0,0,100,100,0,0,"
         f"{border_style},{outline},1,5,105,105,0,1\n"
         "[Events]\n"

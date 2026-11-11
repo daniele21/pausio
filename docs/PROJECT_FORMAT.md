@@ -71,7 +71,7 @@ This reproduces a final kept timeline of `[0,2400)` and `[3900,10000)`, with exp
 | `caption.set` | `style`, source-time `cues` with stable IDs, text and start/end ms | creates subtitle track from ASR |
 | `caption.correct` | `caption_id`, `text` | corrects one caption without rerunning transcription |
 | `caption.style` | `style` = `social`, `minimal` or `boxed` | legacy preset change |
-| `caption.configure` | exact validated `config` with preset, X/Y percentages, font size, RGB colors, outline and background | persists custom or named style consistently for browser preview and FFmpeg output |
+| `caption.configure` | exact validated `config` with preset, X/Y percentages, font family, font size, RGB colors, outline and background | persists custom or named style consistently for browser preview and FFmpeg output |
 | `caption.clear` | no payload | removes subtitle track |
 
 IDs are 32-character lowercase hex identifiers. Times are integer milliseconds on the **original source timeline**, not output timestamps. Keep regions are half-open [start_ms, end_ms), sorted, non-overlapping and within media duration. Source paths, video bytes, model weights and **raw ASR transcripts** are excluded. Reviewed caption cues (stable ID, timestamps, text) are intentionally persisted as typed v2 project commands: they affect exported video, and allow playback without rerunning transcription.
@@ -124,7 +124,7 @@ The session is locked to a single running Studio process; file/directory permiss
 - **Import is data-only.** Unknown or future commands/schema versions are rejected, never executed as code.
 - No absolute source paths or external URLs are stored; the same project can be reopened on a different computer when paired with the identical video bytes.
 - Replay is deterministic and independent of the AI model: no rerunning ClosedRoom, Whisper or FFmpeg silence detection for existing suggestions.
-- V1 contains timeline edit instructions only. Portable project V2 stores reviewed caption text/timing/styles including `caption.configure` but no raw ASR, font assets or packaged exports. Private autosave V2 is a different format and additionally retains the ASR transcript. Each future *output-affecting* UI feature MUST add a typed, versioned operation with migration, import/export tests and a deterministic render/preview mapping.
+- V1 contains timeline edit instructions only. Portable project V2 stores reviewed caption text/timing/styles including the allowlisted `font_family` in `caption.configure`, but no raw ASR, font assets or packaged exports. For older v2 `caption.configure` payloads where `font_family` is absent, replay deterministically inserts `Arial` without changing prior serialized commands. Private autosave V2 is a different format and additionally retains the ASR transcript. Each future *output-affecting* UI feature MUST add a typed, versioned operation with migration, import/export tests and a deterministic render/preview mapping.
 - Export codec/profile in this release is still fixed by Pausio's renderer (1080x1920 H.264/AAC). Before adding export settings, record them as typed instructions rather than untracked UI-only state.
 - No timeline-changing instruction can bypass explicit approval. A malformed or different-video project cannot partially mutate the active session.
 

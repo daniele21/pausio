@@ -353,6 +353,13 @@ a { color: inherit; text-decoration: none; }
 .caption-config-grid { display: flex; flex-direction: column; gap: 12px; margin: 5px 0 12px; min-width: 0; }
 .caption-config-grid label { display: block; color: var(--ink-secondary); font-size: 11px; min-width: 0; }
 .caption-config-grid output { float: right; font-variant-numeric: tabular-nums; color: var(--ink); }
+.caption-config-grid select {
+  display: block; width: 100%; min-width: 0; padding: 9px 8px; margin-top: 6px;
+  font-size: 12px; color: var(--ink); background: var(--surface-raised);
+  border: 1px solid #526276; border-radius: 8px;
+}
+.caption-font-hint { color: var(--ink-secondary); font-size: 10px; line-height: 1.5;
+  margin: -6px 0 2px; overflow-wrap: anywhere; }
 .caption-config-grid input[type=range] { display: block; width: 100%; accent-color: var(--accent); margin: 8px 0 0; }
 .caption-color-pair { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 10px; }
 .caption-config-grid input[type=color] { display: block; width: 100%; min-width: 0; padding: 2px; margin-top: 4px; height: 35px;
