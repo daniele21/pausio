@@ -291,7 +291,6 @@
   els.edit.addEventListener("click", () => {
     els.details.open = true;
     els.details.scrollIntoView({behavior:"smooth", block:"start"});
-    els.script.focus({preventScroll:true});
   });
   els.framing.addEventListener("change", async () => {
     remember();
