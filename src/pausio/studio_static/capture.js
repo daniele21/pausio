@@ -117,7 +117,7 @@
       await releaseCamera();
       const candidate = await navigator.mediaDevices.getUserMedia({
         video: {facingMode: {ideal:facing}, width:{ideal:1080}, height:{ideal:1920},
-          frameRate:{ideal:30}},
+          aspectRatio:{ideal:9/16}, frameRate:{ideal:30}},
         audio: true
       });
       stream = candidate;
@@ -127,7 +127,14 @@
       resetScroll();
       refreshPrompter();
       setMode("preview");
-      notice("Controlla l'inquadratura, poi tocca Registra. Il gobbo sarà visibile solo sullo schermo.");
+      const dimensions = candidate.getVideoTracks()[0]?.getSettings?.() || {};
+      const width = dimensions.width, height = dimensions.height;
+      els.format.textContent = width && height ? width + "×" + height + " · originale" : "Formato automatico";
+      if (width && height && width >= height) {
+        notice("La fotocamera registra in orizzontale (" + width + "×" + height + "). Ruota il telefono in verticale e riattiva la fotocamera prima del take.", true);
+      } else {
+        notice("Controlla l'inquadratura, poi tocca Registra. Il gobbo sarà visibile solo sullo schermo.");
+      }
     } catch (error) {
       await releaseCamera();
       setMode("error");
