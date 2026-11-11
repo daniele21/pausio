@@ -22,20 +22,23 @@ Il workflow `.github/workflows/mobile-capture-pages.yml` pubblica solamente i tr
 
 Per test locale desktop, avvia `pausio studio` e apri `http://127.0.0.1:8765/capture` (o la porta comunicata da Pausio). `localhost` è un contesto sicuro, ma lo stesso URL **non funziona** su un telefono diverso. Verifica sempre la disponibilità del Pages URL prima di condividerlo.
 
-## Layout mobile e inquadratura
+## Layout mobile e video verticale (sorgenti Android orizzontali)
 
-Su smartphone la camera usa una viewport quasi a tutta altezza con `object-fit: contain`: la preview non fa zoom digitale né ritaglia artificialmente il flusso video per adattarlo al riquadro. Il gobbo sovrapposto è regolabile da 3 a 7 righe, e le impostazioni sono nascoste in un pannello espandibile, accessibile tramite il pulsante `Aa`.
+Un browser Android può consegnare una sorgente fotocamera `1920×1080` (16:9 orizzontale) **anche con il telefono in verticale** e con `aspectRatio: {ideal: 9/16}`. I vincoli `ideal` sono preferenze, non garantiscono il formato: prima questa discrepanza produceva una fascia orizzontale nell'anteprima, mentre MediaRecorder scaricava il video orizzontale.
 
-- **Campo ampio 3:4 (default):** richiede al browser un formato più vicino al sensore e normalmente meno ravvicinato rispetto a 9:16, preservando l'intero campo visivo disponibile. Il browser può ignorare le preferenze di risoluzione e rapporto d'aspetto.
-- **Social 9:16:** richiesta più stretta, esplicitamente selezionabile nelle impostazioni; può effettuare un crop della camera stessa.
-- Il file scaricato è **sempre la registrazione raw** scelta dal browser: non aggiungiamo ritagli o sfondi al file in JavaScript. Il formato finale 9:16 viene gestito successivamente nell'editor Pausio sul PC.
+Pausio ora disegna i frame della fotocamera (mai il gobbo DOM) su un canvas **720×1280 (9:16)**: l'anteprima mostra questo canvas e il file video usa `canvas.captureStream(24)` + la traccia microfono originale in `MediaRecorder`. La camera resta la fonte di verità; il browser decide il container MP4/WebM. Il video risultante è verticale anche se l'ingresso è 16:9 orizzontale, **quando il browser supporta la cattura del canvas**. Se manca questo supporto, l'interfaccia mostra un errore anziché salvare silenziosamente un file orizzontale.
 
-Il campo visivo ottico effettivo dipende dall'ottica selezionata dal telefono e dal browser. Né `object-fit: contain` né un rapporto 3:4 possono garantire l'uso della lente ultra-wide o lo zoom ottico minimo su tutti i dispositivi.
+- **Verticale 9:16 · campo completo (default):** mostra l'intero fotogramma della fotocamera con uno sfondo sfocato ricavato dallo stesso video, senza tagliare i lati. Se la sorgente è orizzontale, il contenuto principale mantiene le sue proporzioni e si vedrà una fascia panoramica sopra lo sfondo sfocato. Non è uno zoom ottico.
+- **Verticale 9:16 · schermo pieno (ritaglio):** riempie tutta l'altezza e larghezza del file verticale con un crop centrale. Non lascia bande ma necessariamente ritaglia una parte notevole dei lati di una sorgente 16:9, quindi l'immagine può apparire più ravvicinata.
+- L'opzione cambia la composizione di anteprima e file **insieme**; non ruota il volto sideways e non imprime il gobbo sul video. Il canvas rimane non specchiato nel file, mentre la preview selfie è specchiata solo tramite CSS.
+- Le impostazioni del gobbo restano esportate come preferenze locali; il pannello è collassabile su mobile e il gobbo mostra da 3 a 7 righe.
+
+**Qualità/performance:** questa composizione iniziale esporta HD 720×1280 a 24 fps, non Full HD nativo; il canvas e l'effetto sfocatura possono consumare CPU e batteria. Provare la qualità su Galaxy A56, Safari iOS e microfono esterno prima di considerare la funzione production-ready. Per ottenere contemporaneamente **campo visivo più ampio e pieno schermo 9:16** senza sfondo, occorre una sorgente camera realmente verticale o un'ottica più ampia: il browser non può ricostruire pixel fuori dall'inquadratura.
 
 ## Compatibilità e limiti
 
 - Browser: Safari iOS recente e Chrome Android recente, previa autorizzazione fotocamera+microfono. L'app non garantisce supporto su browser vecchi o embedded. MediaRecorder sceglie MP4 dove disponibile, altrimenti WebM; Pausio Studio importa entrambi, ma alcuni player di sistema non riproducono WebM.
-- La richiesta `width/height/frameRate` è una **preferenza**: il device può produrre diversa risoluzione, frame rate od orientamento. Non si forza un transcode 1080×1920 sul telefono. Verificare i metadati dell'originale dopo l'import.
+- La richiesta `width/height/frameRate` è una **preferenza**: la sorgente può essere orizzontale. Se il canvas è supportato, Pausio registra una composizione HD 720×1280 verticale; verificare con FFprobe i metadati e l'audio dopo il download.
 - Il microfono esterno è selezionato dal sistema operativo/browser. Controllare audio e sincronia su hardware reale. Le videocamere anteriori possono mostrare l'anteprima specchiata; l'effetto è solo CSS, non un filtro del video registrato.
 - Non bloccare il display o passare ad altre app durante la registrazione: i sistemi mobili possono interrompere capture/MediaRecorder. Preferire take brevi (1–3 minuti); i blob sono mantenuti in memoria fino al download e una navigazione/refresh può far perdere il video.
 - Il testo e le impostazioni del gobbo si conservano localmente in `localStorage` quando disponibile. **Le registrazioni non si salvano automaticamente**, non vengono inviate ad alcun server e non restano disponibili dopo aver chiuso/ricaricato la pagina. Il download è un'azione esplicita.
