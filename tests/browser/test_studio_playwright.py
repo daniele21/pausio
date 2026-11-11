@@ -232,6 +232,49 @@ class StudioPlaywrightAudit(unittest.TestCase):
             self.shot("cut-presets-"+str(width))
         self.assertFalse(self.errors,self.errors)
 
+    def test_simulation_skips_short_cut_and_resumes_at_next_keep(self):
+        """A 150 ms gap can fall entirely between two timeupdate events."""
+        initial=self.upload_analyze()
+        self.assertEqual(len(initial["editor_segments"]),2)
+        # Create a valid short exclusion between two kept clips using the UI.
+        end_input=self.page.locator(".segment-card").nth(0).locator(".end-input")
+        end_input.fill("1.70")
+        end_input.press("Tab")
+        revised=self.wait_state("revision",initial["project_revision"]+1)
+        start_input=self.page.locator(".segment-card").nth(1).locator(".start-input")
+        start_input.fill("1.85")
+        start_input.press("Tab")
+        revised=self.wait_state("revision",revised["project_revision"]+1)
+        self.assertEqual(revised["editor_segments"][0]["end_ms"],1700)
+        self.assertEqual(revised["editor_segments"][1]["start_ms"],1850)
+        self.page.locator('[data-mode="edited"]').click()
+        self.assertEqual(self.page.locator('[data-mode="edited"]').get_attribute("aria-pressed"),"true")
+        self.page.evaluate("""() => {
+          window.__simSeeks=[];
+          let v=document.querySelector('#preview-video');
+          v.currentTime=1.60;
+          v.addEventListener('seeking',()=>window.__simSeeks.push(v.currentTime));
+        }""")
+        self.wait_condition(lambda: self.page.evaluate("""() => {
+          let v=document.querySelector('#preview-video');
+          return !v.seeking && Math.abs(v.currentTime-1.60)<0.04;
+        }"""))
+        self.page.locator("#play-pause").click()
+        self.wait_condition(lambda: self.page.evaluate(
+            "() => window.__simSeeks.some(t => t>=1.84 && t<=1.90)"),timeout=7000)
+        self.assertGreaterEqual(self.page.evaluate(
+            "() => document.querySelector('#preview-video').currentTime"),1.84)
+        self.page.locator("#play-pause").click()
+        # Scrubbing into a discarded gap must continue at the next kept clip,
+        # not restart the entire video from the beginning.
+        self.page.evaluate("() => document.querySelector('#preview-video').currentTime=1.75")
+        self.wait_condition(lambda: self.page.evaluate(
+            "() => !document.querySelector('#preview-video').seeking"))
+        self.page.locator("#play-pause").click()
+        self.wait_condition(lambda: self.page.evaluate(
+            "() => document.querySelector('#preview-video').currentTime>=1.85"))
+        self.assertFalse(self.errors,self.errors)
+
     def test_pointer_trim_is_single_edit(self):
         self.upload_analyze()
         self.page.locator("#timeline-zoom").select_option("2")

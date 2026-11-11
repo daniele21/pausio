@@ -7,6 +7,7 @@ let lastJobNotice = "", toastTimeout = 0, dragLevel = 0;
 let didNotifyRecovery = false;
 let waveformData = null, waveformRequestedFor = null, timelineZoom = 1, previewSourceMode = "original";
 let dragHandleActive = false;
+let simulationFrame = null;
 let cutDraft = null, cutSource = null;
 const cutDescriptions = {
   natural: "Preserva il ritmo del parlato. Riduce solo pause sufficientemente lunghe.",
@@ -61,6 +62,16 @@ const shortDuration = ms => ms>=60000 ? msFormat(ms,true) :
   (Math.round(ms/100)/10).toLocaleString("it-IT")+" s";
 const segments = () => project?.editor_segments || [];
 const editedDuration = () => segments().reduce((sum,s) => sum+s.end_ms-s.start_ms,0);
+// If the playhead is in an excluded interval, continue with the NEXT kept
+// interval instead of jumping all the way back to the first segment.
+function nextSimulatedSourceTime(at){
+  const all=segments();
+  for(const s of all){
+    if(at<s.start_ms)return s.start_ms;
+    if(at<s.end_ms)return at;
+  }
+  return all.length?all[0].start_ms:0;
+}
 const sourceFromOutput = ms => {
   let remaining=Math.max(0,ms);
   for(const segment of segments()){
@@ -98,6 +109,11 @@ function busyLabel(kind){
 function update(next){
   project=next;
   const has=!!next.file, plan=!!next.plan, approved=!!next.approved, ready=!!next.export_ready, busy=working();
+  if(mode==="edited"&&(!plan||(next.media&&editedDuration()>=next.media.duration_ms))){
+    mode="original";
+    v.pause();
+    syncSimulationLoop();
+  }
   document.body.classList.toggle("has-media",has);
   syncCutControls(next, busy);
   if(next.media_id && mediaKey!==next.media_id){
@@ -190,8 +206,14 @@ function update(next){
     }).catch(()=>{waveformData=null;});
   }
   for(const button of document.querySelectorAll("[data-mode]")){
-    button.disabled=!has||(button.dataset.mode==="edited"&&!plan)||
+    button.disabled=!has||(button.dataset.mode==="edited"&&(!plan||
+      editedDuration()>=next.media.duration_ms))||
       (button.dataset.mode==="rendered"&&!next.preview_ready);
+    if(button.dataset.mode==="edited"){
+      button.title=plan&&editedDuration()>=next.media.duration_ms?
+        "Nessuna parte esclusa: prova a rianalizzare con un preset più dinamico.":
+        "Salta le parti escluse usando il player originale.";
+    }
     button.classList.toggle("active",button.dataset.mode===mode);
     button.setAttribute("aria-pressed",String(button.dataset.mode===mode));
   }
@@ -455,12 +477,14 @@ async function clearSession(){
   toast("Sessione e video locali eliminati.");
 }
 function changeMode(chosen){
-  if(!project?.media||chosen==="edited"&&!project.plan||
+  if(!project?.media||(chosen==="edited"&&
+    (!project.plan||editedDuration()>=project.media.duration_ms))||
     chosen==="rendered"&&!project.preview_ready)return;
   const oldMode=mode;
   const oldTime=(v.currentTime||0)*1000;
   const sourceTime=oldMode==="rendered"?sourceFromOutput(oldTime):oldTime;
-  const nextTime=chosen==="rendered"?outputTime(sourceTime):sourceTime;
+  const nextTime=chosen==="rendered"?outputTime(sourceTime):
+    chosen==="edited"?nextSimulatedSourceTime(sourceTime):sourceTime;
   v.pause();mode=chosen;
   if(chosen==="rendered"||oldMode==="rendered"){
     const url=chosen==="rendered"?"/api/preview?v="+encodeURIComponent(mediaKey)+
@@ -471,31 +495,58 @@ function changeMode(chosen){
       transport();
     },{once:true});
     v.load();
-  }else if(chosen==="edited"&&segments().length){
-    v.currentTime=segments()[0].start_ms/1000;
-    toast("Simulazione tramite salti: usa «Genera preview» per controllare il montaggio FFmpeg.");
-  }else v.currentTime=nextTime/1000;
+  }else{
+    v.currentTime=nextTime/1000;
+    if(chosen==="edited"){
+      toast("Simulazione tramite salti: usa «Genera preview» per controllare il montaggio FFmpeg.");
+    }
+  }
   previewSourceMode=chosen;
+  syncSimulationLoop();
   update(project);
 }
 function followEdits(){
-  if(mode!=="edited"||!project?.plan||v.paused)return;
-  const at=Math.floor(v.currentTime*1000),all=segments();
-  const selected=all.findIndex(s=>at>=s.start_ms-30&&at<s.end_ms-50);
+  if(mode!=="edited"||!project?.plan||v.paused||v.seeking)return;
+  const at=Math.round(v.currentTime*1000),all=segments();
+  if(!all.length)return;
+  const selected=all.findIndex(s=>at>=s.start_ms-3&&at<s.end_ms);
   if(selected>=0){highlight(selected);return;}
   const next=all.find(s=>s.start_ms>at);
-  if(next)v.currentTime=next.start_ms/1000;
-  else{v.pause();v.currentTime=all[all.length-1].end_ms/1000;}
+  if(next){
+    highlight(all.indexOf(next));
+    v.currentTime=next.start_ms/1000;
+  }else{
+    // The final kept interval has finished. Never play the discarded tail.
+    v.pause();
+    v.currentTime=all[all.length-1].end_ms/1000;
+  }
+}
+// HTMLMediaElement.timeupdate can fire only ~4 times per second. That misses
+// short excluded intervals (especially Dynamic). While actively playing an
+// edit simulation, check every animation frame; retain timeupdate as fallback
+// when a tab is backgrounded. Do not run the loop in other preview modes.
+function simulationTick(){
+  simulationFrame=null;
+  if(mode!=="edited"||v.paused||v.ended)return;
+  followEdits();
+  transport();
+  if(mode==="edited"&&!v.paused)simulationFrame=requestAnimationFrame(simulationTick);
+}
+function syncSimulationLoop(){
+  if(mode==="edited"&&!v.paused&&!v.ended){
+    if(simulationFrame===null)simulationFrame=requestAnimationFrame(simulationTick);
+  }else if(simulationFrame!==null){
+    cancelAnimationFrame(simulationFrame);
+    simulationFrame=null;
+  }
 }
 function play(){
   if(!project?.media)return;
   if(!v.paused){v.pause();return;}
   if(mode==="edited"&&segments().length){
-    const at=v.currentTime*1000;
-    if(!segments().some(s=>at>=s.start_ms&&at<s.end_ms-50))
-      v.currentTime=segments()[0].start_ms/1000;
+    v.currentTime=nextSimulatedSourceTime(Math.round(v.currentTime*1000))/1000;
   }else if(v.ended)v.currentTime=0;
-  v.play().catch(()=>toast("Codec non riproducibile. Usa un MP4 H.264 per la preview.","error"));
+  v.play().catch(()=>toast("Codec non riproducibile. Usa MP4 H.264 per la preview.","error"));
 }
 function jump(seconds){
   if(!project?.media)return;
@@ -605,7 +656,11 @@ el("play-pause").addEventListener("click",play);
 el("video-center-play").addEventListener("click",play);
 v.addEventListener("click",play);
 v.addEventListener("timeupdate",()=>{followEdits();transport();});
-for(const name of ["play","pause","seeked","loadedmetadata"])v.addEventListener(name,transport);
+v.addEventListener("play",()=>{followEdits();syncSimulationLoop();transport();});
+v.addEventListener("pause",()=>{syncSimulationLoop();transport();});
+v.addEventListener("ended",()=>{syncSimulationLoop();transport();});
+v.addEventListener("seeked",()=>{followEdits();transport();});
+v.addEventListener("loadedmetadata",transport);
 v.addEventListener("error",()=>{if(project?.file)toast("Impossibile riprodurre il codec nel browser. Usa MP4 H.264.","error");});
 el("timeline-track").addEventListener("click",event=>{
   if(!project?.media||dragHandleActive)return;const bounds=event.currentTarget.getBoundingClientRect();

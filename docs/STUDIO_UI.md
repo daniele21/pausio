@@ -28,7 +28,7 @@ Design language: cinematic neutral ink surfaces, warm amber action, mint kept sp
 ## Precise review options
 
 - **Originale** plays the imported clip.
-- **Simulazione** skips excluded segments using browser seeks; this is fast but can jump at keyframes and should not be used for final audio decisions.
+- **Simulazione** skips excluded segments using browser seeks monitored on every animation frame during playback, plus a `timeupdate` fallback; this handles brief gaps more reliably than `timeupdate` alone. Seeking into an excluded interval resumes at the next kept clip, not at the beginning. If analysis has not excluded any time, the Simulation button is disabled. As browser seek accuracy varies with codec/keyframes, this fast simulation still must not be used for final audio decisions.
 - **Genera preview** uses **the exact same FFmpeg trim/atrim/concat timeline as the master render**, encoded at 540×960 for faster iteration. It does **not** need approval and does **not** modify the project. Once rendered, select **Preview FFmpeg** to hear actual transitions. Source and output playback clocks are mapped to the same source-time cut timeline.
 - Waveform is computed asynchronously after import, from downsampled local audio. It never uploads content or invokes ClosedRoom; it is a media visualization only. For clips longer than 15 minutes, waveform is unavailable instead of scanning unbounded recordings. If no audio exists, the waveform is blank.
 - Drag the **left/right grip** of a green retained interval to change its original-time boundaries. Keyboard users can focus a grip and use Left/Right for ±100 ms, Shift+Left/Right for ±500 ms. Adjacent intervals cannot overlap; a minimum 50 ms interval is maintained.
