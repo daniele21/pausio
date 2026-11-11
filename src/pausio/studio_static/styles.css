@@ -619,3 +619,103 @@ a { color: inherit; text-decoration: none; }
   .fx-item { align-items:stretch; }
   .fx-item audio { flex:1 1 170px; }
 }
+
+/* Stacked track editing: one source-time axis, one shared scroll/zoom/playhead.
+   Inspired by Kdenlive/OpenShot's lower sound-effect tracks without copying UI assets. */
+.timeline-surface {
+  display: block;
+  height: 136px;
+  padding-top: 10px;
+  background: #14202c;
+}
+.timeline-track { margin-top: 0; margin-bottom: 0; }
+.timeline-fx-track {
+  position: absolute;
+  inset-inline: 0;
+  top: calc(100% + 9px);
+  height: 43px;
+  border: 1px solid #4a3859;
+  border-radius: 5px;
+  background:
+    repeating-linear-gradient(90deg, transparent 0, transparent 67px,
+      rgba(190,160,213,.055) 68px),
+    #191a2b;
+  overflow: hidden;
+  cursor: default;
+}
+.timeline-fx-track .fx-lane {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  margin: 0;
+  overflow: visible;
+}
+.fx-track-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  color: #9584ac;
+  font-size: 11px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.timeline-fx-track .fx-clip-mark {
+  z-index: 2;
+  top: 4px;
+  bottom: 4px;
+  min-width: 3px;
+  padding: 0;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  border: 1px solid #bb9ad6;
+  background: #654581;
+  box-shadow: 0 1px 6px rgba(48,21,67,.38);
+  color: #faf3ff;
+  outline-offset: 2px;
+}
+.timeline-fx-track .fx-clip-mark:hover { border-color: #e0bbfb; background: #7b54a0; }
+.timeline-fx-track .fx-clip-mark:focus-visible { outline: 2px solid #e0bbfb; }
+.timeline-fx-track .fx-clip-mark.dragging { cursor: grabbing; background: #8c60a9; border-color: #f2d3ff; }
+.timeline-fx-track .fx-clip-mark.missing { background:#6e4242; border-color:var(--danger); }
+.fx-clip-waveform {
+  display:block;
+  position:absolute;
+  inset: 0;
+  width: 100%;
+  height:100%;
+  pointer-events: none;
+  opacity: .8;
+}
+.fx-clip-title {
+  position:relative;
+  z-index:1;
+  display:block;
+  max-width:100%;
+  padding:3px 6px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  text-align:left;
+  font-size:10px;
+  text-shadow:0 1px 2px #372345;
+  pointer-events:none;
+}
+.timeline-track > .playhead {
+  height: calc(100% + 65px);
+  top: -6px;
+}
+.fx-panel .fx-header { margin-bottom: 8px; }
+.fx-panel .fx-list { margin-top: 8px; }
+@media (max-width: 650px) {
+  .timeline-surface { height: 125px; padding-top: 9px; }
+  .timeline-fx-track { height: 42px; top:calc(100% + 8px); }
+  .timeline-track > .playhead { height: calc(100% + 62px); }
+  .fx-track-empty { font-size: 10px; }
+}
