@@ -64,6 +64,7 @@
   .settings details[open] > .settings-summary { border-bottom: 1px solid #2d3d4f; }
   .settings-head { padding-top: 18px; }
   .settings details > :not(summary) { margin-left: 17px; margin-right: 17px; }
+  .settings details > input[type=range] { width: calc(100% - 34px); }
   .settings details > :last-child { margin-bottom: 20px; }
   .status { width: min(100%, 460px); margin: 5px auto 0; padding: 9px 0; }
   .download-panel { margin-left: auto; margin-right: auto; }
