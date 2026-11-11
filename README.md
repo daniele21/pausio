@@ -23,6 +23,16 @@ pausio studio
 
 Segui le [note ufficiali della release](.github/release/v0.1.0.md) per i limiti e le istruzioni complete; il flusso via `git clone` qui sotto resta utile a chi vuole sviluppare il progetto.
 
+## Registra dal telefono con il gobbo (Mobile Capture, in sviluppo)
+
+È disponibile una **pagina web mobile indipendente** per registrare video parlati con teleprompter. Il copione rimane visibile sul display ma **non compare nel video**. Dopo ogni take puoi guardare l'anteprima, **scaricare il file sul telefono** o usare la condivisione di sistema quando disponibile; poi lo trasferisci sul PC e lo importi in Studio.
+
+- Da Pausio Studio sul Mac: apri **Registra con gobbo** oppure `http://127.0.0.1:8765/capture` (porta effettiva riportata nel terminale).
+- Da smartphone: una volta attivato il deploy GitHub Pages da `main`, apri `https://daniele21.github.io/pausio/` in **HTTPS**. Il server locale Mac non è accessibile dal telefono e non va esposto in LAN.
+- Il filmato registrato è un **originale** MP4 o WebM secondo il browser, non un render già montato; il download richiede conferma nell'app File/Download prima di chiudere la pagina. Non vengono eseguiti upload, pairing, sincronizzazioni o rendering cloud.
+
+La funzione resta da validare su Safari iOS e Samsung A56 reali. Consulta [Mobile Capture: guida, privacy, deploy e test](docs/MOBILE_CAPTURE.md).
+
 ## Pausio Studio — interfaccia per test reali
 
 Un editor web locale senza npm, cloud o account. L'area di lavoro offre anteprima 9:16, **waveform reale, zoom timeline, maniglie di trim modificabili con mouse/tastiera, preview FFmpeg a 540×960**, trascrizione locale MLX Whisper opzionale, **sottotitoli editabili nel video**, e download MP4.

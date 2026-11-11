@@ -78,3 +78,11 @@
 ## ADR 013 — Audio FX importato e local-first
 
 **Decisione:** traccia FX opzionale per audio personale (riser, whoosh, impact). I comandi versionati `audio.add/update/remove` sono la sola fonte per il rendering, con undo/redo e riferimento al SHA-256 dell'asset privato; nessun percorso assoluto entra nel progetto portabile. Il video sorgente resta immutato. L'anteprima FFmpeg e l'export condividono il mix; la simulazione browser non è un'anteprima audio finale. Nessuna libreria di audio terzi viene vendorizzata senza verifica della licenza.
+
+
+## ADR 014 — Mobile capture is a separate static, local-first recording surface
+
+**Decision:** mobile teleprompter capture runs in the browser, not through Studio's loopback Python API. `getUserMedia` + `MediaRecorder` record the raw camera/microphone tracks; a DOM overlay scrolls the script strictly in preview, without burning the gobbo into the video. The final mobile action is an explicit download or system share of the recorded take (format depends on browser); users transfer and import it on desktop manually. No implicit networking, cloud processing or local Studio exposure. Source assets are shared between the local Studio `/capture` route and an isolated GitHub Pages static deployment.
+
+**Boundaries:** this is acquisition, not a timeline edit; adjustable script/scroll settings do not alter exported pixels. Local storage contains only script/preferences; completed take blobs are not durable until downloaded. The full editor's command-led import/replay remains unchanged. Native/mobile MP4 transcoding, background recovery, LAN pairing, voice-follow and persistent take library are separate future ADRs. GitHub Pages availability and real Safari/Galaxy verification are deployment gates.
+

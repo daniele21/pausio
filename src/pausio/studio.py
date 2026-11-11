@@ -41,6 +41,10 @@ ASSETS = {
     "/": ("index.html", "text/html; charset=utf-8"),
     "/styles.css": ("styles.css", "text/css; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+    "/capture": ("capture.html", "text/html; charset=utf-8"),
+    "/capture.html": ("capture.html", "text/html; charset=utf-8"),
+    "/capture.css": ("capture.css", "text/css; charset=utf-8"),
+    "/capture.js": ("capture.js", "text/javascript; charset=utf-8"),
 }
 STATIC_DIR = Path(__file__).resolve().parent / "studio_static"
 
@@ -670,7 +674,7 @@ class StudioHandler(BaseHTTPRequestHandler):
         self.send_header(
             "Content-Security-Policy",
             "default-src 'self'; connect-src 'self'; script-src 'self'; "
-            "style-src 'self'; img-src 'self' data:; media-src 'self'; "
+            "style-src 'self'; img-src 'self' data:; media-src 'self' blob:; "
             "object-src 'none'; frame-ancestors 'none'; base-uri 'none'",
         )
 

@@ -719,3 +719,6 @@ a { color: inherit; text-decoration: none; }
   .timeline-track > .playhead { height: calc(100% + 62px); }
   .fx-track-empty { font-size: 10px; }
 }
+
+/* Capture entrypoint kept from main. */
+.mobile-capture-link { margin-top: 9px; }
