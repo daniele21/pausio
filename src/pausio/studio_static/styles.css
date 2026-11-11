@@ -895,7 +895,6 @@ a { color: inherit; text-decoration: none; }
   }
   .rail-section + .rail-section { margin-top: 18px; }
   .app-shell[data-workspace="media"] .rail .cut-settings,
-  .app-shell[data-workspace="media"] .rail .tools,
   .app-shell[data-workspace="media"] .rail .asr-settings,
   .app-shell[data-workspace="settings"] .rail .cut-settings,
   .app-shell[data-workspace="settings"] .rail .tools,
