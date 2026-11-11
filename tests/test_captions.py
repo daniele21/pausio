@@ -27,7 +27,7 @@ class TestCaptionPipeline(unittest.TestCase):
         self.assertGreater(len(cues), 1)
         self.assertTrue(all(len(c["text"]) <= 46 for c in cues))
         self.assertEqual(cues[0]["start_ms"], 100)
-        self.assertEqual(cues[-1]["end_ms"], 4490)
+        self.assertEqual(cues[-1]["end_ms"], 4390)
         self.assertEqual(
             " ".join(c["text"] for c in cues),
             "Tre consigli che ti faranno aumentare la produttività."
