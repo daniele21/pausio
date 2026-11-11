@@ -104,10 +104,10 @@ class TestMedia(unittest.TestCase):
                 audio_fx=[(riser, clip)],
             )
 
-            def peak(at_seconds: float) -> int:
+            def peak(at_seconds: float, path: Path = output) -> int:
                 result=subprocess.run([
                     "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin",
-                    "-ss", str(at_seconds), "-i", str(output),
+                    "-ss", str(at_seconds), "-i", str(path),
                     "-t", "0.12", "-map", "0:a:0", "-ac", "1", "-ar", "16000",
                     "-f", "s16le", "-",
                 ], capture_output=True, check=True, timeout=30)
@@ -118,6 +118,23 @@ class TestMedia(unittest.TestCase):
             self.assertLess(peak(0.35), 50, "No sound should play before the riser")
             self.assertGreater(peak(1.0), 500, "Imported FX must be audible in exported MP4")
             self.assertLess(peak(1.6), 50, "FX must stop after its duration")
+
+            quiet=root/"quiet-fx.mp4"
+            render(original,quiet,(Interval(0,2000),),has_audio=True,
+                   size=(540,960),audio_fx=[(riser,clip)],audio_mix={
+                       "voice_gain_db":0,"voice_muted":False,
+                       "fx_gain_db":-12,"fx_muted":False,
+                   })
+            muted=root/"muted-fx.mp4"
+            render(original,muted,(Interval(0,2000),),has_audio=True,
+                   size=(540,960),audio_fx=[(riser,clip)],audio_mix={
+                       "voice_gain_db":0,"voice_muted":False,
+                       "fx_gain_db":0,"fx_muted":True,
+                   })
+            self.assertLess(peak(1.0, quiet), peak(1.0)/2,
+                            "Lowering FX bus should reduce decoded PCM amplitude")
+            self.assertLess(peak(1.0, muted), 50,
+                            "Muting FX bus should remove effect from exported MP4")
 
     def test_render_builds_command_without_execution(self):
         with TemporaryDirectory() as d:
