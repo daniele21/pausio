@@ -7,8 +7,8 @@
   <meta name="color-scheme" content="dark">
   <meta name="description" content="Registra video social con gobbo, direttamente sul telefono. Scarica il video senza upload.">
   <title>Registra · Pausio</title>
-  <link rel="stylesheet" href="./capture.css?v=20261111-layout">
-  <script src="./capture.js?v=20261111-layout" defer></script>
+  <link rel="stylesheet" href="./capture.css?v=20261111-portrait">
+  <script src="./capture.js?v=20261111-portrait" defer></script>
 </head>
 <body>
   <div class="shell">
@@ -23,7 +23,8 @@
           <span id="capture-state" class="state-chip">PRONTO</span>
         </div>
         <div class="camera" id="camera-frame">
-          <video id="camera-video" autoplay playsinline muted aria-label="Anteprima fotocamera"></video>
+          <video id="camera-video" autoplay playsinline muted aria-label="Sorgente originale fotocamera"></video>
+          <canvas id="portrait-canvas" width="720" height="1280" hidden aria-label="Anteprima verticale della registrazione"></canvas>
           <video id="result-video" playsinline controls hidden aria-label="Riproduzione del video registrato"></video>
           <div id="camera-placeholder" class="camera-placeholder">
             <span class="camera-glyph" aria-hidden="true">◎</span>
@@ -36,7 +37,7 @@
           </div>
           <div class="camera-hud">
             <span id="timer" class="timer"><span id="record-dot" class="record-dot"></span><span id="timer-text">00:00</span></span>
-            <span id="format-pill" class="format-pill">Campo ampio · formato originale</span>
+            <span id="format-pill" class="format-pill">720×1280 · verticale</span>
           </div>
           <div id="countdown" class="countdown" aria-live="assertive" hidden>3</div>
         </div>
@@ -52,7 +53,7 @@
         <section id="download-panel" class="download-panel" hidden aria-labelledby="download-title">
           <p class="eyebrow">TAKE PRONTO</p>
           <h2 id="download-title">Video registrato, pronto da salvare.</h2>
-          <p id="file-details" class="small">Il gobbo non compare nel file.</p>
+          <p id="file-details" class="small">Il video salvato è verticale 720×1280 e il gobbo non compare nel file.</p>
           <div class="download-actions">
             <a id="download-video" class="button primary" href="#" download>↓ Scarica video</a>
             <button id="share-video" type="button" class="button secondary" hidden>Condividi / Salva su File</button>
@@ -74,10 +75,10 @@ La lezione pratica? Controlla sempre i file di configurazione prima di pubblicar
         </label>
         <label class="field" for="framing-mode"><span>Inquadratura della fotocamera</span>
           <select id="framing-mode">
-            <option value="wide">Campo ampio · 3:4, meno ritaglio</option>
-            <option value="social">Social · 9:16, più ravvicinato</option>
+            <option value="wide">Verticale 9:16 · campo completo, sfondo sfocato</option>
+            <option value="social">Verticale 9:16 · schermo pieno, ritaglio</option>
           </select>
-          <small>Il campo ampio evita un ritaglio 9:16 forzato. Il file registra il formato reale della fotocamera; il video social 9:16 si può preparare in Pausio sul PC.</small>
+          <small>Il browser può fornire un video orizzontale anche con il telefono verticale. Pausio compone un file 9:16: «campo completo» mantiene l'intera inquadratura con sfondo sfocato, «schermo pieno» riempie il video ritagliando i lati.</small>
         </label>
         <div class="slider-line"><label for="speed">Velocità gobbo</label><strong id="speed-value">120 parole/min</strong></div>
         <input id="speed" type="range" min="50" max="220" step="5" value="120">

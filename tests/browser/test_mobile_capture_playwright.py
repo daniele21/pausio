@@ -73,9 +73,12 @@ class MobileCapturePlaywrightTests(unittest.TestCase):
         info = probe(path)
         self.assertGreater(info.duration_ms, 700)
         self.assertTrue(info.has_audio, "Recorded take must retain microphone audio")
-        self.assertGreater(info.width, 0)
-        self.assertGreater(info.height, 0)
+        self.assertEqual((info.width, info.height), (720, 1280),
+                         "Downloaded video must be portrait regardless of camera source")
         self.assertTrue(page.locator("#result-video").is_visible())
+        self.assertIn("720×1280 verticale", page.locator("#file-details").inner_text())
+        self.assertTrue(page.locator("#gobbo-settings").count() == 1)
+        self.assertIn("Il tuo copione", page.locator("#gobbo-settings").inner_text())
         self.assertFalse(page.locator("#prompter").is_visible())
         self.assertEqual(self.errors, [])
 
@@ -119,6 +122,11 @@ class MobileCapturePlaywrightTests(unittest.TestCase):
         self.assertGreaterEqual(geometry["prompterHeight"], 150, geometry)
         self.assertEqual(geometry["fit"], "contain", geometry)
         self.assertTrue(geometry["hasCamera"])
+        self.assertTrue(page.locator("#portrait-canvas").is_visible())
+        self.assertEqual(page.locator("#portrait-canvas").evaluate(
+            "(el) => [el.width, el.height]"), [720, 1280])
+        self.assertTrue(page.locator("#camera-frame").evaluate(
+            "(el) => el.classList.contains('composited')"))
         page.locator("#edit-gobbo").click()
         self.assertTrue(page.locator("#gobbo-settings").evaluate("(element) => element.open"))
         self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"), 390)
@@ -130,6 +138,42 @@ class MobileCapturePlaywrightTests(unittest.TestCase):
         page.locator("#framing-mode").select_option("social")
         page.locator("#record-start").wait_for(state="visible", timeout=15000)
         self.assertEqual(page.locator("#framing-mode").input_value(), "social")
+        self.assertIn("video verticale con ritaglio", page.locator("#status").inner_text())
+        self.assertEqual(self.errors, [])
+
+    def test_landscape_camera_source_produces_portrait_preview_and_video(self):
+        """Use a forced 640×480 camera to reproduce the user's 1920×1080 issue."""
+        page = self.page
+        page.add_init_script("""
+          const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+          navigator.mediaDevices.getUserMedia = (options) =>
+            original({video: {width: {exact: 640}, height: {exact: 480}},
+                      audio: options.audio});
+        """)
+        page.reload(wait_until="networkidle")
+        page.locator("#activate-camera").click()
+        page.locator("#record-start").wait_for(state="visible", timeout=15000)
+        raw = page.evaluate("""() => {
+            const settings = document.querySelector("#camera-video")
+              .srcObject.getVideoTracks()[0].getSettings();
+            return [settings.width, settings.height];
+        }""")
+        self.assertEqual(raw, [640, 480])
+        self.assertEqual(page.locator("#portrait-canvas").evaluate(
+            "(el) => [el.width, el.height]"), [720, 1280])
+        page.locator("#record-start").click()
+        page.locator("#record-stop").wait_for(state="visible", timeout=15000)
+        page.wait_for_timeout(1300)
+        page.locator("#record-stop").click()
+        page.locator("#download-panel").wait_for(state="visible", timeout=15000)
+        with page.expect_download(timeout=15000) as captured:
+            page.locator("#download-video").click()
+        artifact = Path(self.temp.name) / captured.value.suggested_filename
+        captured.value.save_as(artifact)
+        info = probe(artifact)
+        self.assertEqual((info.width, info.height), (720, 1280))
+        self.assertTrue(info.has_audio)
+        self.assertIn("verticale", page.locator("#file-details").inner_text())
         self.assertEqual(self.errors, [])
 
     def test_camera_preview_is_responsive_at_320px(self):
