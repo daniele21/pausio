@@ -79,3 +79,7 @@ Upstream design inspirations (our implementation and four UI skills are original
 - https://github.com/anthropics/skills/blob/main/skills/frontend-design/SKILL.md
 - https://github.com/vercel-labs/agent-skills/blob/main/skills/web-design-guidelines/SKILL.md
 - https://github.com/nextlevelbuilder/ui-ux-pro-max-skill
+
+## FX audio locali
+
+La traccia FX opzionale permette di importare riser e altri effetti in MP3/WAV/M4A/AAC/FLAC/OGG (60 MB e 3 minuti massimo). Un effetto è aggiunto al momento del playhead (la fine si allinea al punto selezionato), e può essere ascoltato isolatamente, spostato in secondi, modificato in dB o rimosso. Preview e export FFmpeg mixano la voce originale e gli effetti. Undo/Redo e l'export `.pausio.json` conservano i comandi, ma non i byte degli audio. Alla riapertura sulla stessa macchina i file privati sono recuperati; su un altro Mac occorre reimportare lo stesso audio, verificato tramite SHA-256. Render bloccato per file mancanti o alterati.
