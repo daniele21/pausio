@@ -70,7 +70,8 @@ This reproduces a final kept timeline of `[0,2400)` and `[3900,10000)`, with exp
 | `timeline.replace` | complete identified KEEP list | backward-compatible legacy plan replace; discouraged for new UI controls |
 | `caption.set` | `style`, source-time `cues` with stable IDs, text and start/end ms | creates subtitle track from ASR |
 | `caption.correct` | `caption_id`, `text` | corrects one caption without rerunning transcription |
-| `caption.style` | `style` = `social` or `minimal` | changes the subtitle appearance |
+| `caption.style` | `style` = `social`, `minimal` or `boxed` | legacy preset change |
+| `caption.configure` | exact validated `config` with preset, X/Y percentages, font size, RGB colors, outline and background | persists custom or named style consistently for browser preview and FFmpeg output |
 | `caption.clear` | no payload | removes subtitle track |
 
 IDs are 32-character lowercase hex identifiers. Times are integer milliseconds on the **original source timeline**, not output timestamps. Keep regions are half-open [start_ms, end_ms), sorted, non-overlapping and within media duration. Source paths, video bytes, model weights and **raw ASR transcripts** are excluded. Reviewed caption cues (stable ID, timestamps, text) are intentionally persisted as typed v2 project commands: they affect exported video, and allow playback without rerunning transcription.
@@ -115,7 +116,7 @@ The legacy `POST /api/plan` continues to work for compatibility, but explicitly 
 
 Pausio Studio also maintains a **private, automatically saved local session** for crash/restart recovery. This is distinct from the portable document: the local workspace retains a copy of the imported video and an atomic JSON checkpoint, plus one previous checkpoint for fallback. Closing the server does not erase this directory. Default paths: macOS `~/Library/Application Support/Pausio/Studio`; Linux `~/.local/share/pausio/studio` (or XDG_DATA_HOME). Use `pausio studio --data-dir <directory>` to choose another folder.
 
-The session is locked to a single running Studio process; file/directory permissions on POSIX are 0600/0700. If the latest checkpoint is damaged, Studio attempts to recover the previous valid one without discarding media. The UI allows **Elimina dati locali** to remove stored media and project/checkpoints. **Raw ASR transcript data is not part of this v2 autosave**. The reviewed caption instructions persist and recover without rerunning Pausio ASR. The exported `.pausio.json` never embeds the video.
+The session is locked to a single running Studio process; file/directory permissions on POSIX are 0600/0700. If the latest checkpoint is damaged, Studio attempts to recover the previous valid one without discarding media. The UI allows **Elimina dati locali** to remove stored media and project/checkpoints. **Raw ASR transcript data is stored ONLY in the private local session checkpoint (format `pausio.local-session`, schema v2), together with a SHA-256 association to the imported media. Legacy local-session v1 files still recover without a transcript. The exported portable `.pausio.json` never includes raw ASR.** The reviewed caption instructions persist and recover without rerunning Pausio ASR. The exported `.pausio.json` never embeds the video.
 
 ## Portability and safety
 
@@ -123,7 +124,7 @@ The session is locked to a single running Studio process; file/directory permiss
 - **Import is data-only.** Unknown or future commands/schema versions are rejected, never executed as code.
 - No absolute source paths or external URLs are stored; the same project can be reopened on a different computer when paired with the identical video bytes.
 - Replay is deterministic and independent of the AI model: no rerunning ClosedRoom, Whisper or FFmpeg silence detection for existing suggestions.
-- V1 contains timeline edit instructions only. V2 now additionally stores edited caption text/timing/style, but not raw transcripts, bundled fonts or packaged exports. Each future *output-affecting* UI feature MUST add a typed, versioned operation with migration, import/export tests and a deterministic render/preview mapping.
+- V1 contains timeline edit instructions only. Portable project V2 stores reviewed caption text/timing/styles including `caption.configure` but no raw ASR, font assets or packaged exports. Private autosave V2 is a different format and additionally retains the ASR transcript. Each future *output-affecting* UI feature MUST add a typed, versioned operation with migration, import/export tests and a deterministic render/preview mapping.
 - Export codec/profile in this release is still fixed by Pausio's renderer (1080x1920 H.264/AAC). Before adding export settings, record them as typed instructions rather than untracked UI-only state.
 - No timeline-changing instruction can bypass explicit approval. A malformed or different-video project cannot partially mutate the active session.
 
