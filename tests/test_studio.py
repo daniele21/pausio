@@ -255,6 +255,87 @@ class StudioMediaWorkflowTests(StudioHttpTests):
             self.assertEqual(json.loads(payload)["file"], "test footage.mp4")
         return original
 
+    def test_import_custom_audio_fx_preview_relink_and_export(self):
+        self.import_clip()
+        state = self.get_state()
+        with tempfile.TemporaryDirectory() as directory:
+            fx = Path(directory) / "my riser.wav"
+            subprocess.run([
+                "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                "-f", "lavfi", "-i", "sine=frequency=880:duration=0.6",
+                "-c:a", "pcm_s16le", str(fx),
+            ], timeout=35, check=True)
+            raw = fx.read_bytes()
+        headers = {
+            "Content-Type": "application/octet-stream", "X-Pausio-Client": "studio",
+            "Origin": self.base, "X-Filename": "my%20riser.wav",
+            "X-Pausio-Revision": str(state["project_revision"]),
+            "X-Pausio-Start-Ms": "1100",
+        }
+        bad = dict(headers, **{"X-Filename": "notes.txt"})
+        status, _, _ = self.request("POST", "/api/audio/import", raw, bad)
+        self.assertEqual(status, 400)
+        status, _, content = self.request("POST", "/api/audio/import", raw, headers)
+        self.assertEqual(status, 200, content)
+        imported = json.loads(content)
+        self.assertEqual(len(imported["audio_clips"]), 1)
+        clip = imported["audio_clips"][0]
+        self.assertTrue(clip["available"])
+        self.assertEqual(clip["start_ms"], 500)
+        self.assertEqual(clip["gain_db"], -12)
+        import hashlib
+        self.assertEqual(clip["asset_sha256"], hashlib.sha256(raw).hexdigest())
+        fx_path = self.workspace._audio_path(clip["asset_sha256"])
+        self.assertEqual(fx_path.read_bytes(), raw)
+        status, _, data = self.request("GET", "/api/audio/" + clip["asset_sha256"],
+                                       headers={"Range": "bytes=0-31"})
+        self.assertEqual(status, 206)
+        self.assertEqual(data, raw[:32])
+        status, _, project_bytes = self.request("GET", "/api/project/export")
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(project_bytes)["commands"][-1]["type"], "audio.add")
+        self.assertNotIn("file_path", project_bytes.decode())
+
+        status, _, data = self.post("/api/command", {
+            "revision": imported["project_revision"], "type": "history.undo", "payload": {},
+        })
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(data)["audio_clips"], [])
+        status, _, data = self.post("/api/command", {
+            "revision": json.loads(data)["project_revision"], "type": "history.redo", "payload": {},
+        })
+        self.assertEqual(status, 200)
+        self.assertEqual(len(json.loads(data)["audio_clips"]), 1)
+        state = json.loads(data)
+        status, _, data = self.post("/api/command", {
+            "revision": state["project_revision"], "type": "timeline.keep_all", "payload": {},
+        })
+        self.assertEqual(status, 200)
+        status, _, data = self.post("/api/jobs", {"kind": "preview"})
+        self.assertEqual(status, 202, data)
+        self.await_job("preview")
+        self.assertEqual(self.request("GET", "/api/preview")[0], 200)
+
+        fx_path.unlink()
+        self.assertFalse(self.get_state()["audio_clips"][0]["available"])
+        self.assertEqual(self.post("/api/jobs", {"kind": "preview"})[0], 400)
+        state = self.get_state()
+        headers["X-Pausio-Revision"] = str(state["project_revision"])
+        status, _, data = self.request("POST", "/api/audio/import", raw, headers)
+        self.assertEqual(status, 200, data)
+        relinked = json.loads(data)
+        self.assertEqual(len(relinked["audio_clips"]), 1)
+        self.assertEqual(relinked["project_revision"], state["project_revision"])
+        self.assertTrue(relinked["audio_clips"][0]["available"])
+        status, _, data = self.post("/api/command", {
+            "revision": relinked["project_revision"], "type": "timeline.approve", "payload": {},
+        })
+        self.assertEqual(status, 200)
+        status, _, data = self.post("/api/jobs", {"kind": "render"})
+        self.assertEqual(status, 202, data)
+        self.await_job("render")
+        self.assertEqual(self.request("GET", "/api/export")[0], 200)
+
     def test_configurable_presets_persist_and_invalid_requests_are_safe(self):
         self.import_clip()
         state=self.get_state()
