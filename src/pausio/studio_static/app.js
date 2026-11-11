@@ -8,6 +8,52 @@ let didNotifyRecovery = false;
 let waveformData = null, waveformRequestedFor = null, timelineZoom = 1, previewSourceMode = "original";
 let dragHandleActive = false;
 let simulationFrame = null;
+let captionDraft = null, captionSource = null, captionPositionMode = false;
+let captionPointer = null;
+const captionNumberFields = ["x_pct","y_pct","font_size","outline_size"];
+const captionColorFields = ["text_color","outline_color","background_color"];
+function captionConfig(){ return captionDraft||project?.caption_config||project?.caption_presets?.social; }
+function renderCaptionSettings(){
+  if(!captionDraft)return;
+  el("caption-style").value=captionDraft.preset;
+  for(const field of [...captionNumberFields,...captionColorFields]){
+    const input=document.querySelector('[data-caption-setting="'+field+'"]');
+    if(input)input.value=captionDraft[field];
+  }
+  document.querySelector('[data-caption-setting="background"]').checked=captionDraft.background;
+  for(const [id,name,suffix] of [
+    ["caption-x-output","x_pct","%"],["caption-y-output","y_pct","%"],
+    ["caption-font-output","font_size",""],["caption-outline-output","outline_size",""]
+  ])el(id).textContent=captionDraft[name]+suffix;
+}
+function syncCaptionSettings(next,busy){
+  const config=next.caption_config||next.caption_presets?.social;
+  if(!config)return;
+  const key=JSON.stringify([next.media_id,config]);
+  if(key!==captionSource){
+    captionSource=key; captionDraft={...config}; renderCaptionSettings();
+    captionPositionMode=false;
+  }
+  const canEdit=(next.captions||[]).length>0;
+  if(!canEdit)captionPositionMode=false;
+  for(const input of document.querySelectorAll("[data-caption-setting]"))input.disabled=busy||!canEdit;
+  el("caption-drag-toggle").disabled=busy||!canEdit;
+  el("caption-drag-toggle").setAttribute("aria-pressed",String(captionPositionMode));
+  el("caption-drag-toggle").textContent=captionPositionMode?
+    "✓ Posizione attiva · trascina sul video":"Sposta sull'anteprima";
+}
+function previewCaptionSetting(key,value){
+  if(!captionDraft)return;
+  captionDraft={...captionDraft,preset:"custom",[key]:value};
+  renderCaptionSettings();
+  updateCaptionOverlay();
+}
+async function commitCaptionSettings(){
+  if(!(project?.captions||[]).length || !captionDraft)return;
+  if(JSON.stringify(captionDraft)===JSON.stringify(project.caption_config))return;
+  await edit("caption.configure",{config:{...captionDraft}});
+}
+
 let cutDraft = null, cutSource = null;
 const cutDescriptions = {
   natural: "Preserva il ritmo del parlato. Riduce solo pause sufficientemente lunghe.",
@@ -116,6 +162,7 @@ function update(next){
   }
   document.body.classList.toggle("has-media",has);
   syncCutControls(next, busy);
+  syncCaptionSettings(next, busy);
   if(next.media_id && mediaKey!==next.media_id){
     mediaKey=next.media_id;mode="original";previewSourceMode="original";
     waveformData=null;waveformRequestedFor=null;
@@ -171,7 +218,6 @@ function update(next){
   el("caption-generate").disabled=!next.transcript||busy;
   el("caption-generate").textContent=hasCaptions?"Rigenera da trascrizione":"+ Aggiungi sottotitoli";
   el("caption-style").disabled=busy;
-  if(hasCaptions||!next.transcript)el("caption-style").value=next.caption_style||"social";
   el("caption-clear").disabled=!hasCaptions||busy;
   el("caption-active").hidden=!hasCaptions;
   el("caption-count").textContent=hasCaptions?
@@ -331,13 +377,37 @@ function drawCaptionEditor(){
 function updateCaptionOverlay(){
   const overlay=el("caption-overlay");
   if(!overlay)return;
-  const style=project?.caption_style||"social";
-  overlay.classList.toggle("style-minimal",style==="minimal");
+  const config=captionConfig();
+  if(!config)return;
+  overlay.classList.toggle("style-minimal",config.preset==="minimal");
   const at=Math.round(v.currentTime*1000);
   const kept=mode!=="edited"||segments().some(s=>at>=s.start_ms&&at<s.end_ms);
-  const cue=mode==="rendered"||!kept?null:
-    (project?.captions||[]).find(c=>at>=c.start_ms&&at<c.end_ms);
+  const cues=project?.captions||[];
+  let cue=mode==="rendered"||!kept?null:
+    cues.find(c=>at>=c.start_ms&&at<c.end_ms);
+  if(captionPositionMode&&mode!=="rendered"&&!cue)cue=cues[0]||null;
   overlay.hidden=!cue;
+  overlay.classList.toggle("positioning",captionPositionMode&&!!cue&&mode!=="rendered");
+  if(captionPositionMode&&cue){
+    overlay.tabIndex=0;
+    overlay.setAttribute("role","slider");
+    overlay.setAttribute("aria-label","Posizione sottotitoli, usa le frecce o trascina");
+    overlay.setAttribute("aria-valuetext",
+      "Orizzontale "+config.x_pct+"%, verticale "+config.y_pct+"%");
+  }else{
+    overlay.removeAttribute("tabindex");
+    overlay.removeAttribute("role");
+    overlay.removeAttribute("aria-valuetext");
+  }
+  overlay.style.left=config.x_pct+"%";
+  overlay.style.top=config.y_pct+"%";
+  const videoBox=overlay.parentElement.getBoundingClientRect();
+  const scale=Math.max(0.1, videoBox.width/1080);
+  overlay.style.fontSize=Math.max(8,config.font_size*scale)+"px";
+  overlay.style.color=config.text_color;
+  overlay.style.webkitTextStroke=(config.outline_size*scale)+"px "+config.outline_color;
+  overlay.style.textShadow="0 1px 2px "+config.outline_color;
+  overlay.style.background=config.background?config.background_color+"CC":"transparent";
   const value=cue?.text||"";
   if(overlay.textContent!==value)overlay.textContent=value;
 }
@@ -695,16 +765,78 @@ el("caption-generate").addEventListener("click",()=>run(async()=>{
     "Rigenerare i sottotitoli dalla trascrizione? Le correzioni precedenti verranno sostituite."
   ))return;
   const result=await post("/api/captions/generate",{
-    revision:project.project_revision,style:el("caption-style").value
+    revision:project.project_revision,style:
+      captionDraft?.preset==="custom"?"social":(captionDraft?.preset||"social")
   });
+  const chosen={...captionDraft};
   update(result);
+  if(chosen.preset==="custom"){
+    await edit("caption.configure",{config:chosen});
+  }
   toast("Sottotitoli aggiunti al video. Correggi le frasi e genera una preview FFmpeg.");
 }));
 el("caption-style").addEventListener("change",()=>run(async()=>{
-  if((project?.captions||[]).length){
-    await edit("caption.style",{style:el("caption-style").value});
-  }
+  const preset=el("caption-style").value;
+  if(preset==="custom"){el("caption-appearance").open=true;return;}
+  captionDraft={...project.caption_presets[preset]};
+  renderCaptionSettings();updateCaptionOverlay();
+  await commitCaptionSettings();
 }));
+for(const input of document.querySelectorAll("[data-caption-setting]")){
+  const field=input.dataset.captionSetting;
+  input.addEventListener("input",()=>{
+    if(!(project?.captions||[]).length)return;
+    previewCaptionSetting(field,input.type==="checkbox"?input.checked:
+      input.type==="color"?input.value.toUpperCase():Number(input.value));
+  });
+  input.addEventListener("change",()=>run(()=>commitCaptionSettings()));
+}
+el("caption-drag-toggle").addEventListener("click",()=>{
+  if(!(project?.captions||[]).length)return;
+  if(mode==="rendered")changeMode("original");
+  v.pause();
+  captionPositionMode=!captionPositionMode;
+  el("caption-drag-toggle").setAttribute("aria-pressed",String(captionPositionMode));
+  el("caption-drag-toggle").textContent=captionPositionMode?
+    "✓ Posizione attiva · trascina sul video":"Sposta sull'anteprima";
+  updateCaptionOverlay();
+  if(captionPositionMode)el("caption-overlay").focus();
+});
+const overlay=el("caption-overlay");
+function captionPointerAt(event){
+  const bounds=overlay.parentElement.getBoundingClientRect();
+  if(!bounds.width||!bounds.height)return;
+  const x=Math.round(100*(event.clientX-bounds.left)/bounds.width);
+  const y=Math.round(100*(event.clientY-bounds.top)/bounds.height);
+  previewCaptionSetting("x_pct",Math.max(15,Math.min(85,x)));
+  previewCaptionSetting("y_pct",Math.max(15,Math.min(85,y)));
+}
+overlay.addEventListener("pointerdown",event=>{
+  if(!captionPositionMode||working()||mode==="rendered")return;
+  event.preventDefault();v.pause();
+  captionPointer=event.pointerId;
+  overlay.setPointerCapture(event.pointerId);
+  captionPointerAt(event);
+});
+overlay.addEventListener("pointermove",event=>{
+  if(captionPointer===event.pointerId)captionPointerAt(event);
+});
+overlay.addEventListener("pointerup",event=>{
+  if(captionPointer!==event.pointerId)return;
+  captionPointerAt(event);captionPointer=null;
+  run(()=>commitCaptionSettings());
+});
+overlay.addEventListener("pointercancel",()=>{captionPointer=null;refresh().catch(()=>{});});
+overlay.addEventListener("keydown",event=>{
+  if(!captionPositionMode||working())return;
+  if(!["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(event.key))return;
+  event.preventDefault();event.stopPropagation();
+  const step=event.shiftKey?5:1;
+  const field=event.key==="ArrowLeft"||event.key==="ArrowRight"?"x_pct":"y_pct";
+  const delta=event.key==="ArrowLeft"||event.key==="ArrowUp"?-step:step;
+  previewCaptionSetting(field,Math.max(15,Math.min(85,captionDraft[field]+delta)));
+  run(()=>commitCaptionSettings());
+});
 el("caption-clear").addEventListener("click",()=>run(async()=>{
   if(!window.confirm("Rimuovere i sottotitoli dal montaggio?"))return;
   await edit("caption.clear",{});
