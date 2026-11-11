@@ -11,7 +11,9 @@
     next: $("new-take"), flip: $("switch-camera"), pause: $("toggle-scroll"),
     countdown: $("countdown"), panel: $("download-panel"), download: $("download-video"),
     share: $("share-video"), details: $("file-details"), script: $("script-input"),
-    speed: $("speed"), font: $("font-size"), position: $("prompter-position"),
+    speed: $("speed"), font: $("font-size"), lines: $("gobbo-lines"),
+    position: $("prompter-position"), framing: $("framing-mode"),
+    details: $("gobbo-settings"), edit: $("edit-gobbo"),
     autoplay: $("auto-scroll")
   };
   const STORE_KEY = "pausio-mobile-capture-v1";
@@ -33,6 +35,7 @@
     els.next.hidden = next !== "finished";
     els.flip.hidden = next !== "preview";
     els.pause.hidden = next !== "preview" && next !== "recording";
+    els.edit.hidden = ["countdown", "recording", "stopping", "finished"].includes(next);
     els.panel.hidden = next !== "finished";
     els.placeholder.hidden = !["idle", "error", "starting"].includes(next);
     els.live.hidden = ["finished", "idle", "error", "starting"].includes(next);
@@ -42,7 +45,7 @@
     els.state.textContent = {idle:"PRONTO", error:"ERRORE", starting:"APERTURA…", preview:"CAMERA ATTIVA",
       countdown:"PREPARATI", recording:"REC", stopping:"SALVATAGGIO", finished:"TAKE PRONTO"}[next] || "PRONTO";
     const locked = ["countdown","recording","stopping"].includes(next);
-    for (const el of [els.script,els.speed,els.font,els.position,els.autoplay]) el.disabled = locked;
+    for (const el of [els.script,els.speed,els.font,els.lines,els.position,els.framing,els.autoplay]) el.disabled = locked;
     els.pause.textContent = pausedScroll ? "▶" : "Ⅱ";
     els.pause.setAttribute("aria-label", pausedScroll ? "Riprendi scorrimento" : "Pausa scorrimento");
   }
@@ -53,6 +56,8 @@
       if (typeof data.script === "string") els.script.value = data.script.slice(0, 15000);
       if (Number.isFinite(data.speed)) els.speed.value = Math.max(50, Math.min(220, data.speed));
       if (Number.isFinite(data.font)) els.font.value = Math.max(20, Math.min(44, data.font));
+      if (Number.isFinite(data.lines)) els.lines.value = Math.max(3, Math.min(7, data.lines));
+      if (["wide","social"].includes(data.framing)) els.framing.value = data.framing;
       if (["top","middle"].includes(data.position)) els.position.value = data.position;
       if (typeof data.autoplay === "boolean") els.autoplay.checked = data.autoplay;
     } catch (_) { /* Storage unavailable in private browsing. */ }
@@ -61,15 +66,18 @@
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify({version:1,
         script:els.script.value.slice(0,15000), speed:+els.speed.value, font:+els.font.value,
+        lines:+els.lines.value, framing:els.framing.value,
         position:els.position.value, autoplay:els.autoplay.checked}));
     } catch (_) { /* Capture and downloads do not require localStorage. */ }
   }
   function refreshPrompter() {
     els.text.textContent = els.script.value.trim() || "Scrivi uno script nelle impostazioni.";
     els.prompter.style.setProperty("--font-size", els.font.value + "px");
+    els.prompter.style.setProperty("--prompter-lines", els.lines.value);
     els.prompter.classList.toggle("middle", els.position.value === "middle");
     $("speed-value").textContent = els.speed.value + " parole/min";
     $("font-value").textContent = els.font.value + " px";
+    $("lines-value").textContent = els.lines.value + " righe";
   }
   function stopAnimation() { cancelAnimationFrame(raf); raf = 0; lastFrame = 0; }
   function tick(now) {
@@ -124,11 +132,16 @@
       els.camera.disabled = true;
       els.flip.disabled = true;
       await releaseCamera();
-      const candidate = await navigator.mediaDevices.getUserMedia({
-        video: {facingMode: {ideal:facing}, width:{ideal:1080}, height:{ideal:1920},
-          aspectRatio:{ideal:9/16}, frameRate:{ideal:30}},
-        audio: true
-      });
+      // Default to a fuller 3:4 sensor frame rather than forcing a 9:16
+      // acquisition crop (which can look digitally zoomed on Android).
+      // "Social" is an explicit user opt-in to tighter 9:16 capture.
+      const social = els.framing.value === "social";
+      const video = social
+        ? {facingMode:{ideal:facing}, width:{ideal:1080}, height:{ideal:1920},
+           aspectRatio:{ideal:9/16}, frameRate:{ideal:30}}
+        : {facingMode:{ideal:facing}, width:{ideal:960}, height:{ideal:1280},
+           aspectRatio:{ideal:3/4}, frameRate:{ideal:30}};
+      const candidate = await navigator.mediaDevices.getUserMedia({video, audio:true});
       stream = candidate;
       els.live.srcObject = stream;
       els.live.classList.toggle("mirrored", facing === "user");
@@ -151,7 +164,8 @@
       }
       const dimensions = candidate.getVideoTracks()[0]?.getSettings?.() || {};
       const width = dimensions.width, height = dimensions.height;
-      els.format.textContent = width && height ? width + "×" + height + " · originale" : "Formato automatico";
+      els.format.textContent = width && height ? width + "×" + height + " · originale" :
+        (social ? "9:16 richiesto" : "Campo ampio richiesto");
       if (width && height && width >= height) {
         notice("La fotocamera registra in orizzontale (" + width + "×" + height + "). Ruota il telefono in verticale e riattiva la fotocamera prima del take.", true);
       } else {
@@ -274,6 +288,18 @@
     await activateCamera();
   }
   els.camera.addEventListener("click", activateCamera);
+  els.edit.addEventListener("click", () => {
+    els.details.open = true;
+    els.details.scrollIntoView({behavior:"smooth", block:"start"});
+    els.script.focus({preventScroll:true});
+  });
+  els.framing.addEventListener("change", async () => {
+    remember();
+    if (mode === "preview") {
+      notice("Aggiorno il campo visivo della fotocamera…");
+      await activateCamera();
+    }
+  });
   els.live.addEventListener("click", () => {
     if (mode !== "preview") return;
     const pending = els.live.play();
@@ -288,9 +314,9 @@
   els.pause.addEventListener("click", () => { pausedScroll = !pausedScroll; els.pause.textContent = pausedScroll ? "▶" : "Ⅱ"; els.pause.setAttribute("aria-label",pausedScroll ? "Riprendi scorrimento" : "Pausa scorrimento"); });
   els.download.addEventListener("click", () => { savedAfterRecording = true; notice("Download richiesto. Verifica che il file sia realmente presente in Download o File prima di uscire."); });
   els.share.addEventListener("click", shareRecording);
-  for (const el of [els.script,els.speed,els.font,els.position,els.autoplay]) {
+  for (const el of [els.script,els.speed,els.font,els.lines,els.position,els.autoplay]) {
     el.addEventListener(el === els.script ? "input" : "change", () => { refreshPrompter(); remember(); });
-    if (el === els.speed || el === els.font) el.addEventListener("input", () => { refreshPrompter(); remember(); });
+    if ([els.speed, els.font, els.lines].includes(el)) el.addEventListener("input", () => { refreshPrompter(); remember(); });
   }
   document.addEventListener("visibilitychange", () => {
     if (document.hidden && (mode === "recording" || mode === "countdown")) {
@@ -303,7 +329,10 @@
       event.preventDefault(); event.returnValue = "";
     }
   });
-  prefs(); refreshPrompter(); setMode("idle");
+  prefs();
+  if (window.matchMedia("(max-width:850px)").matches) els.details.open = false;
+  refreshPrompter();
+  setMode("idle");
   notice("Pagina pronta. Tocca Attiva fotocamera e consenti l'accesso a fotocamera e microfono.");
   if (!window.isSecureContext && !["localhost","127.0.0.1"].includes(location.hostname)) {
     els.camera.disabled = true;
