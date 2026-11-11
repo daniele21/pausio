@@ -26,19 +26,20 @@
   }
   function setMode(next) {
     mode = next;
-    els.camera.hidden = next !== "idle" && next !== "error";
+    els.camera.hidden = !["idle", "error", "starting"].includes(next);
+    els.camera.textContent = next === "starting" ? "Apertura fotocamera…" : "Attiva fotocamera";
     els.start.hidden = next !== "preview";
     els.stop.hidden = next !== "recording";
     els.next.hidden = next !== "finished";
     els.flip.hidden = next !== "preview";
     els.pause.hidden = next !== "preview" && next !== "recording";
     els.panel.hidden = next !== "finished";
-    els.placeholder.hidden = next !== "idle" && next !== "error";
-    els.live.hidden = next === "finished" || next === "idle" || next === "error";
+    els.placeholder.hidden = !["idle", "error", "starting"].includes(next);
+    els.live.hidden = ["finished", "idle", "error", "starting"].includes(next);
     els.playback.hidden = next !== "finished";
     els.prompter.hidden = next === "finished" || next === "idle" || next === "error";
     els.timer.classList.toggle("live", next === "recording");
-    els.state.textContent = {idle:"PRONTO", error:"ERRORE", preview:"CAMERA ATTIVA",
+    els.state.textContent = {idle:"PRONTO", error:"ERRORE", starting:"APERTURA…", preview:"CAMERA ATTIVA",
       countdown:"PREPARATI", recording:"REC", stopping:"SALVATAGGIO", finished:"TAKE PRONTO"}[next] || "PRONTO";
     const locked = ["countdown","recording","stopping"].includes(next);
     for (const el of [els.script,els.speed,els.font,els.position,els.autoplay]) el.disabled = locked;
@@ -106,12 +107,20 @@
     els.live.srcObject = null;
   }
   async function activateCamera() {
+    if (["starting", "countdown", "recording", "stopping"].includes(mode)) return;
+    if (!window.isSecureContext && !["localhost", "127.0.0.1"].includes(location.hostname)) {
+      setMode("error");
+      notice("La fotocamera richiede HTTPS. Apri il link direttamente in Chrome o Safari.", true);
+      return;
+    }
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
       setMode("error");
       notice("Questo browser non supporta la registrazione diretta. Usa Safari aggiornato su iPhone o Chrome aggiornato su Android, tramite HTTPS.", true);
       return;
     }
     try {
+      setMode("starting");
+      notice("Apertura fotocamera e microfono… Se compare una richiesta del browser, scegli Consenti.");
       els.camera.disabled = true;
       els.flip.disabled = true;
       await releaseCamera();
@@ -123,10 +132,23 @@
       stream = candidate;
       els.live.srcObject = stream;
       els.live.classList.toggle("mirrored", facing === "user");
-      await els.live.play();
       resetScroll();
       refreshPrompter();
+      // Reveal the video BEFORE asking the browser to play it. Safari can leave
+      // play() pending indefinitely when its target is display:none.
       setMode("preview");
+      try {
+        const playback = els.live.play();
+        if (playback && typeof playback.catch === "function") {
+          playback.catch(() => {
+            if (mode === "preview") {
+              notice("Fotocamera attiva, ma l'anteprima non parte: tocca il video per riprovare. Se non funziona, apri la pagina in Chrome o Safari.", true);
+            }
+          });
+        }
+      } catch (_) {
+        notice("Fotocamera attiva: tocca il video per attivare l'anteprima.", true);
+      }
       const dimensions = candidate.getVideoTracks()[0]?.getSettings?.() || {};
       const width = dimensions.width, height = dimensions.height;
       els.format.textContent = width && height ? width + "×" + height + " · originale" : "Formato automatico";
@@ -139,8 +161,8 @@
       await releaseCamera();
       setMode("error");
       const denied = ["NotAllowedError","PermissionDeniedError","SecurityError"].includes(error?.name);
-      notice(denied ? "Fotocamera o microfono non autorizzati. Abilita entrambi nei permessi del browser e riprova." :
-        "Non riesco ad aprire fotocamera e microfono. Chiudi altre app che li usano e riprova (" + (error?.name || "errore") + ").", true);
+      notice(denied ? "Accesso negato: consenti fotocamera e microfono nelle impostazioni del sito, poi premi di nuovo Attiva fotocamera. Se sei in un browser integrato, apri il link in Chrome o Safari." :
+        "Non riesco ad aprire fotocamera e microfono (" + (error?.name || "errore") + "). Chiudi altre app che li usano e riprova.", true);
     } finally {
       els.camera.disabled = false;
       els.flip.disabled = false;
@@ -252,6 +274,13 @@
     await activateCamera();
   }
   els.camera.addEventListener("click", activateCamera);
+  els.live.addEventListener("click", () => {
+    if (mode !== "preview") return;
+    const pending = els.live.play();
+    if (pending && typeof pending.catch === "function") {
+      pending.catch(() => notice("Il browser ha bloccato l'anteprima: controlla i permessi della fotocamera.", true));
+    }
+  });
   els.flip.addEventListener("click", async () => { if (mode !== "preview") return; facing = facing === "user" ? "environment" : "user"; await activateCamera(); });
   els.start.addEventListener("click", startRecording);
   els.stop.addEventListener("click", stopRecording);
@@ -275,6 +304,7 @@
     }
   });
   prefs(); refreshPrompter(); setMode("idle");
+  notice("Pagina pronta. Tocca Attiva fotocamera e consenti l'accesso a fotocamera e microfono.");
   if (!window.isSecureContext && !["localhost","127.0.0.1"].includes(location.hostname)) {
     els.camera.disabled = true;
     notice("La fotocamera da browser richiede HTTPS. Apri questa pagina da un sito HTTPS.", true);
