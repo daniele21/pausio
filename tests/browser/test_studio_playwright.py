@@ -137,6 +137,37 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertTrue(self.page.locator("#fx-panel").is_visible())
         self.assertEqual(self.page.locator(".fx-item").count(), 1)
         self.assertEqual(self.page.locator(".fx-item audio").count(), 1)
+        # Regression: FX used to be displayed as a waveform but silent during
+        # ordinary video playback. The live monitor must follow the video clock.
+        self.assertTrue(self.page.locator("#fx-monitor-toggle").is_visible())
+        self.assertEqual(self.page.locator("#fx-monitor-toggle").get_attribute("aria-pressed"),"true")
+        clip = current["audio_clips"][0]
+        self.page.evaluate("""(at) => {
+          document.getElementById('preview-video').currentTime=sourceFromOutput(at);
+        }""",(clip["start_ms"]+250)/1000*1000)
+        self.wait_condition(lambda: self.page.evaluate("() => !document.getElementById('preview-video').seeking"))
+        self.page.locator("#play-pause").click()
+        self.wait_condition(lambda: self.page.evaluate("""(id) => {
+          const player=liveFxPlayers.get(id);
+          return !document.getElementById('preview-video').paused &&
+                 !!player && !player.audio.paused;
+        }""",clip["id"]),timeout=15000)
+        self.page.locator("#play-pause").click()
+        self.wait_condition(lambda: self.page.evaluate("""(id) => {
+          const player=liveFxPlayers.get(id);
+          return document.getElementById('preview-video').paused &&
+                 !!player && player.audio.paused;
+        }""",clip["id"]))
+        self.page.locator("#fx-monitor-toggle").click()
+        self.assertEqual(self.page.locator("#fx-monitor-toggle").get_attribute("aria-pressed"),"false")
+        self.page.locator("#play-pause").click()
+        self.page.wait_for_timeout(160)
+        self.assertTrue(self.page.evaluate("""(id) => {
+          const player=liveFxPlayers.get(id);
+          return !!player && player.audio.paused;
+        }""",clip["id"]))
+        self.page.locator("#play-pause").click()
+        self.page.locator("#fx-monitor-toggle").click()
         # FX is inside the SAME scroll/zoom surface as the source waveform.
         geometry = self.page.evaluate("""() => {
           const bounds=id=>{ const b=document.querySelector(id).getBoundingClientRect();
