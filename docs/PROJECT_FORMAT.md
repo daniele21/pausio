@@ -139,3 +139,7 @@ The session is locked to a single running Studio process; file/directory permiss
 ## Next evolution
 
 Extend structured effects (captions, crop, color, audio), selection tools, AI/prompt edits (as a proposal that emits the **same typed commands**), batch operations and optional interchange exporters (e.g. OpenTimelineIO / CapCut). Preserve the canonical Pausio command model as source of truth rather than making CapCut drafts the database.
+
+## Comandi audio FX (estensione dello schema v2)
+
+`audio.add` contiene `clip: {id, asset_sha256, filename, start_ms, duration_ms, gain_db}`; `audio.update` contiene `{clip_id, start_ms, gain_db}`; `audio.remove` contiene `{clip_id}`. Massimo 16 effetti, durata di ogni asset fino a 180000 ms, gain da -36 a +12 dB. `start_ms` è nella timeline **montata**, non nei timestamp del sorgente; effetti oltre l'output sono ignorati/troncati nel render. Il JSON conserva hash e istruzioni, non audio binario né path arbitrari.
