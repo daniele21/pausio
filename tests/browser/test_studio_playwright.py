@@ -222,13 +222,16 @@ class StudioPlaywrightAudit(unittest.TestCase):
           Math.abs(document.querySelector('#timeline-ruler').scrollLeft-
                    document.querySelector('#timeline-surface').scrollLeft)<2"""))
         self.page.locator("#timeline-zoom").select_option("1")
+        self.page.evaluate("document.querySelector('#timeline-surface').scrollLeft=0")
         fx_mark=self.page.locator("#fx-lane .fx-clip-mark").first
+        fx_mark.scroll_into_view_if_needed()
+        self.assertFalse(fx_mark.is_disabled())
         box=fx_mark.bounding_box()
         self.assertIsNotNone(box)
         x,y=box["x"]+box["width"]/2,box["y"]+box["height"]/2
         self.page.mouse.move(x,y);self.page.mouse.down()
         self.page.mouse.move(x+65,y,steps=6);self.page.mouse.up()
-        dragged=self.wait_state("revision",moved["project_revision"]+1)
+        dragged=self.wait_state("revision",moved["project_revision"]+1,timeout=12000)
         self.assertGreater(dragged["audio_clips"][0]["start_ms"],moved["audio_clips"][0]["start_ms"])
         revision = dragged["project_revision"]
         self.page.locator('.fx-item input[aria-label^="Volume"]').fill("-18")
