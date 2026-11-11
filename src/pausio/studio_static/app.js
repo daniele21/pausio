@@ -243,7 +243,11 @@ function syncLiveFx(){
     }
     if(audio.paused&&!player.starting){
       player.starting=true;
-      audio.play().catch(()=>{
+      audio.play().catch(error=>{
+        // A seek/pause or cut boundary can abort a pending play() normally.
+        // Do not permanently mark a valid asset broken for this case.
+        if(error?.name==="AbortError"||v.paused||mode==="rendered"||
+           !fxMonitoringEnabled)return;
         if(!player.failed){
           player.failed=true;
           toast("Impossibile ascoltare l'FX live. Prova la preview FFmpeg.","error");
@@ -1245,6 +1249,9 @@ v.addEventListener("timeupdate",()=>{followEdits();syncLiveFx();transport();});
 v.addEventListener("play",()=>{unlockFxAudio();followEdits();syncLiveFx();syncSimulationLoop();transport();});
 v.addEventListener("pause",()=>{pauseLiveFx();syncSimulationLoop();transport();});
 v.addEventListener("ended",()=>{pauseLiveFx();syncSimulationLoop();transport();});
+v.addEventListener("waiting",pauseLiveFx);
+v.addEventListener("stalled",pauseLiveFx);
+v.addEventListener("playing",()=>{syncLiveFx();syncSimulationLoop();});
 v.addEventListener("seeking",pauseLiveFx);
 v.addEventListener("seeked",()=>{followEdits();syncLiveFx();transport();});
 v.addEventListener("ratechange",syncLiveFx);
