@@ -333,7 +333,11 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.page.locator('[data-workspace-nav="media"]').click()
         self.assertTrue(self.page.locator("#import-action").is_visible())
         self.upload_analyze()
+        revision=self.state()["project_revision"]
+        self.page.evaluate("document.getElementById(\'preview-video\').currentTime=1")
         self.page.locator('[data-workspace-nav="audio"]').click()
+        self.assertEqual(self.state()["project_revision"],revision)
+        self.assertGreaterEqual(self.page.evaluate("document.getElementById(\'preview-video\').currentTime"),.99)
         self.assertTrue(self.page.locator("#fx-panel").is_visible())
         self.assertTrue(self.page.locator("#audio-mixer").is_visible())
         self.assertEqual(self.page.locator("#app").get_attribute("data-workspace"), "audio")
@@ -363,6 +367,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
             else:
                 self.assertFalse(self.page.locator(".studio-navigation").is_visible())
                 self.assertLessEqual(info["timeline"]["bottom"],info["inspector"]["y"]+2)
+                self.assertEqual(self.page.evaluate("document.getElementById(\'fx-panel\').parentElement.id"),"app")
         self.assertFalse(self.errors,self.errors)
 
     def test_layout_across_five_viewports(self):
