@@ -320,6 +320,35 @@ a { color: inherit; text-decoration: none; }
 .asr-download-optin input { flex: 0 0 auto; margin: 3px 0 0; accent-color: var(--accent); }
 .asr-download-optin span { min-width: 0; overflow-wrap: anywhere; }
 .asr-download-optin small { display: block; color: var(--ink-secondary); font-size: 10px; margin-top: 4px; }
+/* Caption preview: non-interactive overlay, kept clear of mobile platform UI.
+   Actual FFmpeg burn-in uses matching 1080x1920 ASS layout and source->output timing. */
+.caption-overlay {
+  position: absolute; z-index: 3; left: 8%; right: 8%; bottom: 20%;
+  pointer-events: none; text-align: center; color: #fff;
+  font-size: clamp(14px, 3.3vh, 21px);
+  font-weight: 800; line-height: 1.24; overflow-wrap: anywhere;
+  text-shadow: 0 2px 2px #000, 1px -1px 4px #000, -1px 1px 4px #000;
+  white-space: pre-wrap;
+}
+.caption-overlay.style-minimal { font-size: clamp(12px,2.5vh,17px); font-weight: 650; bottom: 18%; }
+.caption-overlay[hidden] { display: none; }
+.caption-tools { border-top: 1px solid var(--border); padding: 14px 0 20px; margin-bottom: 12px; }
+.caption-help, .caption-hint { color: var(--ink-secondary); font-size: 11px; line-height: 1.5; margin: 8px 0 13px; }
+.caption-tools > label { display: block; font-size: 11px; margin-bottom: 5px; color: var(--ink-secondary); }
+#caption-style, .caption-edit-input {
+  color: var(--ink); background: var(--surface-raised);
+  border: 1px solid #526276; border-radius: 8px; font-size: 12px; width: 100%; min-width: 0;
+}
+#caption-style { padding: 10px 7px; margin-bottom: 11px; }
+.caption-tools > button { min-height: 41px; }
+.caption-summary { display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; font-size: 11px; margin: 12px 0; color: var(--keep); }
+.caption-edit-list { display: flex; flex-direction: column; gap: 10px; max-height: 280px; overflow-y: auto; }
+.caption-edit-card { border-left: 2px solid #445869; padding-left: 10px; min-width: 0; }
+.caption-edit-heading { font-size: 10px; color: var(--accent); margin: 0 0 5px; font-variant-numeric: tabular-nums; }
+.caption-edit-input { display: block; padding: 8px; resize: vertical; line-height: 1.5; }
+.caption-edit-card button { margin: 4px 0 6px; }
+.caption-hint { margin: 12px 0 0; }
 @media (max-width: 1280px) {
   .workbench { grid-template-columns: 236px minmax(330px, 1fr) 305px; }
   .rail { padding-left: 17px; padding-right: 14px; }

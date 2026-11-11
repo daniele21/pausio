@@ -165,8 +165,17 @@ function update(next){
   }
   el("export-action").disabled=!approved||busy||ready;
   el("export-action").hidden=ready;el("download-action").hidden=!ready;
-  el("transcript-empty").hidden=!!next.transcript;
-  el("transcript-content").hidden=!next.transcript;
+  const hasCaptions=(next.captions||[]).length>0;
+  el("transcript-empty").hidden=!!next.transcript||hasCaptions;
+  el("transcript-content").hidden=!next.transcript&&!hasCaptions;
+  el("caption-generate").disabled=!next.transcript||busy;
+  el("caption-generate").textContent=hasCaptions?"Rigenera da trascrizione":"+ Aggiungi sottotitoli";
+  el("caption-style").disabled=busy;
+  if(hasCaptions||!next.transcript)el("caption-style").value=next.caption_style||"social";
+  el("caption-clear").disabled=!hasCaptions||busy;
+  el("caption-active").hidden=!hasCaptions;
+  el("caption-count").textContent=hasCaptions?
+    next.captions.length+" sottotitoli · inclusi nell'MP4":"";
   el("timeline-subtitle").textContent=!has?"Nessun video importato":!plan?"Originale • da analizzare":
     next.plan.segments.length+" intervalli mantenuti";
   el("waveform-state").textContent=!has?"":next.waveform_status==="running"?
@@ -194,7 +203,7 @@ function update(next){
     el("saved-time").textContent=shortDuration(Math.max(0,duration-editedDuration()));
     el("keep-time").textContent=shortDuration(editedDuration());
   }
-  drawSegments();drawTimeline();drawTranscript();transport();
+  drawSegments();drawTimeline();drawTranscript();drawCaptionEditor();transport();
   if(has&&next.waveform_status==="ready"&&waveformRequestedFor!==next.media_id){
     waveformRequestedFor=next.media_id;
     fetch("/api/waveform",{cache:"no-store"}).then(async response=>{
@@ -279,11 +288,14 @@ function highlight(index){
 }
 function drawTranscript(){
   const list=el("transcript-list");list.replaceChildren();
-  const tr=project?.transcript;if(!tr)return;
-  el("transcript-model").textContent=tr.model||tr.backend||"";
-  el("transcript-note").textContent=tr.word_timestamps_available?
-    "Allineamento delle parole disponibile. Il testo non modifica automaticamente i tagli.":
-    "Timestamp delle singole parole non disponibili. Mostro gli intervalli riconosciuti.";
+  const tr=project?.transcript;
+  el("transcript-model").textContent=tr?.model||tr?.backend||"Salvato nel progetto";
+  el("transcript-note").textContent=!tr?
+    "Sottotitoli recuperati dal progetto. Puoi correggerli e renderizzarli anche senza rilanciare la trascrizione.":
+    tr.word_timestamps_available?
+    "Allineamento delle parole disponibile. Premi «Aggiungi sottotitoli» per inserirli nel video.":
+    "Allineamento delle parole non disponibile: i sottotitoli useranno gli intervalli delle frasi intere.";
+  if(!tr)return;
   for(const s of tr.segments||[]){
     const item=document.createElement("article");item.className="transcript-item";
     const time=document.createElement("span");time.textContent=msFormat(s.start_ms,true)+" — "+msFormat(s.end_ms,true);
@@ -296,6 +308,38 @@ function drawTranscript(){
     const text=document.createElement("p");text.className="transcript-note";
     text.textContent=tr.text||"Non è stato rilevato parlato.";list.append(text);
   }
+}
+function drawCaptionEditor(){
+  const list=el("caption-edit-list");list.replaceChildren();
+  for(const cue of project?.captions||[]){
+    const card=document.createElement("article");card.className="caption-edit-card";
+    const heading=document.createElement("div");heading.className="caption-edit-heading";
+    heading.textContent=msFormat(cue.start_ms,true)+" — "+msFormat(cue.end_ms,true);
+    const input=document.createElement("textarea");
+    input.className="caption-edit-input";input.rows=2;input.maxLength=300;
+    input.value=cue.text;input.disabled=working();input.setAttribute("aria-label","Testo sottotitolo "+heading.textContent);
+    const save=document.createElement("button");save.type="button";
+    save.className="text-button";save.textContent="Salva testo";save.disabled=working();
+    save.addEventListener("click",()=>run(async()=>{
+      if(input.value.trim()===cue.text)return;
+      await edit("caption.correct",{caption_id:cue.id,text:input.value.trim()});
+    }));
+    card.append(heading,input,save);
+    list.append(card);
+  }
+}
+function updateCaptionOverlay(){
+  const overlay=el("caption-overlay");
+  if(!overlay)return;
+  const style=project?.caption_style||"social";
+  overlay.classList.toggle("style-minimal",style==="minimal");
+  const at=Math.round(v.currentTime*1000);
+  const kept=mode!=="edited"||segments().some(s=>at>=s.start_ms&&at<s.end_ms);
+  const cue=mode==="rendered"||!kept?null:
+    (project?.captions||[]).find(c=>at>=c.start_ms&&at<c.end_ms);
+  overlay.hidden=!cue;
+  const value=cue?.text||"";
+  if(overlay.textContent!==value)overlay.textContent=value;
 }
 function drawTimeline(){
   const parts=el("timeline-regions");parts.replaceChildren();if(!project?.media)return;
@@ -414,6 +458,7 @@ function paintWaveform(){
 }
 
 function transport(){
+  updateCaptionOverlay();
   const duration=project?.media?.duration_ms||0;
   const at=Math.max(0,Math.min(duration,(v.currentTime||0)*1000));
   const edited=mode==="edited"&&!!project?.plan;
@@ -645,6 +690,25 @@ for(const input of document.querySelectorAll("[data-cut-setting]")){
 }
 el("analyze-action").addEventListener("click",()=>run(()=>startJob("analyze")));
 el("transcribe-action").addEventListener("click",()=>run(()=>startJob("transcribe")));
+el("caption-generate").addEventListener("click",()=>run(async()=>{
+  if((project?.captions||[]).length&&!window.confirm(
+    "Rigenerare i sottotitoli dalla trascrizione? Le correzioni precedenti verranno sostituite."
+  ))return;
+  const result=await post("/api/captions/generate",{
+    revision:project.project_revision,style:el("caption-style").value
+  });
+  update(result);
+  toast("Sottotitoli aggiunti al video. Correggi le frasi e genera una preview FFmpeg.");
+}));
+el("caption-style").addEventListener("change",()=>run(async()=>{
+  if((project?.captions||[]).length){
+    await edit("caption.style",{style:el("caption-style").value});
+  }
+}));
+el("caption-clear").addEventListener("click",()=>run(async()=>{
+  if(!window.confirm("Rimuovere i sottotitoli dal montaggio?"))return;
+  await edit("caption.clear",{});
+}));
 el("export-action").addEventListener("click",()=>run(()=>startJob("render")));
 el("preview-action").addEventListener("click",()=>run(()=>startJob("preview")));
 el("approve-action").addEventListener("click",()=>run(approve));

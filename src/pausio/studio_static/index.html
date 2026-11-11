@@ -207,6 +207,7 @@
           <div class="video-workspace" id="video-workspace" hidden>
             <div class="aspect-canvas">
               <video id="preview-video" preload="metadata" playsinline aria-label="Anteprima del video"></video>
+              <div id="caption-overlay" class="caption-overlay" aria-hidden="true" hidden></div>
               <div class="canvas-corner corner-tl" aria-hidden="true"></div>
               <div class="canvas-corner corner-tr" aria-hidden="true"></div>
               <div class="canvas-corner corner-bl" aria-hidden="true"></div>
@@ -272,6 +273,21 @@
           <div id="transcript-content" hidden>
             <div class="transcript-source"><span class="private-dot" aria-hidden="true"></span> Pausio ASR · locale <span id="transcript-model" class="truncate"></span></div>
             <p class="transcript-note" id="transcript-note"></p>
+            <section class="caption-tools" aria-labelledby="caption-tools-title">
+              <div class="section-heading"><span id="caption-tools-title">SOTTOTITOLI NEL VIDEO</span></div>
+              <p class="caption-help">Genera frasi brevi, correggi il testo e controlla l'anteprima prima di esportare.</p>
+              <label for="caption-style">Stile dei sottotitoli</label>
+              <select id="caption-style">
+                <option value="social">Social · grande e leggibile</option>
+                <option value="minimal">Minimal · discreto</option>
+              </select>
+              <button type="button" class="button button-primary button-full" id="caption-generate">+ Aggiungi sottotitoli</button>
+              <div id="caption-active" hidden>
+                <div class="caption-summary"><span id="caption-count"></span><button type="button" class="text-button" id="caption-clear">Rimuovi</button></div>
+                <div id="caption-edit-list" class="caption-edit-list" aria-label="Correzione sottotitoli"></div>
+                <p class="caption-hint">Correggi una frase e premi Salva. Ogni modifica viene salvata nel progetto e richiede nuova conferma del montaggio.</p>
+              </div>
+            </section>
             <div class="transcript-list" id="transcript-list"></div>
           </div>
         </div>
