@@ -178,8 +178,8 @@ class StudioPortSelectionTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as directory:
                 from io import StringIO
                 from contextlib import redirect_stdout
-                with patch("pausio.studio.webbrowser.open") as open_browser, \\
-                     patch("pausio.studio.StudioServer.serve_forever"):
+                with (patch("pausio.studio.webbrowser.open") as open_browser,
+                      patch("pausio.studio.StudioServer.serve_forever")):
                     output = StringIO()
                     with redirect_stdout(output):
                         run_studio(port=starting_port, data_dir=Path(directory))
