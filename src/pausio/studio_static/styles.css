@@ -593,3 +593,6 @@ a { color: inherit; text-decoration: none; }
   .inspector-body { max-height: none; overflow: visible; }
   .has-media .rail-intro { display: none; }
 }
+
+/* Mobile capture entry point: class-based for Studio's strict no-inline-style CSP. */
+.mobile-capture-link { margin-top: 9px; }

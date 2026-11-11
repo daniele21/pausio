@@ -14,6 +14,7 @@ video.mp4 → inspect → analyze → propose **editable** timeline → review �
 - project_commands.py: pure deterministic event reducer, versioned `.pausio.json` v2 tape with active history cursor, monotonic revision, v1 import migration, media fingerprint binding and state reconstruction. **Canonical source of truth** for UI edits.
 - studio_persistence.py: private persistent local workspace, media fingerprint verification, process lock, atomic checkpoint with previous-state fallback and explicit privacy cleanup (separate from portable project JSON).
 - studio.py: local HTTP server, private autosaved workspace, restart recovery and asynchronous jobs; every edit and Undo/Redo is a validated command or cursor transition, not an untracked UI state mutation. Delegates to existing modules.
+- mobile capture: `studio_static/capture.{html,css,js}` for a standalone HTTPS teleprompter / browser MediaRecorder; downloads on-device, never calls Studio's private endpoints, no automatic upload. GitHub Pages copies these same source assets without Python, and the local Studio serves them via `/capture`. The captured take is a raw media input, not a typed edited output; editing on desktop remains entirely project-command driven.
 - studio_static/: offline HTML/CSS/JS workspace with extracted audio waveform, source-time timeline zoom/trim handles (typed commands), simulated or FFmpeg-rendered preview, Pausio local transcript, and MP4 download. Python remains the plan's source of truth.
 
 ## Future boundaries
