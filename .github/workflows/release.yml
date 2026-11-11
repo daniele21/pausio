@@ -1,0 +1,125 @@
+name: Publish GitHub Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/release/manifest.json"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pausio-github-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # A release is possible only for a reviewed main commit, never a PR branch.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact release candidate
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate release manifest against Python package
+        run: |
+          python - <<'PY'
+          import json, os, re, tomllib
+          from pathlib import Path
+          info = json.loads(Path(".github/release/manifest.json").read_text(encoding="utf-8"))
+          version = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+          init = Path("src/pausio/__init__.py").read_text(encoding="utf-8")
+          if not re.fullmatch(r"v\d+\.\d+\.\d+", info["tag"]):
+              raise SystemExit("Invalid semantic release tag")
+          if info["tag"] != "v" + version or '__version__ = "' + version + '"' not in init:
+              raise SystemExit("Release tag, pyproject version and Python version differ")
+          notes = Path(".github/release") / (info["tag"] + ".md")
+          if not notes.is_file() or notes.stat().st_size < 100:
+              raise SystemExit("Missing or incomplete release notes")
+          if not isinstance(info["prerelease"], bool) or not isinstance(info["name"], str):
+              raise SystemExit("Invalid release metadata")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write(f"RELEASE_TAG={info['tag']}\n")
+              env.write(f"RELEASE_NAME={info['name']}\n")
+              env.write(f"RELEASE_NOTES={notes}\n")
+              env.write(f"RELEASE_PRERELEASE={str(info['prerelease']).lower()}\n")
+          PY
+      - name: Install FFmpeg with libass and build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          ffmpeg -hide_banner -filters 2>&1 | grep -E '[[:space:]]ass[[:space:]]'
+          python -m pip install --upgrade build twine
+          python -m pip install -e .
+      - name: Product and command contract tests
+        run: |
+          python scripts/validate_skills.py
+          python -m compileall -q src scripts
+          python -m unittest discover -s tests -v
+          pausio doctor
+      - name: Build and verify redistributable source and wheel
+        run: |
+          python -m build --sdist --wheel
+          python -m twine check dist/*.whl dist/*.tar.gz
+          python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          packages = list(Path("dist").glob("*.whl"))
+          if len(packages) != 1:
+              raise SystemExit(f"Expected one wheel: {packages}")
+          with ZipFile(packages[0]) as wheel:
+              files = set(wheel.namelist())
+              mandatory = {
+                  "pausio/studio_static/index.html",
+                  "pausio/studio_static/app.js",
+                  "pausio/studio_static/styles.css",
+              }
+              missing = mandatory - files
+              if missing:
+                  raise SystemExit(f"Studio assets not packed in wheel: {sorted(missing)}")
+          PY
+          python -m venv /tmp/pausio-release-smoke
+          /tmp/pausio-release-smoke/bin/python -m pip install dist/*.whl
+          (cd /tmp && /tmp/pausio-release-smoke/bin/pausio --version)
+          (cd /tmp && /tmp/pausio-release-smoke/bin/pausio doctor)
+          (cd /tmp && /tmp/pausio-release-smoke/bin/python -c 'from pausio.studio import STATIC_DIR; assert (STATIC_DIR / "index.html").is_file()')
+          (cd dist && sha256sum ./*.whl ./*.tar.gz > SHA256SUMS.txt)
+      - name: Create immutable version tag on the tested commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git fetch origin --tags
+          if git rev-parse "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            actual="$(git rev-list -n 1 "refs/tags/$RELEASE_TAG")"
+            if [ "$actual" != "$GITHUB_SHA" ]; then
+              echo "::error::Tag $RELEASE_TAG already refers to $actual, not $GITHUB_SHA. Never move release tags."
+              exit 1
+            fi
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$RELEASE_TAG" -m "Pausio $RELEASE_TAG — Early Access"
+            git push origin "refs/tags/$RELEASE_TAG"
+          fi
+      - name: Publish GitHub Release with verified distributions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists, leaving it unchanged."
+            exit 0
+          fi
+          flags=()
+          if [ "$RELEASE_PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
+          gh release create "$RELEASE_TAG" dist/*.whl dist/*.tar.gz dist/SHA256SUMS.txt \
+            --title "$RELEASE_NAME" --notes-file "$RELEASE_NOTES" --verify-tag "${flags[@]}"
+          gh release view "$RELEASE_TAG" --json tagName,isPrerelease,url,assets
