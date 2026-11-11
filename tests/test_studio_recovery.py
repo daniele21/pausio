@@ -10,6 +10,7 @@ import json
 import os
 import stat
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -34,6 +35,40 @@ def imported_workspace(directory: Path) -> StudioWorkspace:
     return ws
 
 
+def sample_transcript(ws: StudioWorkspace) -> dict:
+    return {
+        "schema_version": 1, "source": str(ws.source),
+        "source_duration_ms": INFO.duration_ms, "provider": "pausio-local",
+        "backend": "mlx-whisper", "model": "mlx-community/whisper-large-v3-turbo",
+        "language": "it", "text": "Tre consigli per creare video. AI e coding.",
+        "word_timestamps_available": True, "warnings": [],
+        "segments": [
+            {"start_ms":100, "end_ms":1400, "text":"Tre consigli per creare video.",
+             "words":[{"start_ms":100,"end_ms":350,"text":"Tre"},
+                      {"start_ms":400,"end_ms":900,"text":"consigli"},
+                      {"start_ms":950,"end_ms":1400,"text":"video."}]},
+            {"start_ms":1700, "end_ms":2800, "text":"AI e coding.",
+             "words":[{"start_ms":1700,"end_ms":2100,"text":"AI"},
+                      {"start_ms":2150,"end_ms":2300,"text":"e"},
+                      {"start_ms":2350,"end_ms":2800,"text":"coding."}]},
+        ]
+    }
+
+
+def complete_transcription(ws: StudioWorkspace, transcript: dict | None = None):
+    data = sample_transcript(ws) if transcript is None else transcript
+    with patch("pausio.studio.transcribe_video_local", return_value=data):
+        ws.start_job("transcribe")
+        for _ in range(250):
+            job=ws.snapshot()["job"]
+            if job["status"] in {"completed","failed"}:
+                if job["status"] != "completed":
+                    raise AssertionError(str(job))
+                return data
+            time.sleep(.02)
+    raise AssertionError("Transcription timeout")
+
+
 def applied_plan(ws: StudioWorkspace) -> None:
     ws.save_plan([
         {"start_ms": 0, "end_ms": 1100},
@@ -42,6 +77,109 @@ def applied_plan(ws: StudioWorkspace) -> None:
 
 
 class RecoveryTests(unittest.TestCase):
+    def test_transcript_restores_with_words_model_after_restart_and_edit(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory=Path(temp)/"private"
+            ws=imported_workspace(directory)
+            try:
+                transcript=complete_transcription(ws)
+                self.assertEqual(ws.snapshot()["transcript"]["text"],transcript["text"])
+                saved=json.loads((directory/STATE_FILE).read_text(encoding="utf-8"))
+                self.assertEqual(saved["schema_version"],2)
+                self.assertEqual(saved["transcript"]["media_sha256"],ws.media_sha256)
+                self.assertNotIn("source",saved["transcript"]["data"])
+                self.assertNotIn(str(ws.source),(directory/STATE_FILE).read_text())
+                self.assertNotIn("transcript",ws.export_project())
+                self.assertNotIn(transcript["text"],json.dumps(ws.export_project()))
+                if os.name=="posix":
+                    self.assertEqual(stat.S_IMODE((directory/STATE_FILE).stat().st_mode),0o600)
+                applied_plan(ws)
+                ws.approve_plan()
+                self.assertEqual(json.loads((directory/STATE_FILE).read_text())
+                                 ["transcript"]["data"]["text"],transcript["text"])
+            finally:
+                ws.close()
+            restored=new_workspace(directory)
+            try:
+                snap=restored.snapshot()
+                self.assertTrue(snap["recovered"])
+                self.assertEqual(snap["transcript"]["text"],transcript["text"])
+                self.assertEqual(snap["transcript"]["model"],transcript["model"])
+                self.assertEqual(snap["transcript"]["segments"][0]["words"],
+                                 transcript["segments"][0]["words"])
+                with patch("pausio.studio.transcribe_video_local") as rerun:
+                    restored.generate_captions({
+                        "revision":restored.tape.revision, "style":"social"
+                    })
+                    rerun.assert_not_called()
+                self.assertTrue(restored.snapshot()["captions"])
+            finally:
+                restored.close()
+
+    def test_v1_session_migrates_to_v2_on_next_autosave(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory=Path(temp)/"private"
+            ws=imported_workspace(directory)
+            try:
+                state=json.loads((directory/STATE_FILE).read_text())
+                state["schema_version"]=1
+                state.pop("transcript")
+                (directory/STATE_FILE).write_text(json.dumps(state),encoding="utf-8")
+            finally:
+                ws.close()
+            restored=new_workspace(directory)
+            try:
+                self.assertTrue(restored.snapshot()["recovered"])
+                self.assertIsNone(restored.snapshot()["transcript"])
+                applied_plan(restored)
+                upgraded=json.loads((directory/STATE_FILE).read_text())
+                self.assertEqual(upgraded["schema_version"],2)
+                self.assertIsNone(upgraded["transcript"])
+            finally:
+                restored.close()
+
+    def test_transcript_is_cleared_with_new_media_and_explicit_delete(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory=Path(temp)/"private"
+            ws=imported_workspace(directory)
+            try:
+                complete_transcription(ws)
+                candidate,label=ws.begin_import("new.mp4")
+                candidate.write_bytes(b"another example media")
+                ws.finish_import(candidate,label,INFO)
+                self.assertIsNone(ws.snapshot()["transcript"])
+                self.assertIsNone(json.loads((directory/STATE_FILE).read_text())["transcript"])
+                complete_transcription(ws)
+                ws.clear_session()
+                self.assertIsNone(ws.snapshot()["transcript"])
+                self.assertFalse((directory/STATE_FILE).exists())
+            finally:
+                ws.close()
+            restored=new_workspace(directory)
+            try:
+                self.assertIsNone(restored.snapshot()["transcript"])
+            finally:
+                restored.close()
+
+    def test_failed_transcription_autosave_does_not_expose_unsaved_data(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory=Path(temp)/"private"
+            ws=imported_workspace(directory)
+            try:
+                before=(directory/STATE_FILE).read_bytes()
+                with patch.object(ws.store,"save",side_effect=OSError("disk full")):
+                    with patch("pausio.studio.transcribe_video_local",
+                               return_value=sample_transcript(ws)):
+                        ws.start_job("transcribe")
+                        for _ in range(250):
+                            job=ws.snapshot()["job"]
+                            if job["status"] in {"completed","failed"}:break
+                            time.sleep(.02)
+                self.assertEqual(ws.snapshot()["job"]["status"],"failed")
+                self.assertIsNone(ws.snapshot()["transcript"])
+                self.assertEqual((directory/STATE_FILE).read_bytes(),before)
+            finally:ws.close()
+
     def test_reopen_after_restart_restores_media_timeline_cursor_and_redo(self):
         with tempfile.TemporaryDirectory() as temp:
             directory = Path(temp) / "private"
