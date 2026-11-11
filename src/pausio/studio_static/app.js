@@ -24,7 +24,8 @@ function renderCutControls(){
   el("cut-preset-help").textContent=cutDescriptions[cutDraft.preset]||cutDescriptions.custom;
 }
 function syncCutControls(next, busy){
-  const effective=next.analysis_settings||next.cut_presets?.natural;
+  const defaultPreset=next.cut_presets?.natural;
+  const effective=next.analysis_settings||(defaultPreset?{preset:"natural",...defaultPreset}:null);
   if(!effective)return;
   const source=JSON.stringify([next.media_id, effective]);
   if(source!==cutSource){

@@ -110,6 +110,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.wait_state("waveform","ready",timeout=30000)
         self.wait_condition(lambda: "Waveform" in self.page.locator("#waveform-state").inner_text(),
                             timeout=12000)
+        self.assertEqual(self.page.locator("#cut-preset").input_value(),"natural")
         self.page.locator("#analyze-action").click()
         result=self.wait_state("analyze","completed")
         self.wait_condition(lambda: self.page.locator(".segment-card").count()>=2,
