@@ -399,8 +399,13 @@
           <h2 id="fx-title">Effetti audio <span class="fx-pill">OPZIONALE</span></h2>
           <p>Importa un riser, un whoosh o un altro suono. Il file rimane sul tuo Mac.</p>
         </div>
-        <button class="button button-outline" id="fx-import" type="button">+ Importa audio</button>
+        <div class="fx-header-actions">
+          <button class="button button-outline fx-monitor-toggle" id="fx-monitor-toggle" type="button"
+                  aria-pressed="true" title="Attiva o disattiva l'ascolto live degli effetti durante Play" hidden>♫ FX attivi</button>
+          <button class="button button-outline" id="fx-import" type="button">+ Importa audio</button>
+        </div>
       </div>
+      <p class="fx-hint" id="fx-monitor-status" role="status" aria-live="polite" hidden></p>
       <p class="fx-hint" id="fx-hint">Nessun effetto. Seleziona un punto nel video e importa un file MP3, WAV, M4A, AAC, FLAC o OGG.</p>
       <div class="fx-list" id="fx-list"></div>
     </section>
