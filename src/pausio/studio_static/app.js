@@ -1604,6 +1604,15 @@ el("timeline-zoom").addEventListener("change",event=>{
 el("timeline-surface").addEventListener("scroll",()=>{
   el("timeline-ruler").scrollLeft=el("timeline-surface").scrollLeft;
 });
+/* Preserve the original single-column mobile audio flow. Reparent the same
+   live FX controls; never duplicate DOM controls or listeners. */
+function syncFxPanelOrder(){
+  const fx=el("fx-panel"),inspector=document.querySelector(".inspector");
+  const small=window.matchMedia("(max-width: 1000px)").matches;
+  if(small && fx.parentElement!==el("app"))el("file-input").before(fx);
+  else if(!small && fx.parentElement!==inspector)
+    inspector.querySelector(".inspector-bottom").before(fx);
+}
 /* Keep visual, keyboard and screen-reader navigation order consistent. */
 function syncTimelineOrder(){
   const timeline=document.querySelector(".timeline-panel");
@@ -1620,9 +1629,11 @@ function syncTimelineOrder(){
 }
 window.addEventListener("resize",()=>{
   syncTimelineOrder();
+  syncFxPanelOrder();
   resizeTimeline();
 });
 syncTimelineOrder();
+syncFxPanelOrder();
 resizeTimeline();
 initializeDesktopWorkspace();
 
