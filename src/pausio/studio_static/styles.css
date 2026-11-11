@@ -722,3 +722,13 @@ a { color: inherit; text-decoration: none; }
 
 /* Capture entrypoint kept from main. */
 .mobile-capture-link { margin-top: 9px; }
+
+/* Non-destructive monitoring of FX while playing the unrendered editor. */
+.fx-header-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.fx-monitor-toggle { color:#e7caef; border-color:#765591; background:rgba(111,67,145,.22); }
+.fx-monitor-toggle[aria-pressed="false"] { color:var(--ink-secondary); background:transparent; border-color:var(--border); }
+#fx-monitor-status { padding-top:7px; color:#c7afd8; }
+@media(max-width:600px){
+  .fx-header-actions { width:100%; }
+  .fx-header-actions .button { width:auto; flex:1 1 132px; }
+}
