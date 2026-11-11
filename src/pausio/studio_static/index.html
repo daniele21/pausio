@@ -393,6 +393,42 @@
       </div>
     </section>
 
+    <section class="audio-mixer" id="audio-mixer" aria-labelledby="mixer-title" hidden>
+      <div class="audio-mixer-head">
+        <h2 id="mixer-title">Mixer audio</h2>
+        <p>Regola i livelli mentre ascolti. Le modifiche vengono salvate nel progetto.</p>
+      </div>
+      <div class="audio-mixer-tracks">
+        <div class="mixer-track mixer-track-voice">
+          <div class="mixer-track-title"><span class="mixer-track-dot" aria-hidden="true"></span>
+            <strong>Voce originale</strong><span>Traccia principale</span></div>
+          <div class="mixer-level">
+            <input type="range" id="voice-gain" min="-36" max="12" step="1" value="0"
+                   aria-label="Volume della voce originale" aria-valuetext="100%">
+            <output id="voice-gain-label" for="voice-gain">100% · 0 dB</output>
+          </div>
+          <div class="mixer-actions">
+            <button id="voice-mute" class="mixer-mute" type="button" aria-pressed="false">Silenzia</button>
+            <button id="voice-reset" class="mixer-reset" type="button" title="Ripristina volume voce a 100%" aria-label="Ripristina volume voce">↺</button>
+          </div>
+        </div>
+        <div class="mixer-track mixer-track-fx">
+          <div class="mixer-track-title"><span class="mixer-track-dot" aria-hidden="true"></span>
+            <strong>Effetti FX</strong><span>Tutti i riser importati</span></div>
+          <div class="mixer-level">
+            <input type="range" id="fx-gain" min="-36" max="12" step="1" value="0"
+                   aria-label="Volume generale degli effetti FX" aria-valuetext="100%">
+            <output id="fx-gain-label" for="fx-gain">100% · 0 dB</output>
+          </div>
+          <div class="mixer-actions">
+            <button id="fx-mute" class="mixer-mute" type="button" aria-pressed="false">Silenzia</button>
+            <button id="fx-reset" class="mixer-reset" type="button" title="Ripristina volume FX a 100%" aria-label="Ripristina volume FX">↺</button>
+          </div>
+        </div>
+      </div>
+      <p class="mixer-note">100% = volume originale · oltre il 100% amplifica il suono. Silenzia esclude la traccia anche dall’export; l’ascolto FX live è un controllo separato.</p>
+    </section>
+
     <section class="fx-panel" id="fx-panel" aria-labelledby="fx-title" hidden>
       <div class="fx-header">
         <div>
