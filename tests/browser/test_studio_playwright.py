@@ -119,13 +119,19 @@ class StudioPlaywrightAudit(unittest.TestCase):
 
     def test_custom_audio_fx_import_in_real_browser(self):
         self.upload_analyze()
-        effect = self.root / "personal-riser.wav"
-        with wave.open(str(effect), "wb") as wav:
+        wav_path = self.root / "personal-riser.wav"
+        effect = self.root / "personal-riser.mp3"
+        with wave.open(str(wav_path), "wb") as wav:
             wav.setnchannels(1);wav.setsampwidth(2);wav.setframerate(22050)
             data = b"".join(struct.pack("<h", int(10000 * (i/13230)
                              * math.sin(2*math.pi*700*i/22050)))
                             for i in range(13230))
             wav.writeframes(data)
+        # User-facing regression: imported MP3 risers must play in the browser,
+        # not only WAVs produced for synthetic media tests.
+        subprocess.run(["ffmpeg","-hide_banner","-loglevel","error","-y",
+            "-i",str(wav_path),"-c:a","libmp3lame","-b:a","160k",str(effect)],
+            check=True,timeout=35)
         self.page.evaluate("document.getElementById('preview-video').currentTime=2.5")
         start = self.state()["project_revision"]
         self.page.locator("#fx-input").set_input_files(str(effect))
