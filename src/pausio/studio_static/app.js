@@ -179,6 +179,8 @@ function update(next){
   document.body.classList.toggle("has-media",has);
   syncCutControls(next, busy);
   syncCaptionSettings(next, busy);
+  el("fx-panel").hidden=!has;
+  el("fx-import").disabled=!has||busy;
   if(next.media_id && mediaKey!==next.media_id){
     mediaKey=next.media_id;mode="original";previewSourceMode="original";
     waveformData=null;waveformRequestedFor=null;
@@ -265,7 +267,7 @@ function update(next){
     el("saved-time").textContent=shortDuration(Math.max(0,duration-editedDuration()));
     el("keep-time").textContent=shortDuration(editedDuration());
   }
-  drawSegments();drawTimeline();drawTranscript();drawCaptionEditor();transport();
+  drawSegments();drawTimeline();drawFx();drawTranscript();drawCaptionEditor();transport();
   if(has&&next.waveform_status==="ready"&&waveformRequestedFor!==next.media_id){
     waveformRequestedFor=next.media_id;
     fetch("/api/waveform",{cache:"no-store"}).then(async response=>{
@@ -430,6 +432,65 @@ function updateCaptionOverlay(){
   const value=cue?.text||"";
   if(overlay.textContent!==value)overlay.textContent=value;
 }
+function drawFx(){
+  const list=el("fx-list"),lane=el("fx-lane");list.replaceChildren();lane.replaceChildren();
+  const clips=project?.audio_clips||[];
+  const duration=project?.plan?editedDuration():project?.media?.duration_ms||0;
+  el("fx-hint").textContent=clips.length?
+    clips.length+" effetto/i audio · trascina il punto con «Inizio» e ascolta la preview FFmpeg.":
+    "Nessun effetto. Posiziona il cursore sul video e importa un riser, un whoosh o un altro audio.";
+  for(const clip of clips){
+    const mark=document.createElement("div");
+    mark.className="fx-clip-mark"+(clip.available?"":" missing");
+    mark.textContent=clip.filename;
+    mark.title=clip.filename+" · "+msFormat(clip.start_ms,true);
+    mark.style.left=(duration?Math.min(100,clip.start_ms/duration*100):0)+"%";
+    mark.style.width=(duration?Math.min(100,Math.max(0,duration-clip.start_ms)/duration*100,
+      clip.duration_ms/duration*100):0)+"%";
+    lane.append(mark);
+    const item=document.createElement("div");item.className="fx-item";
+    const name=document.createElement("div");name.className="fx-item-name";
+    const label=document.createElement("strong");label.textContent=clip.filename;
+    const status=document.createElement("span");
+    status.textContent=!clip.available?"File mancante · reimporta per ricollegare":
+      clip.start_ms>=duration?"Fuori dalla durata montata · modifica inizio":
+      "Durata "+shortDuration(clip.duration_ms)+" · FX incluso nella preview e nell'export";
+    if(!clip.available)status.className="fx-missing";
+    name.append(label,status);item.append(name);
+    const controls=[
+      ["Inizio (sec)","start_ms",clip.start_ms/1000,.1,0,Math.max(0,(project.media.duration_ms-1)/1000)],
+      ["Volume (dB)","gain_db",clip.gain_db,1,-36,12]
+    ];
+    for(const [title,key,val,step,min,max] of controls){
+      const wrapper=document.createElement("label");wrapper.textContent=title;
+      const input=document.createElement("input");input.type="number";
+      input.min=min;input.max=max;input.step=step;
+      input.value=String(val);input.disabled=working();
+      input.setAttribute("aria-label",title+" "+clip.filename);
+      input.addEventListener("change",()=>run(async()=>{
+        if(!input.checkValidity()||!Number.isFinite(Number(input.value)))
+          throw Error("Valore audio fuori dai limiti.");
+        const value=key==="start_ms"?Math.round(Number(input.value)*1000):Number(input.value);
+        await edit("audio.update",{clip_id:clip.id,
+          start_ms:key==="start_ms"?value:clip.start_ms,
+          gain_db:key==="gain_db"?value:clip.gain_db});
+      }));
+      wrapper.append(input);item.append(wrapper);
+    }
+    if(clip.available){
+      const audio=document.createElement("audio");audio.controls=true;audio.preload="none";
+      audio.src="/api/audio/"+clip.asset_sha256;
+      audio.setAttribute("aria-label","Ascolta "+clip.filename);
+      item.append(audio);
+    }
+    const remove=document.createElement("button");remove.type="button";remove.className="fx-remove";
+    remove.textContent="Rimuovi";remove.disabled=working();
+    remove.setAttribute("aria-label","Rimuovi effetto "+clip.filename);
+    remove.addEventListener("click",()=>run(()=>edit("audio.remove",{clip_id:clip.id})));
+    item.append(remove);list.append(item);
+  }
+}
+
 function drawTimeline(){
   const parts=el("timeline-regions");parts.replaceChildren();if(!project?.media)return;
   const duration=project.media.duration_ms,keep=segments();
@@ -706,6 +767,47 @@ function biggestGap(){
     cursor=s.end_ms;
   }return max;
 }
+function importAudio(file){
+  if(!file)return;
+  if(!project?.media)return toast("Importa prima un video.","error");
+  if(working())return toast("Completa prima l'operazione in corso.","error");
+  const ext=(file.name.split(".").pop()||"").toLowerCase();
+  if(!["mp3","wav","m4a","aac","flac","ogg"].includes(ext))
+    return toast("Scegli un audio MP3, WAV, M4A, AAC, FLAC o OGG.","error");
+  if(!file.size||file.size>60*1024*1024)
+    return toast("Audio vuoto oppure superiore a 60 MB.","error");
+  const sourceTime=mode==="rendered"?sourceFromOutput((v.currentTime||0)*1000):(v.currentTime||0)*1000;
+  const anchor=mode==="rendered"?(v.currentTime||0)*1000:project.plan?outputTime(sourceTime):sourceTime;
+  uploading=true;el("job-banner").hidden=false;el("job-message").textContent="Importazione FX · 0%";
+  const xhr=new XMLHttpRequest();xhr.open("POST","/api/audio/import");
+  xhr.setRequestHeader("Content-Type","application/octet-stream");
+  xhr.setRequestHeader("X-Pausio-Client","studio");
+  xhr.setRequestHeader("X-Pausio-Revision",String(project.project_revision));
+  xhr.setRequestHeader("X-Pausio-Start-Ms",String(Math.max(0,Math.min(project.media.duration_ms-1,
+    Math.round(anchor)))));
+  xhr.setRequestHeader("X-Filename",encodeURIComponent(file.name));
+  xhr.upload.addEventListener("progress",event=>{
+    if(event.lengthComputable)el("job-message").textContent=
+      "Importazione FX · "+Math.round(event.loaded/event.total*100)+"%";
+  });
+  xhr.addEventListener("load",()=>{
+    uploading=false;el("fx-input").value="";
+    let result={};try{result=JSON.parse(xhr.responseText);}catch{}
+    if(xhr.status===200){
+      update(result);toast("Audio importato sul Mac. Regola posizione e volume nella traccia FX.");
+    }else{
+      el("job-banner").hidden=true;
+      toast(result.error||"Importazione audio non riuscita.","error");
+      refresh().catch(()=>{});
+    }
+  });
+  xhr.addEventListener("error",()=>{uploading=false;el("job-banner").hidden=true;
+    toast("Connessione al server locale interrotta.","error");refresh().catch(()=>{});});
+  xhr.send(file);
+}
+el("fx-import").addEventListener("click",()=>el("fx-input").click());
+el("fx-input").addEventListener("change",()=>importAudio(el("fx-input").files?.[0]));
+
 function importVideo(file){
   if(!file)return;
   if(working())return toast("Completa prima l'operazione in corso.","error");
