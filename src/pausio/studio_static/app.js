@@ -305,6 +305,7 @@ function update(next){
     mediaKey=next.media_id;mode="original";previewSourceMode="original";
     waveformData=null;waveformRequestedFor=null;
     fxWaveforms.clear();fxWaveformsPending.clear();
+    for(const id of [...liveFxPlayers.keys()])disposeLiveFx(id);
     paintWaveform();
     v.pause();v.src="/api/media?v="+encodeURIComponent(mediaKey);v.load();tab("cuts");
   }
@@ -388,7 +389,8 @@ function update(next){
     el("saved-time").textContent=shortDuration(Math.max(0,duration-editedDuration()));
     el("keep-time").textContent=shortDuration(editedDuration());
   }
-  drawSegments();drawTimeline();drawFx();drawTranscript();drawCaptionEditor();transport();
+  drawSegments();drawTimeline();drawFx();drawTranscript();drawCaptionEditor();
+  updateFxMonitorUI();syncLiveFx();transport();
   if(has&&next.waveform_status==="ready"&&waveformRequestedFor!==next.media_id){
     waveformRequestedFor=next.media_id;
     fetch("/api/waveform",{cache:"no-store"}).then(async response=>{
@@ -920,6 +922,7 @@ async function clearSession(){
   mediaKey=null;
   mode="original";
   v.pause();v.removeAttribute("src");v.load();
+  for(const id of [...liveFxPlayers.keys()])disposeLiveFx(id);
   toast("Sessione e video locali eliminati.");
 }
 function changeMode(chosen){
@@ -931,7 +934,7 @@ function changeMode(chosen){
   const sourceTime=oldMode==="rendered"?sourceFromOutput(oldTime):oldTime;
   const nextTime=chosen==="rendered"?outputTime(sourceTime):
     chosen==="edited"?nextSimulatedSourceTime(sourceTime):sourceTime;
-  v.pause();mode=chosen;
+  v.pause();pauseLiveFx();mode=chosen;
   if(chosen==="rendered"||oldMode==="rendered"){
     const url=chosen==="rendered"?"/api/preview?v="+encodeURIComponent(mediaKey)+
       "&rev="+project.project_revision:"/api/media?v="+encodeURIComponent(mediaKey);
@@ -973,18 +976,25 @@ function followEdits(){
 // when a tab is backgrounded. Do not run the loop in other preview modes.
 function simulationTick(){
   simulationFrame=null;
-  if(mode!=="edited"||v.paused||v.ended)return;
-  followEdits();
+  if(v.paused||v.ended)return;
+  if(mode==="edited")followEdits();
+  syncLiveFx();
   transport();
-  if(mode==="edited"&&!v.paused)simulationFrame=requestAnimationFrame(simulationTick);
+  if(!v.paused&&(mode==="edited"||(mode!=="rendered"&&fxMonitoringEnabled&&
+       (project?.audio_clips||[]).length))){
+    simulationFrame=requestAnimationFrame(simulationTick);
+  }
 }
 function syncSimulationLoop(){
-  if(mode==="edited"&&!v.paused&&!v.ended){
+  const active=!v.paused&&!v.ended&&(mode==="edited"||
+    (mode!=="rendered"&&fxMonitoringEnabled&&(project?.audio_clips||[]).length));
+  if(active){
     if(simulationFrame===null)simulationFrame=requestAnimationFrame(simulationTick);
   }else if(simulationFrame!==null){
     cancelAnimationFrame(simulationFrame);
     simulationFrame=null;
   }
+  if(!active)pauseLiveFx();
 }
 function play(){
   if(!project?.media)return;
@@ -992,6 +1002,7 @@ function play(){
   if(mode==="edited"&&segments().length){
     v.currentTime=nextSimulatedSourceTime(Math.round(v.currentTime*1000))/1000;
   }else if(v.ended)v.currentTime=0;
+  unlockFxAudio();
   v.play().catch(()=>toast("Codec non riproducibile. Usa MP4 H.264 per la preview.","error"));
 }
 function jump(seconds){
@@ -1045,6 +1056,12 @@ function importAudio(file){
     toast("Connessione al server locale interrotta.","error");refresh().catch(()=>{});});
   xhr.send(file);
 }
+el("fx-monitor-toggle").addEventListener("click",()=>{
+  if(mode==="rendered")return;
+  fxMonitoringEnabled=!fxMonitoringEnabled;
+  if(fxMonitoringEnabled)unlockFxAudio();else pauseLiveFx();
+  updateFxMonitorUI();syncLiveFx();syncSimulationLoop();
+});
 el("fx-import").addEventListener("click",()=>el("fx-input").click());
 el("fx-input").addEventListener("change",()=>importAudio(el("fx-input").files?.[0]));
 
@@ -1224,11 +1241,14 @@ el("forward-five").addEventListener("click",()=>jump(5));
 el("play-pause").addEventListener("click",play);
 el("video-center-play").addEventListener("click",play);
 v.addEventListener("click",play);
-v.addEventListener("timeupdate",()=>{followEdits();transport();});
-v.addEventListener("play",()=>{followEdits();syncSimulationLoop();transport();});
-v.addEventListener("pause",()=>{syncSimulationLoop();transport();});
-v.addEventListener("ended",()=>{syncSimulationLoop();transport();});
-v.addEventListener("seeked",()=>{followEdits();transport();});
+v.addEventListener("timeupdate",()=>{followEdits();syncLiveFx();transport();});
+v.addEventListener("play",()=>{unlockFxAudio();followEdits();syncLiveFx();syncSimulationLoop();transport();});
+v.addEventListener("pause",()=>{pauseLiveFx();syncSimulationLoop();transport();});
+v.addEventListener("ended",()=>{pauseLiveFx();syncSimulationLoop();transport();});
+v.addEventListener("seeking",pauseLiveFx);
+v.addEventListener("seeked",()=>{followEdits();syncLiveFx();transport();});
+v.addEventListener("ratechange",syncLiveFx);
+v.addEventListener("volumechange",syncLiveFx);
 v.addEventListener("loadedmetadata",transport);
 v.addEventListener("error",()=>{if(project?.file)toast("Impossibile riprodurre il codec nel browser. Usa MP4 H.264.","error");});
 el("timeline-track").addEventListener("click",event=>{
