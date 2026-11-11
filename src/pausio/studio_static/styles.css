@@ -593,3 +593,29 @@ a { color: inherit; text-decoration: none; }
   .inspector-body { max-height: none; overflow: visible; }
   .has-media .rail-intro { display: none; }
 }
+
+/* Optional sound-design lane: imported FX remain separate from immutable source audio. */
+.fx-panel { border-top:1px solid var(--border-soft); padding:16px 24px 20px; background:var(--surface); }
+.fx-header { display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; }
+.fx-header h2 { margin:0 0 4px; font-size:15px; }
+.fx-header p,.fx-hint { margin:0; color:var(--muted); font-size:12px; line-height:1.5; }
+.fx-pill { font-size:9px; font-weight:700; letter-spacing:.08em; color:var(--ink-secondary); border:1px solid var(--border); border-radius:14px; padding:3px 7px; vertical-align:middle; margin-left:6px; }
+.fx-lane { position:relative; height:35px; border:1px solid var(--border); border-radius:7px; background:var(--canvas); margin:14px 0 8px; overflow:hidden; }
+.fx-clip-mark { position:absolute; top:4px; bottom:4px; min-width:3px; border-radius:4px; background:#79539b; border:1px solid #b995dd; color:#fff; padding:5px; font-size:10px; text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.fx-clip-mark.missing { background:#6e4242; border-color:var(--danger); }
+.fx-list { display:grid; gap:8px; margin-top:10px; }
+.fx-item { display:flex; align-items:center; flex-wrap:wrap; gap:10px; border:1px solid var(--border); border-radius:8px; background:var(--surface-soft); padding:10px 12px; }
+.fx-item-name { display:flex; flex-direction:column; gap:3px; min-width:125px; flex:1 1 180px; overflow-wrap:anywhere; }
+.fx-item-name strong { font-size:12px; }
+.fx-item-name span { font-size:11px; color:var(--muted); }
+.fx-item label { display:grid; gap:3px; color:var(--ink-secondary); font-size:10px; }
+.fx-item input { width:87px; background:var(--canvas); color:var(--ink); border:1px solid var(--border); border-radius:5px; padding:6px; font-size:12px; }
+.fx-item audio { width:145px; height:32px; max-width:100%; }
+.fx-remove { color:var(--danger); border:1px solid var(--border); background:none; border-radius:5px; padding:7px 10px; }
+.fx-item .fx-missing { color:var(--danger); }
+@media (max-width:600px) {
+  .fx-panel { padding:15px; }
+  .fx-header .button { width:100%; }
+  .fx-item { align-items:stretch; }
+  .fx-item audio { flex:1 1 170px; }
+}
