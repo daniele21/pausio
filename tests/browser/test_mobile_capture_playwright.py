@@ -45,6 +45,7 @@ class MobileCapturePlaywrightTests(unittest.TestCase):
 
     def test_record_preview_and_download(self):
         page = self.page
+        page.locator("#edit-gobbo").click()
         page.locator("#script-input").fill("Questo è un take di prova. Il gobbo è solo un overlay.")
         self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"),
                              390)
