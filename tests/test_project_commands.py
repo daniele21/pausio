@@ -106,6 +106,35 @@ class ProjectReplayTests(unittest.TestCase):
                 tape.append(kind, payload)
         self.assertEqual(tape.view.captions[0]["text"], "Tre consigli AI")
 
+    def test_caption_config_replays_with_undo_and_rejects_untrusted_values(self):
+        from pausio.captions import default_caption_config
+        tape=analyze(ProjectTape(media())).append("caption.set", {
+            "style":"social","cues":[{"id":"a"*32,"start_ms":100,
+                "end_ms":1000,"text":"Consigli AI"}]
+        })
+        original=tape.view.caption_config
+        self.assertEqual(original["x_pct"],50)
+        cfg={**default_caption_config("boxed"),"preset":"custom",
+             "x_pct":63,"y_pct":40,"font_size":82,"text_color":"#FFE600"}
+        tape=tape.append("timeline.approve",{})
+        tape=tape.append("caption.configure",{"config":cfg})
+        self.assertFalse(tape.view.approved)
+        self.assertEqual(tape.view.caption_config,cfg)
+        self.assertEqual(tape.view.caption_style,"custom")
+        self.assertEqual(ProjectTape.from_dict(tape.as_dict()).view,tape.view)
+        undone=tape.undo()
+        self.assertEqual(undone.view.caption_config,original)
+        self.assertEqual(undone.redo().view.caption_config,cfg)
+        for invalid in (
+            {**cfg,"x_pct":-1},{**cfg,"font_size":True},
+            {**cfg,"text_color":"bad"},{**cfg,"background":"yes"},
+            {**cfg,"preset":"boxed"},
+        ):
+            with self.subTest(invalid=invalid),self.assertRaises(ProjectFormatError):
+                tape.append("caption.configure",{"config":invalid})
+        with self.assertRaises(ProjectFormatError):
+            analyze(ProjectTape(media())).append("caption.configure",{"config":cfg})
+
     def test_precise_commands_replay_to_same_edit_plan_after_json_import(self):
         tape = analyze(ProjectTape(media()))
         first, second = tape.view.segments
