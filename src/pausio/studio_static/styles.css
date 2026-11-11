@@ -732,3 +732,54 @@ a { color: inherit; text-decoration: none; }
   .fx-header-actions { width:100%; }
   .fx-header-actions .button { width:auto; flex:1 1 132px; }
 }
+
+/* Quick mixer: bus controls are always next to the timeline, without requiring
+   the user to open a separate audio settings pane. */
+.audio-mixer { padding:17px 24px; background:#101923; border-top:1px solid #304053; }
+.audio-mixer-head { display:flex; gap:12px; align-items:baseline; flex-wrap:wrap; margin-bottom:12px; }
+.audio-mixer-head h2 { margin:0; font-size:14px; color:#eff6f9; font-weight:750; }
+.audio-mixer-head p,.mixer-note { font-size:11px; color:#a2b1c2; line-height:1.5; margin:0; }
+.audio-mixer-tracks { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.mixer-track { display:grid; grid-template-columns:minmax(0,150px) minmax(100px,1fr) auto; align-items:center;
+  gap:12px; min-width:0; background:#1a2835; padding:12px; border:1px solid #38495a; border-radius:9px; }
+.mixer-track-fx { background:#231c30; border-color:#534064; }
+.mixer-track-title { display:grid; grid-template-columns:9px minmax(0,1fr); gap:3px 7px; align-items:center; min-width:0; }
+.mixer-track-dot { height:9px; width:9px; border-radius:3px; background:#75bdb2; grid-row:1/3; }
+.mixer-track-fx .mixer-track-dot { background:#bb9ad6; }
+.mixer-track-title strong { font-size:12px; font-weight:700; color:#f0f6f9; white-space:nowrap; }
+.mixer-track-title span:last-child { font-size:10px; color:#a8b7c7; white-space:nowrap; }
+.mixer-level { display:grid; gap:4px; min-width:0; }
+.mixer-level input[type="range"],.clip-mixer input[type="range"] { width:100%; min-width:0;
+  cursor:pointer; accent-color:#76bdaf; height:20px; margin:0; padding:0; }
+.mixer-track-fx .mixer-level input[type="range"],.clip-mixer input[type="range"] { accent-color:#bf97df; }
+.mixer-level output,.clip-mixer output { font-variant-numeric:tabular-nums; font-size:11px;
+  text-align:center; color:#dde7ed; white-space:nowrap; }
+.mixer-actions { display:flex; align-items:center; gap:5px; }
+.mixer-mute,.mixer-reset,.clip-mute,.clip-reset { background:#293848; border:1px solid #526177;
+  border-radius:6px; color:#ecf1f6; font-size:11px; height:32px; padding:0 9px; white-space:nowrap; }
+.mixer-track-fx .mixer-mute,.mixer-track-fx .mixer-reset { background:#3c304b; border-color:#73568e; }
+.mixer-mute[aria-pressed="true"],.clip-mute[aria-pressed="true"] { color:#f6d2d2;
+  background:#573139; border-color:#d77d8f; }
+.mixer-reset,.clip-reset { min-width:30px; font-size:18px; padding:0 7px; }
+.mixer-track input:focus-visible,.mixer-track button:focus-visible,.clip-mixer button:focus-visible,
+.clip-mixer input:focus-visible { outline:2px solid #f1b47f; outline-offset:2px; }
+.mixer-note { margin-top:9px; }
+.mixer-track.is-muted .mixer-level { opacity:.55; }
+.clip-mixer { display:grid; grid-template-columns:minmax(100px,1fr) auto; gap:5px 7px;
+  align-items:center; min-width:160px; flex:1 1 215px; }
+.clip-mixer > label { grid-column:1/-1; font-size:10px; color:#b8a5cf; }
+.clip-mixer-controls { display:flex; gap:5px; align-items:center; justify-content:flex-end; }
+.clip-mixer.is-muted input { opacity:.5; }
+.clip-mixer output { grid-column:1; }
+.clip-mixer .clip-mute,.clip-mixer .clip-reset { height:28px; }
+@media (max-width:1200px) {
+  .mixer-track { grid-template-columns:1fr auto; }
+  .mixer-track-title { grid-column:1/-1; }
+  .mixer-level { grid-column:1; }
+  .mixer-actions { grid-column:2; }
+}
+@media (max-width:640px) {
+  .audio-mixer { padding:14px 15px; }
+  .audio-mixer-tracks { grid-template-columns:minmax(0,1fr); }
+  .mixer-track { grid-template-columns:minmax(0,1fr) auto; gap:8px; }
+}
