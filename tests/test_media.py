@@ -1,4 +1,7 @@
 import unittest
+import shutil
+import subprocess
+from array import array
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -71,6 +74,50 @@ class TestMedia(unittest.TestCase):
                     (Interval(0,1000),),has_audio=True,dry_run=True)
             self.assertIn("ass=filename=",with_captions[with_captions.index("-filter_complex")+1])
             self.assertNotIn("ass=filename=",without[without.index("-filter_complex")+1])
+
+    @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "FFmpeg unavailable")
+    def test_exported_mp4_contains_audible_riser_only_at_scheduled_time(self):
+        """Detect real PCM samples, not just an MP4 file with an audio stream."""
+        with TemporaryDirectory() as d:
+            root=Path(d)
+            original=root/"silent-voice.mp4"
+            riser=root/"riser.wav"
+            output=root/"mixed-preview.mp4"
+            subprocess.run([
+                "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+                "-f", "lavfi", "-i", "color=c=black:s=160x284:r=15:d=2",
+                "-f", "lavfi", "-i", "anullsrc=r=22050:cl=mono",
+                "-t", "2", "-shortest", "-c:v", "mpeg4", "-c:a", "aac", str(original),
+            ], check=True, timeout=40)
+            subprocess.run([
+                "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+                "-f", "lavfi", "-i", "sine=frequency=700:duration=0.35",
+                "-c:a", "pcm_s16le", str(riser),
+            ], check=True, timeout=40)
+            clip={
+                "id": "a"*32, "asset_sha256": "b"*64, "filename": "riser.wav",
+                "start_ms": 900, "duration_ms": 350, "gain_db": -6,
+            }
+            render(
+                original, output, (Interval(0, 2000),),
+                has_audio=True, size=(540, 960),
+                audio_fx=[(riser, clip)],
+            )
+
+            def peak(at_seconds: float) -> int:
+                result=subprocess.run([
+                    "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin",
+                    "-ss", str(at_seconds), "-i", str(output),
+                    "-t", "0.12", "-map", "0:a:0", "-ac", "1", "-ar", "16000",
+                    "-f", "s16le", "-",
+                ], capture_output=True, check=True, timeout=30)
+                samples=array("h")
+                samples.frombytes(result.stdout)
+                return max((abs(v) for v in samples),default=0)
+
+            self.assertLess(peak(0.35), 50, "No sound should play before the riser")
+            self.assertGreater(peak(1.0), 500, "Imported FX must be audible in exported MP4")
+            self.assertLess(peak(1.6), 50, "FX must stop after its duration")
 
     def test_render_builds_command_without_execution(self):
         with TemporaryDirectory() as d:
