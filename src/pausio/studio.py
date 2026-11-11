@@ -27,7 +27,7 @@ from pausio.domain import EditPlan, Interval
 from pausio.captions import (
     CAPTION_STYLES, CAPTION_PRESETS, CAPTION_FONTS, propose_captions, remap_captions
 )
-from pausio.media import MediaInfo, detect_silences, probe, probe_audio, render, waveform_envelope
+from pausio.media import MediaError, MediaInfo, detect_silences, probe, probe_audio, render, waveform_envelope
 from pausio.planner import CUT_PRESETS, validate_cut_settings, policy_from_cut_settings, propose_segments
 from pausio.project_commands import ProjectTape, ProjectFormatError, UI_COMMANDS
 from pausio.studio_persistence import StudioSessionStore, RecoveryError, default_studio_directory
@@ -142,7 +142,7 @@ class StudioWorkspace:
                 "detected_silences": self.tape.view.detected_silences if self.tape else None,
                 "transcript": self.transcript,
                 "captions": [dict(c) for c in self.tape.view.captions] if self.tape else [],
-                "audio_clips": [{**dict(c), "available": self._audio_path(c["asset_sha256"]).is_file()} for c in self.tape.view.audio_clips] if self.tape else [],
+                "audio_clips": [{**dict(c), "available": (self._audio_path(c["asset_sha256"]).is_file() and not self._audio_path(c["asset_sha256"]).is_symlink())} for c in self.tape.view.audio_clips] if self.tape else [],
                 "caption_style": self.tape.view.caption_style if self.tape else "social",
                 "caption_config": self.tape.view.caption_config if self.tape else CAPTION_PRESETS["social"],
                 "caption_presets": CAPTION_PRESETS,
@@ -166,7 +166,7 @@ class StudioWorkspace:
     def begin_audio_import(self, name: str, revision: int) -> tuple[Path, str]:
         label = Path(name).name.strip()
         suffix = Path(label).suffix.lower()
-        if not label or "\\" in label or suffix not in AUDIO_EXTENSIONS:
+        if not label or len(label) > 160 or "\\" in label or suffix not in AUDIO_EXTENSIONS:
             raise StudioError("Audio non supportato: usa MP3, WAV, M4A, AAC, FLAC o OGG.")
         with self.lock:
             self._ensure_unlocked()
@@ -177,28 +177,28 @@ class StudioWorkspace:
 
     def finish_audio_import(
         self, candidate: Path, label: str, duration_ms: int, digest: str,
-        revision: int, start_ms: int
+        revision: int, anchor_ms: int
     ) -> None:
         with self.lock:
             try:
                 if self.tape is None or self.source is None or revision != self.tape.revision:
                     raise StudioError("Progetto modificato durante il caricamento audio.")
-                if type(start_ms) is not int or not 0 <= start_ms < self.tape.media["duration_ms"]:
+                if type(anchor_ms) is not int or not 0 <= anchor_ms < self.tape.media["duration_ms"]:
                     raise StudioError("Posizione audio fuori dal video.")
                 target = self._audio_path(digest)
                 if target.exists():
                     if target.is_symlink() or not target.is_file():
                         raise StudioError("File audio locale non valido.")
-                    candidate.unlink(missing_ok=True)
+                    os.replace(candidate, target)
                 else:
                     os.replace(candidate, target)
-                    if os.name == "posix":
-                        target.chmod(0o600)
+                if os.name == "posix":
+                    target.chmod(0o600)
                 # Re-link missing assets after importing a portable project.
                 if not any(c["asset_sha256"] == digest for c in self.tape.view.audio_clips):
                     clip = {
                         "id": uuid.uuid4().hex, "asset_sha256": digest,
-                        "filename": label, "start_ms": start_ms,
+                        "filename": label, "start_ms": max(0, anchor_ms - duration_ms),
                         "duration_ms": duration_ms, "gain_db": -12,
                     }
                     self._install_tape(self.tape.append("audio.add", {"clip": clip}))
@@ -744,7 +744,7 @@ class StudioHandler(BaseHTTPRequestHandler):
                 self._json(202, self.server.workspace.snapshot())
                 return
             self._failed(404, "Endpoint non trovato.")
-        except StudioError as exc:
+        except (StudioError, MediaError) as exc:
             self._failed(409 if "in corso" in str(exc) or "Versione" in str(exc) else 400, str(exc))
         except Exception:
             self._failed(500, "Errore interno. Controlla il terminale di Pausio.")
@@ -756,7 +756,7 @@ class StudioHandler(BaseHTTPRequestHandler):
         filename = unquote(self.headers.get("X-Filename", ""))
         try:
             revision = int(self.headers.get("X-Pausio-Revision", ""))
-            start_ms = int(self.headers.get("X-Pausio-Start-Ms", "0"))
+            anchor_ms = int(self.headers.get("X-Pausio-Start-Ms", "0"))
         except ValueError as exc:
             raise StudioError("Posizione o versione del progetto non valida.") from exc
         destination, label = self.server.workspace.begin_audio_import(filename, revision)
@@ -777,7 +777,7 @@ class StudioHandler(BaseHTTPRequestHandler):
                 os.fsync(target.fileno())
             duration_ms = probe_audio(destination)
             self.server.workspace.finish_audio_import(
-                destination, label, duration_ms, digest.hexdigest(), revision, start_ms
+                destination, label, duration_ms, digest.hexdigest(), revision, anchor_ms
             )
             completed = True
             self._json(200, self.server.workspace.snapshot())
@@ -904,10 +904,10 @@ class StudioHandler(BaseHTTPRequestHandler):
                 }.get(Path(clip["filename"]).suffix.lower(), "application/octet-stream")
             else:
                 path = (
-                self.server.workspace.directory / "preview.mp4" if preview
-                else self.server.workspace.directory / "export.mp4" if exported
-                else self.server.workspace.source
-            )
+                    self.server.workspace.directory / "preview.mp4" if preview
+                    else self.server.workspace.directory / "export.mp4" if exported
+                    else self.server.workspace.source
+                )
             if audio_sha is None and ((exported and not self.server.workspace.export_ready) or (
                 preview and not self.server.workspace.preview_ready
             )):
