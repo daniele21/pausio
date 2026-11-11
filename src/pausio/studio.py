@@ -29,7 +29,7 @@ from pausio.captions import (
 )
 from pausio.media import MediaError, MediaInfo, detect_silences, probe, probe_audio, render, waveform_envelope
 from pausio.planner import CUT_PRESETS, validate_cut_settings, policy_from_cut_settings, propose_segments
-from pausio.project_commands import ProjectTape, ProjectFormatError, UI_COMMANDS
+from pausio.project_commands import ProjectTape, ProjectFormatError, UI_COMMANDS, default_audio_mix
 from pausio.studio_persistence import StudioSessionStore, RecoveryError, default_studio_directory
 
 MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024
@@ -147,6 +147,7 @@ class StudioWorkspace:
                 "transcript": self.transcript,
                 "captions": [dict(c) for c in self.tape.view.captions] if self.tape else [],
                 "audio_clips": [{**dict(c), "available": (self._audio_path(c["asset_sha256"]).is_file() and not self._audio_path(c["asset_sha256"]).is_symlink())} for c in self.tape.view.audio_clips] if self.tape else [],
+                "audio_mix": dict(self.tape.view.audio_mix) if self.tape else default_audio_mix(),
                 "caption_style": self.tape.view.caption_style if self.tape else "social",
                 "caption_config": self.tape.view.caption_config if self.tape else CAPTION_PRESETS["social"],
                 "caption_presets": CAPTION_PRESETS,
@@ -607,6 +608,7 @@ class StudioWorkspace:
                         current_captions = self.tape.view.captions
                         current_style = self.tape.view.caption_style
                         current_config = self.tape.view.caption_config
+                    current_audio_mix = dict(self.tape.view.audio_mix)
                     mapped = remap_captions(current_captions, plan.segments)
                     render(
                         source, self.directory / ("preview.mp4" if kind == "preview" else "export.mp4"),
@@ -614,7 +616,7 @@ class StudioWorkspace:
                         size=(540, 960) if kind == "preview" else (1080, 1920),
                         captions=mapped, caption_style=current_style,
                         caption_config=current_config,
-                        audio_fx=active_fx,
+                        audio_fx=active_fx, audio_mix=current_audio_mix,
                     )
                     with self.lock:
                         if kind == "preview":
