@@ -24,6 +24,7 @@ from urllib.parse import unquote, urlsplit
 from pausio import __version__
 from pausio.local_asr import transcribe_video_local, validate_asr_settings
 from pausio.domain import EditPlan, Interval
+from pausio.captions import CAPTION_STYLES, propose_captions, remap_captions
 from pausio.media import MediaInfo, detect_silences, probe, render, waveform_envelope
 from pausio.planner import CUT_PRESETS, validate_cut_settings, policy_from_cut_settings, propose_segments
 from pausio.project_commands import ProjectTape, ProjectFormatError, UI_COMMANDS
@@ -135,6 +136,11 @@ class StudioWorkspace:
                 "analysis_settings": self.tape.view.analysis_settings if self.tape else None,
                 "detected_silences": self.tape.view.detected_silences if self.tape else None,
                 "transcript": self.transcript,
+                "captions": [dict(c) for c in self.tape.view.captions] if self.tape else [],
+                "caption_style": self.tape.view.caption_style if self.tape else "social",
+                "output_captions": remap_captions(
+                    self.tape.view.captions, self.plan.segments
+                ) if self.tape and self.plan and self.tape.view.captions else [],
                 "export_ready": self.export_ready,
                 "preview_ready": self.preview_ready,
                 "waveform_status": self.waveform_status,
@@ -308,6 +314,32 @@ class StudioWorkspace:
                 "values": list(self.waveform or []),
             }
 
+    def generate_captions(self, raw: dict) -> None:
+        """Turn the *current* in-memory ASR draft into a portable edit event."""
+        with self.lock:
+            self._ensure_unlocked()
+            if self.tape is None or self.info is None or self.transcript is None:
+                raise StudioError("Trascrivi prima il parlato per creare sottotitoli.")
+            if not isinstance(raw, dict) or set(raw) != {"revision", "style"}:
+                raise StudioError("Generazione sottotitoli: parametri non validi.")
+            if type(raw["revision"]) is not int or raw["revision"] != self.tape.revision:
+                raise StudioError("Versione progetto non aggiornata. Ricarica e riprova.")
+            if raw["style"] not in CAPTION_STYLES:
+                raise StudioError("Stile sottotitoli non valido.")
+            try:
+                proposals = propose_captions(
+                    self.transcript, source_duration_ms=self.info.duration_ms
+                )
+                if not proposals:
+                    raise ValueError("La trascrizione non contiene parole da sottotitolare.")
+                cues = [{"id": uuid.uuid4().hex, **row} for row in proposals]
+                next_tape = self.tape.append(
+                    "caption.set", {"style": raw["style"], "cues": cues}
+                )
+            except (ValueError, ProjectFormatError) as exc:
+                raise StudioError(str(exc)) from exc
+            self._install_tape(next_tape)
+
     def command(self, raw: dict) -> None:
         """Execute a version-checked typed command requested by the Studio UI."""
         with self.lock:
@@ -476,10 +508,16 @@ class StudioWorkspace:
                         self.transcript = result
                 elif kind in {"render", "preview"}:
                     assert plan is not None
+                    with self.lock:
+                        assert self.tape is not None
+                        current_captions = self.tape.view.captions
+                        current_style = self.tape.view.caption_style
+                    mapped = remap_captions(current_captions, plan.segments)
                     render(
                         source, self.directory / ("preview.mp4" if kind == "preview" else "export.mp4"),
                         plan.segments, has_audio=plan.has_audio, overwrite=True,
                         size=(540, 960) if kind == "preview" else (1080, 1920),
+                        captions=mapped, caption_style=current_style,
                     )
                     with self.lock:
                         if kind == "preview":
@@ -600,6 +638,10 @@ class StudioHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/command":
                 self.server.workspace.command(self._read_json())
+                self._json(200, self.server.workspace.snapshot())
+                return
+            if path == "/api/captions/generate":
+                self.server.workspace.generate_captions(self._read_json())
                 self._json(200, self.server.workspace.snapshot())
                 return
             if path == "/api/project/import":

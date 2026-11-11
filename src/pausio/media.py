@@ -13,6 +13,7 @@ from dataclasses import asdict, dataclass
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
+from pausio.captions import ass_document
 from pausio.domain import Interval
 
 
@@ -138,6 +139,7 @@ def render(
     source: Path, output: Path, segments: tuple[Interval, ...], *,
     has_audio: bool, overwrite: bool = False, dry_run: bool = False,
     size: tuple[int, int] = (1080, 1920),
+    captions: list[dict] | None = None, caption_style: str = "social",
 ) -> list[str]:
     """Render ordered intervals in one re-encode; preserve aspect ratio with padding.
 
@@ -154,6 +156,11 @@ def render(
         raise MediaError("output filename must end in .mp4")
     if output.exists() and not overwrite:
         raise MediaError(f"output exists: {output}; pass --overwrite to replace")
+    if captions is not None and not isinstance(captions, list):
+        raise MediaError("captions must be a list or None")
+    # Validate subtitle text/style for both preview and final output.
+    if captions:
+        ass_document(captions, style=caption_style)
 
     components: list[str] = []
     concat_inputs: list[str] = []
@@ -174,12 +181,21 @@ def render(
     )
     components.append(
         f"[joinedv]fps=30,scale={size[0]}:{size[1]}:force_original_aspect_ratio=decrease,"
-        f"pad={size[0]}:{size[1]}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p[outv]"
+        f"pad={size[0]}:{size[1]}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p"
+        + ("[basev]" if captions else "[outv]")
     )
-    def make_args(destination: Path) -> list[str]:
+    def make_args(destination: Path, subtitle_file: Path | None = None) -> list[str]:
+        filters = list(components)
+        if captions:
+            # This name is intentionally created in a private ASCII-only /tmp
+            # directory; FFmpeg filtergraphs are not shell commands. Use a
+            # placeholder for the dry-run command (nothing is executed).
+            path = subtitle_file or Path("/tmp/pausio-ass-preview/captions.ass")
+            filters.append(f"[basev]ass=filename={path.as_posix()}[outv]")
+
         args = [
             require_binary("ffmpeg"), "-hide_banner", "-nostdin", "-y",
-            "-i", str(source), "-filter_complex", ";".join(components),
+            "-i", str(source), "-filter_complex", ";".join(filters),
             "-map", "[outv]",
         ]
         if has_audio:
@@ -198,8 +214,19 @@ def render(
     # A failed encoder cannot corrupt a previous approved export.
     with TemporaryDirectory(prefix=".pausio-", dir=output.parent) as tmp:
         staged_output = Path(tmp) / "render.mp4"
-        args = make_args(staged_output)
-        _run(args, timeout_s=1200)
+        if captions:
+            # /tmp exists on macOS and Linux and has no path quoting hazards.
+            # The dedicated 0700 directory is removed after FFmpeg returns.
+            with TemporaryDirectory(prefix="pausio-ass-", dir="/tmp") as subtitle_tmp:
+                subtitle_file = Path(subtitle_tmp) / "captions.ass"
+                subtitle_file.write_text(
+                    ass_document(captions, style=caption_style), encoding="utf-8"
+                )
+                args = make_args(staged_output, subtitle_file)
+                _run(args, timeout_s=1200)
+        else:
+            args = make_args(staged_output)
+            _run(args, timeout_s=1200)
         if output.exists() and not overwrite:
             # Another process may have written the destination during rendering.
             raise MediaError(f"output appeared during rendering: {output}")
