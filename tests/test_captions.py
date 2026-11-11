@@ -4,7 +4,7 @@ import unittest
 
 from pausio.captions import (
     ass_document, propose_captions, remap_captions,
-    CAPTION_PRESETS, validate_caption_config, default_caption_config
+    CAPTION_PRESETS, CAPTION_FONTS, validate_caption_config, default_caption_config
 )
 from pausio.domain import Interval
 
@@ -102,6 +102,41 @@ class TestCaptionPipeline(unittest.TestCase):
                 validate_caption_config({**custom,**change})
         with self.assertRaises(ValueError):
             validate_caption_config({**custom,"preset":"social"})
+
+    def test_font_family_is_whitelisted_and_emitted_to_ass(self):
+        cues = [{"id": "a" * 32, "start_ms": 100, "end_ms": 1200,
+                 "text": "Prova font"}]
+        self.assertIn("Arial", CAPTION_FONTS)
+        self.assertIn("Georgia", CAPTION_FONTS)
+        for font in CAPTION_FONTS:
+            with self.subTest(font=font):
+                config = {
+                    **default_caption_config(), "preset": "custom",
+                    "font_family": font
+                }
+                self.assertEqual(validate_caption_config(config), config)
+                self.assertIn(
+                    "Style: Caption," + font + ",64,",
+                    ass_document(cues, settings=config)
+                )
+        for bad in ("Arial,Injected", r"Arial\\N", "", "Comic Sans MS", None, 2):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                validate_caption_config({
+                    **default_caption_config(), "preset": "custom",
+                    "font_family": bad,
+                })
+        # Legacy .pausio.json events had no font_family key. They use Arial.
+        legacy = default_caption_config()
+        legacy.pop("font_family")
+        self.assertEqual(
+            validate_caption_config(legacy)["font_family"], "Arial"
+        )
+        old_custom = {**legacy, "preset": "custom", "x_pct": 61}
+        self.assertEqual(
+            validate_caption_config(old_custom)["font_family"], "Arial"
+        )
+        with self.assertRaises(ValueError):
+            validate_caption_config({**legacy, "preset": "social", "x_pct": 61})
 
     def test_no_guessing_or_silent_caption_drops_for_malformed_asr(self):
         for value in (-1, True, 5000):
