@@ -343,8 +343,24 @@ async function commitAudioBus(bus,changes){
   await edit("audio.mixer.configure",next);
 }
 function ensureLiveAudioPreview(){
-  // Rendered MP4s do not update instantly when a mixer control changes.
-  if(mode==="rendered")changeMode("original");
+  // Switching via changeMode() would rebuild and detach the slider while
+  // dragging. Switch only the media source; the next saved event redraws UI.
+  if(mode!=="rendered"||!project?.media)return;
+  const sourceAt=sourceFromOutput(Math.round((v.currentTime||0)*1000));
+  v.pause();pauseLiveFx();
+  mode="original";previewSourceMode="original";
+  v.src="/api/media?v="+encodeURIComponent(mediaKey);
+  v.addEventListener("loadedmetadata",()=>{
+    v.currentTime=Math.min(v.duration||0,sourceAt/1000);
+    transport();
+  },{once:true});
+  v.load();
+  for(const button of document.querySelectorAll("[data-mode]")){
+    const selected=button.dataset.mode==="original";
+    button.classList.toggle("active",selected);
+    button.setAttribute("aria-pressed",String(selected));
+  }
+  updateFxMonitorUI();syncVoicePlayback();transport();
 }
 function setupAudioMixer(){
   for(const bus of ["voice","fx"]){
