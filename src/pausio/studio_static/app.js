@@ -342,21 +342,28 @@ async function commitAudioBus(bus,changes){
   }
   await edit("audio.mixer.configure",next);
 }
+function ensureLiveAudioPreview(){
+  // Rendered MP4s do not update instantly when a mixer control changes.
+  if(mode==="rendered")changeMode("original");
+}
 function setupAudioMixer(){
   for(const bus of ["voice","fx"]){
     const slider=el(bus+"-gain"),field=bus+"_gain_db",muted=bus+"_muted";
     slider.addEventListener("input",()=>{
+      ensureLiveAudioPreview();
       const value=Number(slider.value);
       audioMixerDraft={...currentAudioMix(),[field]:value};
       paintAudioMixer();syncVoicePlayback();syncLiveFx();
     });
     slider.addEventListener("change",()=>run(()=>commitAudioBus(bus,{[field]:Number(slider.value)})));
-    el(bus+"-mute").addEventListener("click",()=>run(()=>commitAudioBus(bus,{
-      [muted]:!(project?.audio_mix||baseAudioMix())[muted]
-    })));
-    el(bus+"-reset").addEventListener("click",()=>run(()=>commitAudioBus(bus,{
-      [field]:0,[muted]:false
-    })));
+    el(bus+"-mute").addEventListener("click",()=>{
+      ensureLiveAudioPreview();
+      run(()=>commitAudioBus(bus,{[muted]:!(project?.audio_mix||baseAudioMix())[muted]}));
+    });
+    el(bus+"-reset").addEventListener("click",()=>{
+      ensureLiveAudioPreview();
+      run(()=>commitAudioBus(bus,{[field]:0,[muted]:false}));
+    });
   }
 }
 setupAudioMixer();
@@ -402,6 +409,16 @@ function update(next){
     for(const id of [...liveFxPlayers.keys()])disposeLiveFx(id);
     paintWaveform();
     v.pause();v.src="/api/media?v="+encodeURIComponent(mediaKey);v.load();tab("cuts");
+  }
+  if(mode==="rendered"&&!next.preview_ready&&next.media&&mediaKey===next.media_id){
+    const sourceAt=sourceFromOutput(Math.round((v.currentTime||0)*1000));
+    v.pause();pauseLiveFx();mode="original";previewSourceMode="original";
+    v.src="/api/media?v="+encodeURIComponent(mediaKey);
+    v.addEventListener("loadedmetadata",()=>{
+      v.currentTime=Math.min(v.duration||0,sourceAt/1000);
+      transport();
+    },{once:true});
+    v.load();
   }
   el("empty-state").hidden=has;el("video-workspace").hidden=!has;
   el("stage-title").textContent=has?"Anteprima del tuo video":"Il tuo spazio creativo";
@@ -816,6 +833,7 @@ function drawFx(){
         });
       }
       input.addEventListener("change",()=>run(async()=>{
+        if(key==="gain_db")ensureLiveAudioPreview();
         if(!input.checkValidity()||!Number.isFinite(Number(input.value)))
           throw Error("Valore audio fuori dai limiti.");
         const value=key==="start_ms"?Math.round(Number(input.value)*1000):Number(input.value);
@@ -846,19 +864,26 @@ function drawFx(){
     clipMute.textContent=clip.muted?"Riattiva":"Silenzia";
     clipMute.setAttribute("aria-label",(clip.muted?"Riattiva":"Silenzia")+" effetto "+clip.filename);
     clipMute.setAttribute("aria-pressed",String(!!clip.muted));
-    clipMute.addEventListener("click",()=>run(()=>edit("audio.clip.mix",{
-      clip_id:clip.id,gain_db:clip.gain_db,muted:!clip.muted
-    })));
+    clipMute.addEventListener("click",()=>{
+      ensureLiveAudioPreview();
+      run(()=>edit("audio.clip.mix",{
+        clip_id:clip.id,gain_db:clip.gain_db,muted:!clip.muted
+      }));
+    });
     const clipReset=document.createElement("button");clipReset.type="button";
     clipReset.className="clip-reset";clipReset.disabled=working();
     clipReset.textContent="↺";
     clipReset.title="Ripristina volume effetto al livello iniziale (-12 dB)";
     clipReset.setAttribute("aria-label","Ripristina volume effetto "+clip.filename);
-    clipReset.addEventListener("click",()=>run(async()=>{
-      if(clip.gain_db===-12&&!clip.muted)return;
-      await edit("audio.clip.mix",{clip_id:clip.id,gain_db:-12,muted:false});
-    }));
+    clipReset.addEventListener("click",()=>{
+      ensureLiveAudioPreview();
+      run(async()=>{
+        if(clip.gain_db===-12&&!clip.muted)return;
+        await edit("audio.clip.mix",{clip_id:clip.id,gain_db:-12,muted:false});
+      });
+    });
     slider.addEventListener("input",()=>{
+      ensureLiveAudioPreview();
       const value=Number(slider.value);
       level.textContent=gainText(value);
       slider.setAttribute("aria-valuetext",gainText(value));
