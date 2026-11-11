@@ -377,6 +377,11 @@
           aria-label="Timeline originale: clicca per spostarti, usa le maniglie sui segmenti per regolare i tagli" hidden>
           <canvas class="waveform-canvas" id="waveform-canvas" aria-hidden="true"></canvas>
           <div class="timeline-regions" id="timeline-regions"></div>
+          <div class="timeline-fx-track" id="timeline-fx-track" role="group"
+               aria-label="Effetti audio allineati alla traccia originale">
+            <div class="fx-lane" id="fx-lane"></div>
+            <span class="fx-track-empty" id="fx-track-empty" aria-hidden="true">FX · Importa un riser per aggiungerlo qui</span>
+          </div>
           <div class="playhead" id="playhead"><span></span></div>
         </div>
       </div>
@@ -394,7 +399,6 @@
         </div>
         <button class="button button-outline" id="fx-import" type="button">+ Importa audio</button>
       </div>
-      <div class="fx-lane" id="fx-lane" role="group" aria-label="Traccia FX sul video montato"></div>
       <p class="fx-hint" id="fx-hint">Nessun effetto. Seleziona un punto nel video e importa un file MP3, WAV, M4A, AAC, FLAC o OGG.</p>
       <div class="fx-list" id="fx-list"></div>
     </section>
