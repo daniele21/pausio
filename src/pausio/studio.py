@@ -77,7 +77,7 @@ class StudioWorkspace:
             try:
                 recovered = self.store.recover()
                 if recovered:
-                    source, tape, from_backup = recovered
+                    source, tape, transcript, from_backup = recovered
                     info = probe(source)
                     tape.require_media(
                         sha256=tape.media["sha256"],
@@ -89,6 +89,7 @@ class StudioWorkspace:
                     self.media_id = uuid.uuid4().hex
                     self.info = info
                     self._install_tape(tape, persist=False)
+                    self.transcript = transcript
                     self.recovered = True
                     if from_backup:
                         self.recovery_warning = (
@@ -232,7 +233,7 @@ class StudioWorkspace:
             if proposal is not None else None
         )
         if persist and self.store:
-            self.store.save(tape, self.source)
+            self.store.save(tape, self.source, transcript=self.transcript)
         self.tape = tape
         self.plan = new_plan
         self.suggested_plan = suggested_plan
@@ -505,6 +506,11 @@ class StudioWorkspace:
                     assert asr_options is not None
                     result = transcribe_video_local(source, **asr_options)
                     with self.lock:
+                        # Publish only after the private checkpoint is durable:
+                        # a disk-write error must not claim ASR was saved.
+                        if self.store:
+                            assert self.tape is not None and self.source is not None
+                            self.store.save(self.tape, self.source, transcript=result)
                         self.transcript = result
                 elif kind in {"render", "preview"}:
                     assert plan is not None
