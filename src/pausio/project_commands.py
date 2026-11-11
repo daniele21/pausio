@@ -13,7 +13,10 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
-from pausio.captions import CAPTION_STYLES, MAX_CAPTIONS, MAX_CAPTION_LENGTH
+from pausio.captions import (
+    CAPTION_STYLES, MAX_CAPTIONS, MAX_CAPTION_LENGTH,
+    default_caption_config, validate_caption_config
+)
 from pausio.domain import EditPlan, Interval
 from pausio.planner import CUT_PRESETS, validate_cut_settings
 
@@ -38,6 +41,7 @@ _TYPES = frozenset({
     "caption.set",
     "caption.correct",
     "caption.style",
+    "caption.configure",
     "caption.clear",
 })
 UI_COMMANDS = frozenset(_TYPES - {"analysis.propose", "timeline.replace"})
@@ -158,6 +162,7 @@ class ProjectView:
     detected_silences: int | None = None
     captions: tuple[dict, ...] = ()
     caption_style: str = "social"
+    caption_config: dict | None = None
 
 
 def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
@@ -169,6 +174,7 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
     detected_silences: int | None = None
     captions: list[dict] = []
     caption_style = "social"
+    caption_config = default_caption_config()
     used_events: set[str] = set()
 
     for command in commands:
@@ -263,6 +269,7 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
                 raise ProjectFormatError("Stile sottotitoli non supportato.")
             captions = _captions(payload["cues"], duration)
             caption_style = payload["style"]
+            caption_config = default_caption_config(caption_style)
             approved = False
         elif kind == "caption.correct":
             _object(payload, {"caption_id", "text"}, kind)
@@ -280,6 +287,17 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
             if payload["style"] not in CAPTION_STYLES or not captions:
                 raise ProjectFormatError("Stile sottotitoli non disponibile.")
             caption_style = payload["style"]
+            caption_config = default_caption_config(caption_style)
+            approved = False
+        elif kind == "caption.configure":
+            _object(payload, {"config"}, kind)
+            if not captions:
+                raise ProjectFormatError("Genera prima i sottotitoli.")
+            try:
+                caption_config = validate_caption_config(payload["config"])
+            except ValueError as exc:
+                raise ProjectFormatError(str(exc)) from exc
+            caption_style = caption_config["preset"]
             approved = False
         elif kind == "caption.clear":
             _object(payload, set(), kind)
@@ -296,6 +314,7 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
         detected_silences=detected_silences,
         captions=tuple(copy.deepcopy(captions)),
         caption_style=caption_style,
+        caption_config=copy.deepcopy(caption_config),
     )
 
 

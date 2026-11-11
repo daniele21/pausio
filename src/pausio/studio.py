@@ -24,7 +24,7 @@ from urllib.parse import unquote, urlsplit
 from pausio import __version__
 from pausio.local_asr import transcribe_video_local, validate_asr_settings
 from pausio.domain import EditPlan, Interval
-from pausio.captions import CAPTION_STYLES, propose_captions, remap_captions
+from pausio.captions import CAPTION_STYLES, CAPTION_PRESETS, propose_captions, remap_captions
 from pausio.media import MediaInfo, detect_silences, probe, render, waveform_envelope
 from pausio.planner import CUT_PRESETS, validate_cut_settings, policy_from_cut_settings, propose_segments
 from pausio.project_commands import ProjectTape, ProjectFormatError, UI_COMMANDS
@@ -139,6 +139,8 @@ class StudioWorkspace:
                 "transcript": self.transcript,
                 "captions": [dict(c) for c in self.tape.view.captions] if self.tape else [],
                 "caption_style": self.tape.view.caption_style if self.tape else "social",
+                "caption_config": self.tape.view.caption_config if self.tape else CAPTION_PRESETS["social"],
+                "caption_presets": CAPTION_PRESETS,
                 "output_captions": remap_captions(
                     self.tape.view.captions, self.plan.segments
                 ) if self.tape and self.plan and self.tape.view.captions else [],
@@ -518,12 +520,14 @@ class StudioWorkspace:
                         assert self.tape is not None
                         current_captions = self.tape.view.captions
                         current_style = self.tape.view.caption_style
+                        current_config = self.tape.view.caption_config
                     mapped = remap_captions(current_captions, plan.segments)
                     render(
                         source, self.directory / ("preview.mp4" if kind == "preview" else "export.mp4"),
                         plan.segments, has_audio=plan.has_audio, overwrite=True,
                         size=(540, 960) if kind == "preview" else (1080, 1920),
                         captions=mapped, caption_style=current_style,
+                        caption_config=current_config,
                     )
                     with self.lock:
                         if kind == "preview":
