@@ -876,6 +876,9 @@ a { color: inherit; text-decoration: none; }
     scrollbar-width: thin;
   }
   .rail-intro, .rail-footer { display: none; }
+  .rail .steps { display: none; }
+  .app-shell[data-workspace="media"] .rail .tools { display: block; }
+  .app-shell[data-workspace="media"] .rail #transcribe-action { display: none; }
   .workspace-context { display: block; margin-bottom: 17px; }
   .workspace-context .eyebrow { margin-bottom: 7px; }
   .workspace-context h2 {
