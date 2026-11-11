@@ -8,7 +8,8 @@ let didNotifyRecovery = false;
 let waveformData = null, waveformRequestedFor = null, timelineZoom = 1, previewSourceMode = "original";
 let dragHandleActive = false;
 let simulationFrame = null;
-let captionDraft = null, captionSource = null, captionPositionMode = false;
+let captionDraft = null, captionSource = null, captionMediaKey = null;
+let captionPositionMode = false;
 let captionPointer = null;
 const captionNumberFields = ["x_pct","y_pct","font_size","outline_size"];
 const captionColorFields = ["text_color","outline_color","background_color"];
@@ -30,9 +31,12 @@ function syncCaptionSettings(next,busy){
   const config=next.caption_config||next.caption_presets?.social;
   if(!config)return;
   const key=JSON.stringify([next.media_id,config]);
+  if(next.media_id!==captionMediaKey){
+    captionMediaKey=next.media_id;
+    captionPositionMode=false;
+  }
   if(key!==captionSource){
     captionSource=key; captionDraft={...config}; renderCaptionSettings();
-    captionPositionMode=false;
   }
   const canEdit=(next.captions||[]).length>0;
   if(!canEdit)captionPositionMode=false;

@@ -340,6 +340,39 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.page.locator("#caption-style").select_option("minimal")
         changed=self.wait_state("revision",state["project_revision"]+1)
         self.assertEqual(changed["caption_style"],"minimal")
+        self.assertEqual(changed["caption_config"]["font_size"],48)
+        # Preset Riquadro, then an actual on-stage drag and keyboard adjustment.
+        self.page.locator("#caption-style").select_option("boxed")
+        box_state=self.wait_state("revision",changed["project_revision"]+1)
+        self.assertEqual(box_state["caption_style"],"boxed")
+        self.assertTrue(box_state["caption_config"]["background"])
+        self.page.locator("#caption-appearance summary").click()
+        self.page.locator("#caption-drag-toggle").click()
+        self.wait_condition(lambda:self.page.locator("#caption-overlay").get_attribute(
+            "role")=="slider")
+        frame=self.page.locator(".aspect-canvas").bounding_box()
+        label=self.page.locator("#caption-overlay").bounding_box()
+        self.assertIsNotNone(frame)
+        self.assertIsNotNone(label)
+        self.page.mouse.move(label["x"]+label["width"]/2,label["y"]+label["height"]/2)
+        self.page.mouse.down()
+        self.page.mouse.move(
+            frame["x"]+frame["width"]*.64,
+            frame["y"]+frame["height"]*.60,steps=5
+        )
+        self.page.mouse.up()
+        dragged=self.wait_state("revision",box_state["project_revision"]+1)
+        self.assertEqual(dragged["caption_style"],"custom")
+        self.assertAlmostEqual(dragged["caption_config"]["x_pct"],64,delta=3)
+        self.assertAlmostEqual(dragged["caption_config"]["y_pct"],60,delta=3)
+        self.page.locator("#caption-overlay").focus()
+        self.page.locator("#caption-overlay").press("ArrowUp")
+        keyed=self.wait_state("revision",dragged["project_revision"]+1)
+        self.assertEqual(keyed["caption_config"]["y_pct"],
+                         dragged["caption_config"]["y_pct"]-1)
+        self.page.locator('[data-caption-setting="text_color"]').fill("#FFCC00")
+        recolored=self.wait_state("revision",keyed["project_revision"]+1)
+        self.assertEqual(recolored["caption_config"]["text_color"],"#FFCC00")
         for width,height in [(1440,900),(390,844),(320,700)]:
             self.page.set_viewport_size({"width":width,"height":height})
             self.page.wait_for_timeout(140)
@@ -359,7 +392,8 @@ class StudioPlaywrightAudit(unittest.TestCase):
         commands=json.loads(saved.read_text())["commands"]
         self.assertIn("caption.set",[c["type"] for c in commands])
         self.assertIn("caption.correct",[c["type"] for c in commands])
-        self.assertIn("caption.style",[c["type"] for c in commands])
+        self.assertIn("caption.configure",[c["type"] for c in commands])
+        self.assertEqual(commands[-1]["payload"]["config"]["text_color"],"#FFCC00")
         self.assertFalse(self.errors,self.errors)
 
     def test_pointer_trim_is_single_edit(self):
