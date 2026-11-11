@@ -74,3 +74,9 @@
 **Backward compatibility:** Old project v2 `caption.configure` events omit `font_family`; the replay validator accepts only that known omission and defaults to `Arial`. The JSON schema therefore permits the new key but does not require it, preserving historical project imports. New UI edits include it, and every font change invalidates approval and cached preview/render via existing typed-event semantics.
 
 **Limits:** The operating system/libass must have the requested font installed; substitution can differ between the HTML canvas and exported MP4 on another machine. Display a warning and require real FFmpeg preview before delivery. Supporting user-supplied font uploads will need separate validated asset packaging and licensing policy.
+
+## ADR 013 — Mobile capture is a separate static, local-first recording surface
+
+**Decision:** mobile teleprompter capture runs in the browser, not through Studio's loopback Python API. `getUserMedia` + `MediaRecorder` record the raw camera/microphone tracks; a DOM overlay scrolls the script strictly in preview, without burning the gobbo into the video. The final mobile action is an explicit download or system share of the recorded take (format depends on browser); users transfer and import it on desktop manually. No implicit networking, cloud processing or local Studio exposure. Source assets are shared between the local Studio `/capture` route and an isolated GitHub Pages static deployment.
+
+**Boundaries:** this is acquisition, not a timeline edit; adjustable script/scroll settings do not alter exported pixels. Local storage contains only script/preferences; completed take blobs are not durable until downloaded. The full editor's command-led import/replay remains unchanged. Native/mobile MP4 transcoding, background recovery, LAN pairing, voice-follow and persistent take library are separate future ADRs. GitHub Pages availability and real Safari/Galaxy verification are deployment gates.
