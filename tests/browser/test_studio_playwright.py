@@ -117,6 +117,44 @@ class StudioPlaywrightAudit(unittest.TestCase):
                             timeout=30000)
         return result
 
+    def test_custom_audio_fx_import_in_real_browser(self):
+        self.upload_analyze()
+        effect = self.root / "personal-riser.wav"
+        with wave.open(str(effect), "wb") as wav:
+            wav.setnchannels(1);wav.setsampwidth(2);wav.setframerate(22050)
+            data = b"".join(struct.pack("<h", int(10000 * (i/13230)
+                             * math.sin(2*math.pi*700*i/22050)))
+                            for i in range(13230))
+            wav.writeframes(data)
+        self.page.evaluate("document.getElementById('preview-video').currentTime=2.5")
+        start = self.state()["project_revision"]
+        self.page.locator("#fx-input").set_input_files(str(effect))
+        self.wait_state("revision", start + 1)
+        current = self.state()
+        self.assertEqual(len(current["audio_clips"]), 1)
+        self.assertTrue(current["audio_clips"][0]["available"])
+        self.assertGreaterEqual(current["audio_clips"][0]["start_ms"], 1000)
+        self.assertTrue(self.page.locator("#fx-panel").is_visible())
+        self.assertEqual(self.page.locator(".fx-item").count(), 1)
+        self.assertEqual(self.page.locator(".fx-item audio").count(), 1)
+        revision = current["project_revision"]
+        self.page.locator('.fx-item input[aria-label^="Volume"]').fill("-18")
+        self.page.locator('.fx-item input[aria-label^="Volume"]').dispatch_event("change")
+        self.wait_state("revision", revision + 1)
+        self.assertEqual(self.state()["audio_clips"][0]["gain_db"], -18)
+        self.page.locator("#preview-action").click()
+        self.wait_state("preview", "completed")
+        for width in (390, 320):
+            self.page.set_viewport_size({"width":width,"height":844})
+            self.page.wait_for_timeout(120)
+            self.shot(f"fx-import-{width}")
+            self.assertLessEqual(metrics(self.page)["scrollWidth"],width+3)
+        self.page.locator(".fx-remove").click()
+        self.wait_condition(lambda: len(self.state()["audio_clips"])==0)
+        self.page.locator("#undo-action").click()
+        self.wait_condition(lambda: len(self.state()["audio_clips"])==1)
+        self.assertFalse(self.errors,self.errors)
+
     def test_layout_across_five_viewports(self):
         results={}
         for width,height in [(1440,900),(1024,768),(768,900),(390,844),(320,700)]:
