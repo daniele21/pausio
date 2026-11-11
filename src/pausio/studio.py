@@ -370,6 +370,25 @@ class StudioWorkspace:
                 "values": list(self.waveform or []),
             }
 
+    def get_audio_waveform(self, digest: str) -> dict:
+        """Return real FFmpeg envelope for a user-imported FX, never a fake waveform."""
+        with self.lock:
+            clip = next(
+                (row for row in (self.tape.view.audio_clips if self.tape else ())
+                 if row["asset_sha256"] == digest), None
+            )
+            if clip is None:
+                raise StudioError("Effetto audio non presente nel progetto.")
+            path = self._audio_path(digest)
+            if path.is_symlink() or not path.is_file():
+                raise StudioError("Effetto audio mancante: reimporta il file.")
+            with path.open("rb") as handle:
+                if hashlib.file_digest(handle, "sha256").hexdigest() != digest:
+                    raise StudioError("Effetto audio modificato: reimporta il file.")
+            duration_ms = clip["duration_ms"]
+        peaks = waveform_envelope(path, duration_ms, has_audio=True, bins=900)
+        return {"asset_sha256": digest, "duration_ms": duration_ms, "values": peaks}
+
     def generate_captions(self, raw: dict) -> None:
         """Turn the *current* in-memory ASR draft into a portable edit event."""
         with self.lock:
@@ -853,6 +872,13 @@ class StudioHandler(BaseHTTPRequestHandler):
             )
             self.end_headers()
             self.wfile.write(content)
+            return
+        if path.startswith("/api/audio/waveform/"):
+            try:
+                self._json(200, self.server.workspace.get_audio_waveform(
+                    path.removeprefix("/api/audio/waveform/")))
+            except (StudioError, MediaError) as exc:
+                self._failed(400, str(exc))
             return
         if path.startswith("/api/audio/"):
             self._media(False, False, audio_sha=path.removeprefix("/api/audio/"))
