@@ -291,6 +291,17 @@ class StudioMediaWorkflowTests(StudioHttpTests):
                                        headers={"Range": "bytes=0-31"})
         self.assertEqual(status, 206)
         self.assertEqual(data, raw[:32])
+        status, _, wave = self.request(
+            "GET", "/api/audio/waveform/" + clip["asset_sha256"]
+        )
+        self.assertEqual(status, 200, wave[:200])
+        waveform = json.loads(wave)
+        self.assertEqual(waveform["asset_sha256"], clip["asset_sha256"])
+        self.assertEqual(len(waveform["values"]), 900)
+        self.assertGreater(max(waveform["values"]), 0)
+        self.assertEqual(
+            self.request("GET", "/api/audio/waveform/" + "0"*64)[0], 400
+        )
         status, _, project_bytes = self.request("GET", "/api/project/export")
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(project_bytes)["commands"][-1]["type"], "audio.add")
