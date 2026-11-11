@@ -280,7 +280,37 @@
               <select id="caption-style">
                 <option value="social">Social · grande e leggibile</option>
                 <option value="minimal">Minimal · discreto</option>
+                <option value="boxed">Riquadro · contrasto elevato</option>
+                <option value="custom">Personalizzato</option>
               </select>
+              <details class="caption-appearance" id="caption-appearance">
+                <summary>Posizione e aspetto <span aria-hidden="true">↗</span></summary>
+                <p class="caption-hint">Sposta tutti i sottotitoli insieme, con la stessa posizione nel video esportato.</p>
+                <div class="caption-config-grid">
+                  <label>Orizzontale <output id="caption-x-output">50%</output>
+                    <input type="range" data-caption-setting="x_pct" min="15" max="85" step="1" value="50">
+                  </label>
+                  <label>Verticale <output id="caption-y-output">80%</output>
+                    <input type="range" data-caption-setting="y_pct" min="15" max="85" step="1" value="80">
+                  </label>
+                  <label>Dimensione testo <output id="caption-font-output">64</output>
+                    <input type="range" data-caption-setting="font_size" min="32" max="100" step="2" value="64">
+                  </label>
+                  <label>Spessore contorno <output id="caption-outline-output">4</output>
+                    <input type="range" data-caption-setting="outline_size" min="0" max="10" step="1" value="4">
+                  </label>
+                  <div class="caption-color-pair">
+                    <label>Testo <input type="color" data-caption-setting="text_color" value="#FFFFFF"></label>
+                    <label>Contorno <input type="color" data-caption-setting="outline_color" value="#000000"></label>
+                  </div>
+                  <label class="caption-checkbox"><input type="checkbox" data-caption-setting="background"> Sfondo pieno</label>
+                  <label>Colore sfondo <input type="color" data-caption-setting="background_color" value="#000000"></label>
+                </div>
+                <button type="button" id="caption-drag-toggle" class="button button-outline button-full" aria-pressed="false">
+                  Sposta sull'anteprima
+                </button>
+                <p class="caption-hint">Quando attivo, trascina il testo sul video oppure usa le frecce della tastiera (⇧ per passi da 5%).</p>
+              </details>
               <button type="button" class="button button-primary button-full" id="caption-generate">+ Aggiungi sottotitoli</button>
               <div id="caption-active" hidden>
                 <div class="caption-summary"><span id="caption-count"></span><button type="button" class="text-button" id="caption-clear">Rimuovi</button></div>

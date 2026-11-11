@@ -493,7 +493,8 @@
                   "type": "string",
                   "enum": [
                     "social",
-                    "minimal"
+                    "minimal",
+                    "boxed"
                   ]
                 }
               }
@@ -561,7 +562,8 @@
                   "type": "string",
                   "enum": [
                     "social",
-                    "minimal"
+                    "minimal",
+                    "boxed"
                   ]
                 }
               }
@@ -588,6 +590,93 @@
               "additionalProperties": false,
               "required": [],
               "properties": {}
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "payload"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "type": {
+              "const": "caption.configure"
+            },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "config"
+              ],
+              "properties": {
+                "config": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "preset",
+                    "x_pct",
+                    "y_pct",
+                    "font_size",
+                    "text_color",
+                    "outline_color",
+                    "outline_size",
+                    "background",
+                    "background_color"
+                  ],
+                  "properties": {
+                    "preset": {
+                      "type": "string",
+                      "enum": [
+                        "social",
+                        "minimal",
+                        "boxed",
+                        "custom"
+                      ]
+                    },
+                    "x_pct": {
+                      "type": "integer",
+                      "minimum": 15,
+                      "maximum": 85
+                    },
+                    "y_pct": {
+                      "type": "integer",
+                      "minimum": 15,
+                      "maximum": 85
+                    },
+                    "font_size": {
+                      "type": "integer",
+                      "minimum": 32,
+                      "maximum": 100
+                    },
+                    "outline_size": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 10
+                    },
+                    "text_color": {
+                      "type": "string",
+                      "pattern": "^#[0-9A-F]{6}$"
+                    },
+                    "outline_color": {
+                      "type": "string",
+                      "pattern": "^#[0-9A-F]{6}$"
+                    },
+                    "background_color": {
+                      "type": "string",
+                      "pattern": "^#[0-9A-F]{6}$"
+                    },
+                    "background": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
             }
           }
         }

@@ -17,7 +17,7 @@
 - [ ] Evaluate VAD/ASR quality controls inspired by ClosedRoom, retaining strict no-silent-speech-removal policy.
 - [ ] Integrate Pausio transcript with reviewable edit proposals without automatically removing speech.
 - [ ] Detect suspected repeats and fillers as **review prompts**, never silent deletion.
-- [x] Editable burned-in subtitles using actual Pausio ASR word timestamps or segment fallback; source-to-output remapping, social/minimal presets, FFmpeg preview/export, and typed portable commands.
+- [x] Editable burned-in subtitles using actual Pausio ASR word timestamps or segment fallback; source-to-output remapping, social/minimal/boxed presets, custom position/font/color/outline/background, drag/key editing, FFmpeg preview/export, and typed portable commands.
 - [ ] Verify platform-specific safe areas and font fallback on real A56 footage and social uploads.
 - [ ] Test natural pacing vs aggressive auto cuts using three real clips.
 
@@ -48,7 +48,8 @@
 - [x] Undo/Redo via typed history commands and v2 cursor/revision, with v1 project import migration.
 - [x] Private autosave of active video + project, atomic checkpoint, previous checkpoint fallback, media SHA-256 validation, single-process lock and explicit delete.
 - [ ] Validate visual/keyboard Undo/Redo UX and restart recovery on a real Mac with a Samsung A56 video.
-- [ ] Extend autosave to separate user-managed multi-project workspaces and optionally persist transcripts (with clear privacy controls).
+- [x] Persist complete ASR transcripts privately per active session, with atomic recovery, schema v1 migration, media binding, and explicit deletion.
+- [ ] Extend autosave to multiple user-managed workspaces and optional separate transcript export.
 - [ ] New commands for subtitles, audio effects, crop, export presets and AI prompt editing.
 - [ ] Optional export adapters (OpenTimelineIO / CapCut) without changing the canonical format.
 

@@ -555,6 +555,18 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         self.assertEqual(status,200,data)
         corrected=json.loads(data)
         self.assertEqual(corrected["captions"][0]["text"],"CIAO MONDO!")
+        # Config is a typed command, with an actual ASS change in the rendered MP4.
+        settings={**corrected["caption_presets"]["social"],
+                  "preset":"custom","x_pct":62,"y_pct":56,
+                  "font_size":86}
+        status,_,data=self.post("/api/command",{
+            "revision":corrected["project_revision"],"type":"caption.configure",
+            "payload":{"config":settings}
+        })
+        self.assertEqual(status,200,data)
+        configured=json.loads(data)
+        self.assertEqual(configured["caption_config"],settings)
+        self.assertFalse(configured["approved"])
         # Preview requires an edit plan, and the same captions as final export.
         status,_,data=self.post("/api/jobs",{"kind":"analyze"})
         self.assertEqual(status,202,data)
@@ -577,6 +589,7 @@ class StudioMediaWorkflowTests(StudioHttpTests):
             if pixels[i]>190 and pixels[i+1]>190 and pixels[i+2]>190),100)
         exported=json.loads(self.request("GET","/api/project/export")[2])
         self.assertIn("caption.correct",[c["type"] for c in exported["commands"]])
+        self.assertIn("caption.configure",[c["type"] for c in exported["commands"]])
         self.assertEqual(
             [c["text"] for c in self.workspace.tape.view.captions],["CIAO MONDO!"])
         # Imported caption edits do not depend on a persisted ASR transcript.
@@ -584,6 +597,7 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         status,_,data=self.post("/api/project/import",exported)
         self.assertEqual(status,200,data)
         self.assertEqual(json.loads(data)["captions"][0]["text"],"CIAO MONDO!")
+        self.assertEqual(json.loads(data)["caption_config"],settings)
         self.assertEqual(self.request("GET","/api/captions/generate")[0],404)
 
     def test_export_requires_matching_uploaded_video(self):

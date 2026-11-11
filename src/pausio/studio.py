@@ -24,7 +24,7 @@ from urllib.parse import unquote, urlsplit
 from pausio import __version__
 from pausio.local_asr import transcribe_video_local, validate_asr_settings
 from pausio.domain import EditPlan, Interval
-from pausio.captions import CAPTION_STYLES, propose_captions, remap_captions
+from pausio.captions import CAPTION_STYLES, CAPTION_PRESETS, propose_captions, remap_captions
 from pausio.media import MediaInfo, detect_silences, probe, render, waveform_envelope
 from pausio.planner import CUT_PRESETS, validate_cut_settings, policy_from_cut_settings, propose_segments
 from pausio.project_commands import ProjectTape, ProjectFormatError, UI_COMMANDS
@@ -77,7 +77,7 @@ class StudioWorkspace:
             try:
                 recovered = self.store.recover()
                 if recovered:
-                    source, tape, from_backup = recovered
+                    source, tape, transcript, from_backup = recovered
                     info = probe(source)
                     tape.require_media(
                         sha256=tape.media["sha256"],
@@ -89,6 +89,7 @@ class StudioWorkspace:
                     self.media_id = uuid.uuid4().hex
                     self.info = info
                     self._install_tape(tape, persist=False)
+                    self.transcript = transcript
                     self.recovered = True
                     if from_backup:
                         self.recovery_warning = (
@@ -138,6 +139,8 @@ class StudioWorkspace:
                 "transcript": self.transcript,
                 "captions": [dict(c) for c in self.tape.view.captions] if self.tape else [],
                 "caption_style": self.tape.view.caption_style if self.tape else "social",
+                "caption_config": self.tape.view.caption_config if self.tape else CAPTION_PRESETS["social"],
+                "caption_presets": CAPTION_PRESETS,
                 "output_captions": remap_captions(
                     self.tape.view.captions, self.plan.segments
                 ) if self.tape and self.plan and self.tape.view.captions else [],
@@ -232,7 +235,7 @@ class StudioWorkspace:
             if proposal is not None else None
         )
         if persist and self.store:
-            self.store.save(tape, self.source)
+            self.store.save(tape, self.source, transcript=self.transcript)
         self.tape = tape
         self.plan = new_plan
         self.suggested_plan = suggested_plan
@@ -505,6 +508,11 @@ class StudioWorkspace:
                     assert asr_options is not None
                     result = transcribe_video_local(source, **asr_options)
                     with self.lock:
+                        # Publish only after the private checkpoint is durable:
+                        # a disk-write error must not claim ASR was saved.
+                        if self.store:
+                            assert self.tape is not None and self.source is not None
+                            self.store.save(self.tape, self.source, transcript=result)
                         self.transcript = result
                 elif kind in {"render", "preview"}:
                     assert plan is not None
@@ -512,12 +520,14 @@ class StudioWorkspace:
                         assert self.tape is not None
                         current_captions = self.tape.view.captions
                         current_style = self.tape.view.caption_style
+                        current_config = self.tape.view.caption_config
                     mapped = remap_captions(current_captions, plan.segments)
                     render(
                         source, self.directory / ("preview.mp4" if kind == "preview" else "export.mp4"),
                         plan.segments, has_audio=plan.has_audio, overwrite=True,
                         size=(540, 960) if kind == "preview" else (1080, 1920),
                         captions=mapped, caption_style=current_style,
+                        caption_config=current_config,
                     )
                     with self.lock:
                         if kind == "preview":

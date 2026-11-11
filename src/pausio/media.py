@@ -140,6 +140,7 @@ def render(
     has_audio: bool, overwrite: bool = False, dry_run: bool = False,
     size: tuple[int, int] = (1080, 1920),
     captions: list[dict] | None = None, caption_style: str = "social",
+    caption_config: dict | None = None,
 ) -> list[str]:
     """Render ordered intervals in one re-encode; preserve aspect ratio with padding.
 
@@ -160,7 +161,7 @@ def render(
         raise MediaError("captions must be a list or None")
     # Validate subtitle text/style for both preview and final output.
     if captions:
-        ass_document(captions, style=caption_style)
+        ass_document(captions, style=caption_style, settings=caption_config)
 
     components: list[str] = []
     concat_inputs: list[str] = []
@@ -220,7 +221,7 @@ def render(
             with TemporaryDirectory(prefix="pausio-ass-", dir="/tmp") as subtitle_tmp:
                 subtitle_file = Path(subtitle_tmp) / "captions.ass"
                 subtitle_file.write_text(
-                    ass_document(captions, style=caption_style), encoding="utf-8"
+                    ass_document(captions, style=caption_style, settings=caption_config), encoding="utf-8"
                 )
                 args = make_args(staged_output, subtitle_file)
                 _run(args, timeout_s=1200)

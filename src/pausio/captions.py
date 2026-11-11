@@ -11,7 +11,51 @@ from typing import Any
 
 from pausio.domain import Interval
 
-CAPTION_STYLES = ("social", "minimal")
+CAPTION_STYLES = ("social", "minimal", "boxed")
+CAPTION_PRESETS = {
+    "social": {"preset": "social", "x_pct": 50, "y_pct": 80, "font_size": 64,
+               "text_color": "#FFFFFF", "outline_color": "#000000",
+               "outline_size": 4, "background": False, "background_color": "#000000"},
+    "minimal": {"preset": "minimal", "x_pct": 50, "y_pct": 82, "font_size": 48,
+                "text_color": "#FFFFFF", "outline_color": "#000000",
+                "outline_size": 3, "background": False, "background_color": "#000000"},
+    "boxed": {"preset": "boxed", "x_pct": 50, "y_pct": 76, "font_size": 56,
+              "text_color": "#FFFFFF", "outline_color": "#000000",
+              "outline_size": 3, "background": True, "background_color": "#161616"},
+}
+CAPTION_CONFIG_FIELDS = frozenset(CAPTION_PRESETS["social"])
+CAPTION_CONFIG_RANGES = {
+    "x_pct": (15, 85), "y_pct": (15, 85),
+    "font_size": (32, 100), "outline_size": (0, 10),
+}
+_COLOR_RE = re.compile(r"^#[0-9A-F]{6}$")
+
+
+def validate_caption_config(raw: object) -> dict[str, Any]:
+    """Strictly validate normalized style data for project replay and FFmpeg."""
+    if not isinstance(raw, dict) or set(raw) != CAPTION_CONFIG_FIELDS:
+        raise ValueError("Configurazione sottotitoli incompleta o non valida.")
+    preset = raw["preset"]
+    if not isinstance(preset, str) or preset not in (*CAPTION_STYLES, "custom"):
+        raise ValueError("Preset sottotitoli sconosciuto.")
+    for key, (minimum, maximum) in CAPTION_CONFIG_RANGES.items():
+        if type(raw[key]) is not int or not minimum <= raw[key] <= maximum:
+            raise ValueError(f"{key}: inserisci un intero tra {minimum} e {maximum}.")
+    for key in ("text_color", "outline_color", "background_color"):
+        if not isinstance(raw[key], str) or not _COLOR_RE.fullmatch(raw[key]):
+            raise ValueError(f"{key}: usa un colore esadecimale #RRGGBB.")
+    if type(raw["background"]) is not bool:
+        raise ValueError("Il valore di sfondo deve essere vero o falso.")
+    if preset != "custom" and raw != CAPTION_PRESETS[preset]:
+        raise ValueError("Modifiche al preset richiedono Personalizzato.")
+    return dict(raw)
+
+
+def default_caption_config(preset: str = "social") -> dict[str, Any]:
+    if preset not in CAPTION_STYLES:
+        raise ValueError("Preset sottotitoli sconosciuto.")
+    return dict(CAPTION_PRESETS[preset])
+
 MAX_CAPTIONS = 500
 MAX_CAPTION_LENGTH = 300
 
@@ -155,13 +199,27 @@ def _ass_text(value: str) -> str:
     return clean.strip()
 
 
-def ass_document(cues: list[dict], *, style: str = "social") -> str:
+def _ass_color(rgb: str, *, alpha: str = "00") -> str:
+    """ASS requires the AABBGGRR color channel order."""
+    return f"&H{alpha}{rgb[5:7]}{rgb[3:5]}{rgb[1:3]}".upper()
+
+
+def ass_document(
+    cues: list[dict], *, style: str = "social",
+    settings: dict[str, Any] | None = None
+) -> str:
     """Produce UTF-8 ASS cues for FFmpeg libass burning, at 1080x1920 coords."""
-    if style not in CAPTION_STYLES:
-        raise ValueError("Stile sottotitoli sconosciuto.")
-    font_size = 64 if style == "social" else 48
-    outline = 4 if style == "social" else 3
-    margin = 385 if style == "social" else 350
+    config = validate_caption_config(
+        settings if settings is not None else default_caption_config(style)
+    )
+    font_size = config["font_size"]
+    outline = config["outline_size"]
+    x = round(config["x_pct"] * 1080 / 100)
+    y = round(config["y_pct"] * 1920 / 100)
+    border_style = 3 if config["background"] else 1
+    foreground = _ass_color(config["text_color"])
+    stroke = _ass_color(config["outline_color"])
+    background = _ass_color(config["background_color"], alpha="30")
     header = (
         "[Script Info]\nScriptType: v4.00+\n"
         "PlayResX: 1080\nPlayResY: 1920\nScaledBorderAndShadow: yes\n"
@@ -171,9 +229,9 @@ def ass_document(cues: list[dict], *, style: str = "social") -> str:
         "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, "
         "ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, "
         "MarginL, MarginR, MarginV, Encoding\n"
-        f"Style: Caption,Arial,{font_size},&H00FFFFFF,&H00FFFFFF,"
-        f"&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,"
-        f"{outline},1,2,105,105,{margin},1\n"
+        f"Style: Caption,Arial,{font_size},{foreground},{foreground},"
+        f"{stroke},{background},-1,0,0,0,100,100,0,0,"
+        f"{border_style},{outline},1,5,105,105,0,1\n"
         "[Events]\n"
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, "
         "MarginV, Effect, Text\n"
@@ -187,6 +245,6 @@ def ass_document(cues: list[dict], *, style: str = "social") -> str:
         if value:
             events.append(
                 f"Dialogue: 0,{_ass_time(start)},{_ass_time(end)},"
-                f"Caption,,0,0,0,,{value}\n"
+                f"Caption,,0,0,0,,{{\\an5\\pos({x},{y})}}{value}\n"
             )
     return header + "".join(events)

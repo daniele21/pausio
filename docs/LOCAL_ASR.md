@@ -25,7 +25,7 @@ pausio transcribe input.mp4 -o output.transcript.json --language auto \
 2. Extract temporary 16 kHz mono PCM WAV with FFmpeg, leaving the original untouched; securely clean temporary WAV on both success and failure.
 3. Run `mlx_whisper.transcribe` with a **local model path**, `word_timestamps=True` and conservative decoding parameters; no HTTP server or ClosedRoom import.
 4. Normalize genuine segment and optional word timestamps to source-time integer milliseconds, without synthesizing confidence, speaker labels or word timing. Sidecar provider is `pausio-local`; backend is `mlx-whisper`.
-5. Keep ASR output out of the canonical edit history until explicit typed review commands are added.
+5. Save full ASR text and word timing in the private, media-hash-bound v2 local session checkpoint; restore after restarting Studio. Raw transcripts are never exported in the portable project. Only reviewed caption text/styles enter the canonical `.pausio.json` command history.
 
 ## Not yet at parity with ClosedRoom
 

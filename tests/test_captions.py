@@ -2,7 +2,10 @@
 
 import unittest
 
-from pausio.captions import ass_document, propose_captions, remap_captions
+from pausio.captions import (
+    ass_document, propose_captions, remap_captions,
+    CAPTION_PRESETS, validate_caption_config, default_caption_config
+)
 from pausio.domain import Interval
 
 
@@ -75,6 +78,30 @@ class TestCaptionPipeline(unittest.TestCase):
         self.assertIn("Arial,48",ass_document(cues,style="minimal"))
         with self.assertRaises(ValueError):
             ass_document(cues,style="untrusted")
+
+    def test_style_preset_color_position_and_box_in_ass(self):
+        cues=[{"id":"a"*32, "start_ms":100,"end_ms":1300,"text":"Ciao! 👋"}]
+        config=default_caption_config("boxed")
+        ass=ass_document(cues,style="boxed",settings=config)
+        self.assertIn('pos(540,1459)', ass)
+        self.assertIn(",Arial,56,",ass)
+        self.assertIn(",3,3,1,5,",ass)  # BorderStyle=3 opaque box
+        custom={**config,"preset":"custom","x_pct":65,"y_pct":45,
+                "font_size":84,"text_color":"#FFCC00",
+                "outline_color":"#101010","background":False}
+        actual=ass_document(cues,settings=custom)
+        self.assertIn('pos(702,864)', actual)
+        self.assertIn("Arial,84,&H0000CCFF",actual)
+        self.assertIn("&H00101010",actual)
+        self.assertIn(",1,3,1,5,",actual)
+        self.assertEqual(validate_caption_config(custom),custom)
+        for change in ({"x_pct":0},{"y_pct":100},{"font_size":False},
+                       {"outline_size":11},{"background":"false"},
+                       {"text_color":"red"},{"background_color":"#12"}):
+            with self.subTest(change=change),self.assertRaises(ValueError):
+                validate_caption_config({**custom,**change})
+        with self.assertRaises(ValueError):
+            validate_caption_config({**custom,"preset":"social"})
 
     def test_no_guessing_or_silent_caption_drops_for_malformed_asr(self):
         for value in (-1, True, 5000):
