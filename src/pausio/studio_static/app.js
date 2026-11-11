@@ -493,7 +493,7 @@ function paintFxWaveforms(){
 function bindFxDrag(mark,clip,sourceStart){
   const edited=project?.plan?editedDuration():project.media.duration_ms;
   const max=Math.max(0,Math.min(project.media.duration_ms,edited)-1);
-  const clamp=x=>Math.max(0,Math.min(max,Math.round(x/100)*100));
+  const clamp=x=>Math.max(0,Math.min(max,Math.round(x)));
   const commit=ms=>ms===clip.start_ms?Promise.resolve():edit("audio.update",
     {clip_id:clip.id,start_ms:ms,gain_db:clip.gain_db});
   mark.addEventListener("click",event=>event.stopPropagation());
@@ -516,7 +516,7 @@ function bindFxDrag(mark,clip,sourceStart){
     const move=ev=>{
       const delta=(ev.clientX-firstX)/Math.max(1,width)*sourceDuration;
       const at=Math.max(0,Math.min(sourceDuration,sourceStart+delta));
-      pending=clamp(clip.start_ms+map(at)-map(sourceStart));
+      pending=clamp(clip.start_ms+Math.round((map(at)-map(sourceStart))/100)*100);
       mark.style.transform="translateX("+(ev.clientX-firstX)+"px)";
     };
     const finish=ev=>{cleanup(ev);run(()=>commit(pending));};
