@@ -119,6 +119,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
 
     def test_custom_audio_fx_import_in_real_browser(self):
         self.upload_analyze()
+        self.page.locator('[data-workspace-nav="audio"]').click()
         wav_path = self.root / "personal-riser.wav"
         effect = self.root / "personal-riser.mp3"
         with wave.open(str(wav_path), "wb") as wav:
@@ -314,6 +315,54 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.wait_condition(lambda: len(self.state()["audio_clips"])==0)
         self.page.locator("#undo-action").click()
         self.wait_condition(lambda: len(self.state()["audio_clips"])==1)
+        self.assertFalse(self.errors,self.errors)
+
+
+    def test_desktop_navigation_and_resizable_timeline(self):
+        self.assertTrue(self.page.locator(".studio-navigation").is_visible())
+        self.assertTrue(self.page.locator("#analyze-action").is_visible())
+        self.page.locator('[data-workspace-nav="cuts"]').click()
+        self.assertEqual(self.page.locator("#app").get_attribute("data-workspace"), "cuts")
+        self.assertTrue(self.page.locator(".cut-settings").is_visible())
+        self.assertTrue(self.page.locator("#cuts-panel").is_visible())
+        self.page.locator('[data-workspace-nav="transcript"]').click()
+        self.assertTrue(self.page.locator(".asr-settings").is_visible())
+        self.assertTrue(self.page.locator("#transcript-panel").is_visible())
+        self.page.locator('[data-workspace-nav="captions"]').click()
+        self.assertTrue(self.page.locator("#caption-generate").is_visible())
+        self.page.locator('[data-workspace-nav="media"]').click()
+        self.assertTrue(self.page.locator("#import-action").is_visible())
+        self.upload_analyze()
+        self.page.locator('[data-workspace-nav="audio"]').click()
+        self.assertTrue(self.page.locator("#fx-panel").is_visible())
+        self.assertTrue(self.page.locator("#audio-mixer").is_visible())
+        self.assertEqual(self.page.locator("#app").get_attribute("data-workspace"), "audio")
+        handle=self.page.locator("#dock-resizer")
+        first=int(handle.get_attribute("aria-valuenow"))
+        handle.focus()
+        handle.press("ArrowUp")
+        second=int(handle.get_attribute("aria-valuenow"))
+        self.assertGreater(second,first)
+        self.assertEqual(self.page.evaluate("localStorage.getItem('pausio-studio-dock-height')"),
+                         str(second))
+        self.assertFalse(self.page.locator("#desktop-approve-action").is_disabled() and
+                         self.page.locator("#approve-action").is_disabled())
+        self.page.reload(wait_until="networkidle")
+        self.assertEqual(self.page.locator("#app").get_attribute("data-workspace"), "audio")
+        self.assertEqual(int(self.page.locator("#dock-resizer").get_attribute("aria-valuenow")),
+                         second)
+        for width,height in [(1920,1080),(1440,900),(1280,720),(390,844)]:
+            self.page.set_viewport_size({"width":width,"height":height})
+            self.page.wait_for_timeout(180)
+            info=metrics(self.page)
+            self.assertLessEqual(info["scrollWidth"],width+3,
+                                 f"Workspace overflow at {width}px: {info}")
+            if width>=1001:
+                self.assertLessEqual(info["timeline"]["bottom"],height+2)
+                self.assertLessEqual(info["approve"]["bottom"],height+2)
+            else:
+                self.assertFalse(self.page.locator(".studio-navigation").is_visible())
+                self.assertLessEqual(info["timeline"]["bottom"],info["inspector"]["y"]+2)
         self.assertFalse(self.errors,self.errors)
 
     def test_layout_across_five_viewports(self):
