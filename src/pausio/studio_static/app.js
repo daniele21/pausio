@@ -310,6 +310,57 @@ function updateFxMonitorUI(){
     "Ascolto degli FX disattivato: il rendering finale li include comunque.";
 }
 
+function paintAudioMixer(){
+  const mix=currentAudioMix();
+  for(const bus of ["voice","fx"]){
+    const muted=mix[bus+"_muted"],gain=mix[bus+"_gain_db"];
+    const slider=el(bus+"-gain"),label=el(bus+"-gain-label"),button=el(bus+"-mute");
+    if(document.activeElement!==slider||!audioMixerDraft)slider.value=String(gain);
+    slider.setAttribute("aria-valuetext",gainText(gain)+(muted?" · silenziato":""));
+    label.textContent=muted?"Silenz.: "+gainText(gain):gainText(gain);
+    button.setAttribute("aria-pressed",String(muted));
+    button.textContent=muted?"Riattiva":"Silenzia";
+    button.closest(".mixer-track").classList.toggle("is-muted",muted);
+  }
+}
+function drawAudioMixer(){
+  paintAudioMixer();
+  const has=!!project?.media,busy=working();
+  for(const bus of ["voice","fx"]){
+    const emptyFx=bus==="fx"&&!(project?.audio_clips||[]).length;
+    for(const suffix of ["gain","mute","reset"])
+      el(bus+"-"+suffix).disabled=!has||busy||emptyFx;
+  }
+}
+async function commitAudioBus(bus,changes){
+  const before=project?.audio_mix||baseAudioMix();
+  const next={...before,...changes};
+  const unchanged=Object.keys(next).every(key=>before[key]===next[key]);
+  if(unchanged){
+    audioMixerDraft=null;paintAudioMixer();syncVoicePlayback();syncLiveFx();
+    return;
+  }
+  await edit("audio.mixer.configure",next);
+}
+function setupAudioMixer(){
+  for(const bus of ["voice","fx"]){
+    const slider=el(bus+"-gain"),field=bus+"_gain_db",muted=bus+"_muted";
+    slider.addEventListener("input",()=>{
+      const value=Number(slider.value);
+      audioMixerDraft={...currentAudioMix(),[field]:value};
+      paintAudioMixer();syncVoicePlayback();syncLiveFx();
+    });
+    slider.addEventListener("change",()=>run(()=>commitAudioBus(bus,{[field]:Number(slider.value)})));
+    el(bus+"-mute").addEventListener("click",()=>run(()=>commitAudioBus(bus,{
+      [muted]:!(project?.audio_mix||baseAudioMix())[muted]
+    })));
+    el(bus+"-reset").addEventListener("click",()=>run(()=>commitAudioBus(bus,{
+      [field]:0,[muted]:false
+    })));
+  }
+}
+setupAudioMixer();
+
 function toast(message,kind="success"){
   const n=el("toast");n.textContent=message;n.className="toast"+(kind==="error"?" error":"");n.hidden=false;
   clearTimeout(toastTimeout);toastTimeout=setTimeout(()=>n.hidden=true,6000);
