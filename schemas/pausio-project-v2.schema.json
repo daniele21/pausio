@@ -789,6 +789,90 @@
               }
             }
           }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "payload"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "type": {
+              "const": "audio.mixer.configure"
+            },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "voice_gain_db",
+                "voice_muted",
+                "fx_gain_db",
+                "fx_muted"
+              ],
+              "properties": {
+                "voice_gain_db": {
+                  "type": "integer",
+                  "minimum": -36,
+                  "maximum": 12
+                },
+                "voice_muted": {
+                  "type": "boolean"
+                },
+                "fx_gain_db": {
+                  "type": "integer",
+                  "minimum": -36,
+                  "maximum": 12
+                },
+                "fx_muted": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "payload"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "type": {
+              "const": "audio.clip.mix"
+            },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "clip_id",
+                "gain_db",
+                "muted"
+              ],
+              "properties": {
+                "clip_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "gain_db": {
+                  "type": "integer",
+                  "minimum": -36,
+                  "maximum": 12
+                },
+                "muted": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
         }
       ]
     },
@@ -828,6 +912,9 @@
           "type": "integer",
           "minimum": -36,
           "maximum": 12
+        },
+        "muted": {
+          "type": "boolean"
         }
       }
     }
