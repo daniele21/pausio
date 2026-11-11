@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0c131c">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Registra video social con gobbo, direttamente sul telefono. Scarica il video senza upload.">
+  <title>Registra · Pausio</title>
+  <link rel="stylesheet" href="./capture.css">
+  <script src="./capture.js" defer></script>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">◉</span> pausio<span class="dot">.</span> <span class="brand-page">/ Registra</span></div>
+      <div class="privacy"><span class="privacy-dot" aria-hidden="true"></span> Sul tuo telefono</div>
+    </header>
+    <main class="layout">
+      <section class="capture-column" aria-label="Registrazione video">
+        <div class="heading">
+          <div><p class="eyebrow">MOBILE STUDIO / 01</p><h1>La tua voce.<br><em>Senza perdere il filo.</em></h1></div>
+          <span id="capture-state" class="state-chip">PRONTO</span>
+        </div>
+        <div class="camera" id="camera-frame">
+          <video id="camera-video" autoplay playsinline muted aria-label="Anteprima fotocamera"></video>
+          <video id="result-video" playsinline controls hidden aria-label="Riproduzione del video registrato"></video>
+          <div id="camera-placeholder" class="camera-placeholder">
+            <span class="camera-glyph" aria-hidden="true">◎</span>
+            <strong>Pronto per il tuo prossimo take.</strong>
+            <p>Attiva fotocamera e microfono per vedere il gobbo sopra l'anteprima.</p>
+          </div>
+          <div id="prompter" class="prompter" aria-label="Testo del gobbo" hidden>
+            <div class="lens-hint" aria-hidden="true"><span class="lens-dot"></span> Guarda verso la lente</div>
+            <div id="prompter-scroll" class="prompter-scroll"><div id="prompter-text"></div></div>
+          </div>
+          <div class="camera-hud">
+            <span id="timer" class="timer"><span id="record-dot" class="record-dot"></span><span id="timer-text">00:00</span></span>
+            <span id="format-pill" class="format-pill">9:16 · formato automatico</span>
+          </div>
+          <div id="countdown" class="countdown" aria-live="assertive" hidden>3</div>
+        </div>
+        <div class="transport">
+          <button id="activate-camera" type="button" class="button primary">Attiva fotocamera</button>
+          <button id="record-start" type="button" class="button recording" hidden>● Registra</button>
+          <button id="record-stop" type="button" class="button danger" hidden>■ Termina registrazione</button>
+          <button id="new-take" type="button" class="button secondary" hidden>Nuovo take</button>
+          <button id="switch-camera" type="button" class="button secondary compact" aria-label="Cambia fotocamera" title="Cambia fotocamera" hidden>↻</button>
+          <button id="toggle-scroll" type="button" class="button secondary compact" aria-label="Pausa scorrimento" title="Pausa o riprendi gobbo" hidden>Ⅱ</button>
+        </div>
+        <section id="download-panel" class="download-panel" hidden aria-labelledby="download-title">
+          <p class="eyebrow">TAKE PRONTO</p>
+          <h2 id="download-title">Video registrato, pronto da salvare.</h2>
+          <p id="file-details" class="small">Il gobbo non compare nel file.</p>
+          <div class="download-actions">
+            <a id="download-video" class="button primary" href="#" download>↓ Scarica video</a>
+            <button id="share-video" type="button" class="button secondary" hidden>Condividi / Salva su File</button>
+          </div>
+          <p class="hint">Salva il file prima di uscire: la registrazione non viene caricata online né sincronizzata con il Mac. Sul PC potrai importare MP4 o WebM in Pausio.</p>
+        </section>
+        <p id="status" class="status" role="status" aria-live="polite">Il video resta nel browser finché non lo scarichi. Non viene inviato a Pausio o a servizi esterni.</p>
+      </section>
+      <aside class="settings" aria-label="Configurazione del gobbo">
+        <div class="settings-head"><p class="eyebrow">GOBBO / 02</p><h2>Il tuo copione</h2><p>Incolla lo script, poi prova la velocità. Il testo non entra nel video.</p></div>
+        <label class="field" for="script-input"><span>Testo da leggere</span>
+          <textarea id="script-input" rows="8" spellcheck="true" placeholder="Incolla qui il testo del tuo video...">Puoi costruire l'agente AI più sofisticato del mondo. E poi esporre una password su GitHub per un banale “Don't ask again”.
+
+È uno dei meccanismi emersi da una ricerca: basta una piccola autorizzazione persistente per creare un rischio enorme.
+
+La lezione pratica? Controlla sempre i file di configurazione prima di pubblicare il tuo progetto.</textarea>
+        </label>
+        <div class="slider-line"><label for="speed">Velocità gobbo</label><strong id="speed-value">120 parole/min</strong></div>
+        <input id="speed" type="range" min="50" max="220" step="5" value="120">
+        <div class="slider-line"><label for="font-size">Dimensione testo</label><strong id="font-value">26 px</strong></div>
+        <input id="font-size" type="range" min="20" max="44" step="2" value="26">
+        <label class="field" for="prompter-position"><span>Posizione del gobbo</span>
+          <select id="prompter-position"><option value="top">In alto · vicino alla lente</option><option value="middle">Al centro</option></select>
+        </label>
+        <label class="checkbox-line" for="auto-scroll"><input id="auto-scroll" type="checkbox" checked> Scorrimento automatico durante il take</label>
+        <div class="info"><strong>Per un video più naturale</strong><p>Metti il telefono all'altezza degli occhi, leggi frasi brevi e guarda vicino alla fotocamera. Per 1080p e microfono esterno, verifica il risultato sul tuo dispositivo.</p></div>
+        <p class="small">Funziona da browser HTTPS. La fotocamera richiede un permesso esplicito. La scelta del formato dipende dal browser (MP4 o WebM).</p>
+      </aside>
+    </main>
+    <footer>PAUSIO · MOBILE CAPTURE <span>Privacy first · Nessun upload</span></footer>
+  </div>
+</body>
+</html>
