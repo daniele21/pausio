@@ -17,7 +17,8 @@
 - [ ] Evaluate VAD/ASR quality controls inspired by ClosedRoom, retaining strict no-silent-speech-removal policy.
 - [ ] Integrate Pausio transcript with reviewable edit proposals without automatically removing speech.
 - [ ] Detect suspected repeats and fillers as **review prompts**, never silent deletion.
-- [ ] Editable subtitles using **actual** Pausio ASR word timestamps when available, otherwise segment-level review; safe-area previews.
+- [x] Editable burned-in subtitles using actual Pausio ASR word timestamps or segment fallback; source-to-output remapping, social/minimal presets, FFmpeg preview/export, and typed portable commands.
+- [ ] Verify platform-specific safe areas and font fallback on real A56 footage and social uploads.
 - [ ] Test natural pacing vs aggressive auto cuts using three real clips.
 
 ## Studio UI testing milestone
