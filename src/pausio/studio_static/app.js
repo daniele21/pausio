@@ -7,6 +7,7 @@ let lastJobNotice = "", toastTimeout = 0, dragLevel = 0;
 let didNotifyRecovery = false;
 let waveformData = null, waveformRequestedFor = null, timelineZoom = 1, previewSourceMode = "original";
 let dragHandleActive = false;
+const fxWaveforms=new Map(),fxWaveformsPending=new Set();
 let simulationFrame = null;
 let captionDraft = null, captionSource = null, captionMediaKey = null;
 let captionPositionMode = false;
@@ -184,6 +185,7 @@ function update(next){
   if(next.media_id && mediaKey!==next.media_id){
     mediaKey=next.media_id;mode="original";previewSourceMode="original";
     waveformData=null;waveformRequestedFor=null;
+    fxWaveforms.clear();fxWaveformsPending.clear();
     paintWaveform();
     v.pause();v.src="/api/media?v="+encodeURIComponent(mediaKey);v.load();tab("cuts");
   }
@@ -432,33 +434,151 @@ function updateCaptionOverlay(){
   const value=cue?.text||"";
   if(overlay.textContent!==value)overlay.textContent=value;
 }
+
+/* FX are stored in EDITED time, but the displayed source waveform uses SOURCE time.
+   Split FX into pieces at every kept-interval boundary, avoiding false alignment. */
+function fxSourcePieces(clip){
+  const duration=project?.media?.duration_ms||0;
+  const keep=project?.plan?segments():[{start_ms:0,end_ms:duration}];
+  const total=project?.plan?editedDuration():duration;
+  const last=Math.min(total,clip.start_ms+clip.duration_ms);
+  let elapsed=0;
+  const pieces=[];
+  for(const segment of keep){
+    const len=segment.end_ms-segment.start_ms;
+    const from=Math.max(elapsed,clip.start_ms),to=Math.min(elapsed+len,last);
+    if(from<to)pieces.push({
+      sourceStart:segment.start_ms+from-elapsed,
+      sourceEnd:segment.start_ms+to-elapsed,
+      assetStart:from-clip.start_ms,
+      assetEnd:to-clip.start_ms
+    });
+    elapsed+=len;
+  }
+  return pieces;
+}
+function requestFxWaveform(clip){
+  const sha=clip.asset_sha256;
+  if(!clip.available||fxWaveforms.has(sha)||fxWaveformsPending.has(sha))return;
+  fxWaveformsPending.add(sha);
+  fetch("/api/audio/waveform/"+sha,{cache:"no-store"}).then(async res=>{
+    if(!res.ok)throw Error("Waveform FX non disponibile.");
+    return res.json();
+  }).then(data=>{
+    if(data.asset_sha256!==sha||!Array.isArray(data.values))throw Error("Waveform errata");
+    fxWaveforms.set(sha,data.values);paintFxWaveforms();
+  }).catch(()=>fxWaveforms.set(sha,[])).finally(()=>fxWaveformsPending.delete(sha));
+}
+function paintFxWaveforms(){
+  for(const canvas of document.querySelectorAll(".fx-clip-waveform")){
+    const peaks=fxWaveforms.get(canvas.dataset.sha);
+    const bounds=canvas.getBoundingClientRect();
+    const w=Math.max(1,Math.round(bounds.width)),h=Math.max(1,Math.round(bounds.height));
+    if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}
+    const ctx=canvas.getContext("2d");if(!ctx)continue;
+    ctx.clearRect(0,0,w,h);
+    if(!peaks?.length)continue;
+    const from=Number(canvas.dataset.from),to=Number(canvas.dataset.to),duration=Number(canvas.dataset.duration);
+    ctx.fillStyle="rgba(241,217,252,.82)";
+    for(let x=0;x<w;x++){
+      const a=Math.floor((from+(to-from)*x/w)/duration*peaks.length);
+      const b=Math.max(a+1,Math.ceil((from+(to-from)*(x+1)/w)/duration*peaks.length));
+      let peak=0;
+      for(let i=a;i<Math.min(b,peaks.length);i++)peak=Math.max(peak,peaks[i]);
+      const height=Math.max(1,peak/1000*(h-8));
+      ctx.fillRect(x,Math.round((h-height)/2),1,Math.ceil(height));
+    }
+  }
+}
+function bindFxDrag(mark,clip,sourceStart){
+  const edited=project?.plan?editedDuration():project.media.duration_ms;
+  const max=Math.max(0,Math.min(project.media.duration_ms,edited)-1);
+  const clamp=x=>Math.max(0,Math.min(max,Math.round(x/100)*100));
+  const commit=ms=>ms===clip.start_ms?Promise.resolve():edit("audio.update",
+    {clip_id:clip.id,start_ms:ms,gain_db:clip.gain_db});
+  mark.addEventListener("click",event=>event.stopPropagation());
+  mark.addEventListener("keydown",event=>{
+    if(!["ArrowLeft","ArrowRight"].includes(event.key)||working())return;
+    event.preventDefault();event.stopPropagation();
+    const step=event.shiftKey?500:100;
+    run(()=>commit(clamp(clip.start_ms+(event.key==="ArrowRight"?step:-step))));
+  });
+  mark.addEventListener("pointerdown",event=>{
+    if(event.button!==0||working())return;
+    event.preventDefault();event.stopPropagation();
+    dragHandleActive=true;mark.classList.add("dragging");
+    mark.setPointerCapture(event.pointerId);
+    const firstX=event.clientX;
+    const width=el("timeline-track").getBoundingClientRect().width;
+    const sourceDuration=project.media.duration_ms;
+    const map=project.plan?outputTime:(x=>x);
+    let pending=clip.start_ms;
+    const move=ev=>{
+      const delta=(ev.clientX-firstX)/Math.max(1,width)*sourceDuration;
+      const at=Math.max(0,Math.min(sourceDuration,sourceStart+delta));
+      pending=clamp(clip.start_ms+map(at)-map(sourceStart));
+      mark.style.transform="translateX("+(ev.clientX-firstX)+"px)";
+    };
+    const finish=ev=>{cleanup(ev);run(()=>commit(pending));};
+    const cancel=ev=>cleanup(ev);
+    const cleanup=ev=>{
+      mark.removeEventListener("pointermove",move);
+      mark.removeEventListener("pointerup",finish);
+      mark.removeEventListener("pointercancel",cancel);
+      if(mark.hasPointerCapture(ev.pointerId))mark.releasePointerCapture(ev.pointerId);
+      mark.classList.remove("dragging");mark.style.transform="";
+      window.setTimeout(()=>{dragHandleActive=false;},0);
+    };
+    mark.addEventListener("pointermove",move);
+    mark.addEventListener("pointerup",finish);
+    mark.addEventListener("pointercancel",cancel);
+  });
+}
+
 function drawFx(){
   const list=el("fx-list"),lane=el("fx-lane");list.replaceChildren();lane.replaceChildren();
   const clips=project?.audio_clips||[];
-  const duration=project?.plan?editedDuration():project?.media?.duration_ms||0;
+  const duration=project?.media?.duration_ms||0;
+  el("fx-track-empty").hidden=clips.length>0;
   el("fx-hint").textContent=clips.length?
-    clips.length+" effetto/i audio · trascina il punto con «Inizio» e ascolta la preview FFmpeg.":
+    clips.length+" effetto/i audio · Waveform e FX condividono la scala. Le clip sono suddivise visivamente dove ci sono tagli. Trascina o usa ← →.":
     "Nessun effetto. Posiziona il cursore sul video e importa un riser, un whoosh o un altro audio.";
   for(const clip of clips){
-    const mark=document.createElement("div");
-    mark.className="fx-clip-mark"+(clip.available?"":" missing");
-    mark.textContent=clip.filename;
-    mark.title=clip.filename+" · "+msFormat(clip.start_ms,true);
-    mark.style.left=(duration?Math.min(100,clip.start_ms/duration*100):0)+"%";
-    mark.style.width=(duration?Math.min(100,Math.max(0,duration-clip.start_ms)/duration*100,
-      clip.duration_ms/duration*100):0)+"%";
-    lane.append(mark);
+    const pieces=fxSourcePieces(clip);
+    for(const [index,frag] of pieces.entries()){
+      const mark=document.createElement("button");
+      mark.type="button";
+      mark.className="fx-clip-mark"+(clip.available?"":" missing");
+      mark.dataset.clipId=clip.id;
+      mark.title=clip.filename+" · inizio nel montaggio "+msFormat(clip.start_ms,true)+" · trascina o usa le frecce";
+      mark.setAttribute("aria-label","Sposta effetto "+clip.filename+", inizio "+
+        msFormat(clip.start_ms,true)+" nel montaggio. Frecce ±0,1 s; Shift ±0,5 s.");
+      mark.disabled=working();
+      mark.style.left=(frag.sourceStart/duration*100).toFixed(4)+"%";
+      mark.style.width=((frag.sourceEnd-frag.sourceStart)/duration*100).toFixed(4)+"%";
+      const canvas=document.createElement("canvas");canvas.className="fx-clip-waveform";
+      canvas.dataset.sha=clip.asset_sha256;canvas.dataset.from=frag.assetStart;
+      canvas.dataset.to=frag.assetEnd;canvas.dataset.duration=clip.duration_ms;
+      canvas.setAttribute("aria-hidden","true");mark.append(canvas);
+      if(index===0){
+        const title=document.createElement("span");title.className="fx-clip-title";
+        title.textContent=clip.filename;mark.append(title);
+      }
+      bindFxDrag(mark,clip,frag.sourceStart);
+      lane.append(mark);
+    }
+    if(clip.available)requestFxWaveform(clip);
     const item=document.createElement("div");item.className="fx-item";
     const name=document.createElement("div");name.className="fx-item-name";
     const label=document.createElement("strong");label.textContent=clip.filename;
     const status=document.createElement("span");
     status.textContent=!clip.available?"File mancante · reimporta per ricollegare":
-      clip.start_ms>=duration?"Fuori dalla durata montata · modifica inizio":
+      !pieces.length?"Fuori dalla durata montata · modifica inizio":
       "Durata "+shortDuration(clip.duration_ms)+" · FX incluso nella preview e nell'export";
     if(!clip.available)status.className="fx-missing";
     name.append(label,status);item.append(name);
     const controls=[
-      ["Inizio (sec)","start_ms",clip.start_ms/1000,.1,0,Math.max(0,(project.media.duration_ms-1)/1000)],
+      ["Inizio (sec)","start_ms",clip.start_ms/1000,.1,0,Math.max(0,((project.plan?editedDuration():duration)-1)/1000)],
       ["Volume (dB)","gain_db",clip.gain_db,1,-36,12]
     ];
     for(const [title,key,val,step,min,max] of controls){
@@ -489,6 +609,7 @@ function drawFx(){
     remove.addEventListener("click",()=>run(()=>edit("audio.remove",{clip_id:clip.id})));
     item.append(remove);list.append(item);
   }
+  paintFxWaveforms();
 }
 
 function drawTimeline(){
@@ -1038,6 +1159,7 @@ function resizeTimeline(){
   surface.scrollLeft=Math.max(0,cursor*width);
   el("timeline-ruler").scrollLeft=surface.scrollLeft;
   paintWaveform();
+  paintFxWaveforms();
 }
 el("timeline-zoom").addEventListener("change",event=>{
   timelineZoom=Number(event.target.value)||1;
