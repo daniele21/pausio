@@ -13,7 +13,8 @@ With Python 3.11+, FFmpeg and FFprobe on PATH, install once (`pip install -e .`)
 
 4. **Conferma montaggio** — explicit approval. The backend blocks rendering until this action. Every change after approval resets the approval and invalidates prior export.
 5. **Esporta MP4** — asynchronous FFmpeg render and direct download. Final output is 1080x1920, 30 fps H.264/AAC (if source has audio), aspect ratio preserved with padding. Inspect the saved file for quality and A/V synchronization before publishing.
-6. **Trascrivi il parlato** — optional parallel action: requires the existing ClosedRoom local service running on the same Mac. A normalized, timestamped transcript appears in the inspector. The transcription does not change KEEP intervals and is not yet used to generate subtitles.
+6. **Trascrivi il parlato** — optional Pausio-local ASR; no ClosedRoom server needed. A timestamped transcript appears in the inspector.
+7. **Aggiungi sottotitoli** — under **Trascrizione** click **+ Aggiungi sottotitoli**, choose Social or Minimal, edit individual captions and click **Salva testo**. Original/Simulazione show an overlay; **Preview FFmpeg** and exported MP4 burn actual subtitles after remapping to the edited output timeline. Any caption edit requires re-approval; caption text/styles persist in portable project commands.
 
 ## UX layout
 

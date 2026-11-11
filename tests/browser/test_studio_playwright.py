@@ -300,6 +300,68 @@ class StudioPlaywrightAudit(unittest.TestCase):
             ".transcript-source").inner_text())
         self.assertFalse(self.errors,self.errors)
 
+    def test_generate_edit_and_preview_social_captions_in_browser(self):
+        from unittest.mock import patch
+        initial=self.upload_analyze()
+        transcript={
+            "provider":"pausio-local","backend":"mlx-whisper",
+            "model":"mlx-community/whisper-large-v3-turbo",
+            "language":"it","text":"Tre consigli per creare video.",
+            "word_timestamps_available":True,
+            "segments":[{
+                "start_ms":100,"end_ms":980,"text":"Tre consigli per creare video.",
+                "words":[
+                    {"start_ms":100,"end_ms":250,"text":"Tre"},
+                    {"start_ms":250,"end_ms":400,"text":"consigli"},
+                    {"start_ms":400,"end_ms":550,"text":"per"},
+                    {"start_ms":550,"end_ms":700,"text":"creare"},
+                    {"start_ms":700,"end_ms":980,"text":"video."},
+                ],
+            }],
+        }
+        with patch("pausio.studio.transcribe_video_local",return_value=transcript):
+            self.page.locator("#transcribe-action").click()
+            self.wait_state("transcribe","completed")
+        self.wait_condition(lambda:self.page.locator("#caption-generate").is_visible())
+        self.page.locator("#caption-generate").click()
+        self.wait_condition(lambda:len(self.state()["captions"])>0)
+        self.wait_condition(lambda:self.page.locator(".caption-edit-card").count()>0)
+        updated=self.state()
+        self.assertEqual(updated["last_command"],"caption.set")
+        self.assertFalse(updated["approved"])
+        self.page.evaluate("() => document.querySelector('#preview-video').currentTime=.45")
+        self.wait_condition(lambda:self.page.locator("#caption-overlay").is_visible())
+        self.assertIn("Tre",self.page.locator("#caption-overlay").inner_text())
+        edit=self.page.locator(".caption-edit-card").first
+        edit.locator("textarea").fill("Tre consigli AI!")
+        edit.locator("button").click()
+        state=self.wait_state("revision",updated["project_revision"]+1)
+        self.assertEqual(state["captions"][0]["text"],"Tre consigli AI!")
+        self.page.locator("#caption-style").select_option("minimal")
+        changed=self.wait_state("revision",state["project_revision"]+1)
+        self.assertEqual(changed["caption_style"],"minimal")
+        for width,height in [(1440,900),(390,844),(320,700)]:
+            self.page.set_viewport_size({"width":width,"height":height})
+            self.page.wait_for_timeout(140)
+            self.assertLessEqual(metrics(self.page)["scrollWidth"],width+3)
+            self.shot("caption-social-"+str(width))
+        self.page.set_viewport_size({"width":1440,"height":900})
+        self.page.locator("#preview-action").click()
+        draft=self.wait_state("preview","completed",timeout=120000)
+        self.assertTrue(draft["preview_ready"])
+        self.wait_condition(lambda:self.page.locator('[data-mode="rendered"]').get_attribute(
+            "aria-pressed")=="true")
+        self.assertTrue(self.page.locator("#caption-overlay").is_hidden())
+        with self.page.expect_download() as download:
+            self.page.locator("#project-export").click()
+        saved=self.root/"caption-project.pausio.json"
+        download.value.save_as(saved)
+        commands=json.loads(saved.read_text())["commands"]
+        self.assertIn("caption.set",[c["type"] for c in commands])
+        self.assertIn("caption.correct",[c["type"] for c in commands])
+        self.assertIn("caption.style",[c["type"] for c in commands])
+        self.assertFalse(self.errors,self.errors)
+
     def test_pointer_trim_is_single_edit(self):
         self.upload_analyze()
         self.page.locator("#timeline-zoom").select_option("2")

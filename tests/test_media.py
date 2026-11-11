@@ -59,6 +59,19 @@ class TestMedia(unittest.TestCase):
                 original_filter.split(";")[:-1], draft_filter.split(";")[:-1]
             )
 
+    def test_render_burns_ass_captions_only_when_requested(self):
+        with TemporaryDirectory() as d:
+            source=Path(d)/"input.mov"
+            source.touch()
+            cues=[{"id":"a"*32,"start_ms":200,"end_ms":900,"text":"CIAO"}]
+            with patch("pausio.media.require_binary",return_value="ffmpeg"):
+                with_captions=render(source,Path(d)/"out.mp4",
+                    (Interval(0,1000),),has_audio=True,dry_run=True,captions=cues)
+                without=render(source,Path(d)/"no.mp4",
+                    (Interval(0,1000),),has_audio=True,dry_run=True)
+            self.assertIn("ass=filename=",with_captions[with_captions.index("-filter_complex")+1])
+            self.assertNotIn("ass=filename=",without[without.index("-filter_complex")+1])
+
     def test_render_builds_command_without_execution(self):
         with TemporaryDirectory() as d:
             source = Path(d) / "input.mov"

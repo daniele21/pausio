@@ -4,11 +4,11 @@
 
 A local-first toolkit for natural-sounding, talking-head social videos. Pausio is designed to make post-production **reviewable**, not fully automatic at the expense of speech or pacing.
 
-> **Status: early foundation (v0.1.0).** The current CLI inspects videos, suggests cuts using FFmpeg's signal-level silence detection, writes a human-editable JSON timeline, and exports a vertical 1080x1920 MP4. It now has optional standalone MLX Whisper ASR on Apple Silicon (no ClosedRoom app or service required), but does not yet make semantic cuts, generate subtitles, denoise or export CapCut projects.
+> **Status: early foundation (v0.1.0).** The current CLI inspects videos, suggests cuts using FFmpeg's signal-level silence detection, writes a human-editable JSON timeline, and exports a vertical 1080x1920 MP4. It now has optional standalone MLX Whisper ASR on Apple Silicon (no ClosedRoom app or service required), but does not yet make semantic cuts, denoise or export CapCut projects; its on-device transcripts can now drive **editable burned-in captions**.
 
 ## Pausio Studio — interfaccia per test reali
 
-Un editor web locale senza npm, cloud o account. L'area di lavoro offre anteprima 9:16, **waveform reale, zoom timeline, maniglie di trim modificabili con mouse/tastiera, preview FFmpeg a 540×960**, trascrizione locale MLX Whisper opzionale e download MP4.
+Un editor web locale senza npm, cloud o account. L'area di lavoro offre anteprima 9:16, **waveform reale, zoom timeline, maniglie di trim modificabili con mouse/tastiera, preview FFmpeg a 540×960**, trascrizione locale MLX Whisper opzionale, **sottotitoli editabili nel video**, e download MP4.
 
 ```bash
 brew install ffmpeg
@@ -22,7 +22,7 @@ pausio studio
 
 Il browser si apre su **http://127.0.0.1:8765** quando la porta è libera. Se è occupata da un altro servizio, Studio prova automaticamente **8766, 8767, ...**, senza terminare il processo esistente; il terminale mostra l'indirizzo effettivo e il browser apre quello corretto. Puoi scegliere la porta iniziale con `pausio studio --port 8877 --no-open`. Il blocco di sicurezza della cartella della sessione resta attivo: una seconda istanza non può usare contemporaneamente gli stessi dati locali. Il server usa solo loopback e **salva automaticamente la sessione sul Mac**, inclusa una copia privata del video importato, per permettere il recupero dopo la chiusura o un'interruzione. La sezione Progetto offre **Annulla / Ripeti**, scorciatoie ⌘Z / ⌘⇧Z e **Elimina dati locali**. Il percorso predefinito su macOS è `~/Library/Application Support/Pausio/Studio`; puoi personalizzarlo con `pausio studio --data-dir /percorso/privato`. Chiudere Pausio **non elimina** il video salvato: usa esplicitamente «Elimina dati locali» per rimuoverlo. **Importa progetto / Esporta progetto** salva o ricostruisce i tagli come comandi versionati in un file `.pausio.json` **v2**, senza includere il video. I file v1 sono importabili e vengono convertiti automaticamente in memoria. Undo/Redo conserva l'eventuale cronologia futura nel progetto portabile. Reimporta prima il video originale: il sistema verifica il suo SHA-256. Supporta MP4/MOV/MKV/WebM fino a 2 GiB. Importa, analizza le pause, rivedi gli intervalli da mantenere, **conferma il montaggio** ed esporta.
 
-La modalità **Simulazione** salta tra gli intervalli dell'originale, e può essere imprecisa. Con **Genera preview** produci invece un MP4 a 540×960 tramite lo stesso pipeline FFmpeg dell'export finale per ascoltare e verificare gli stacchi, prima di confermare il montaggio. Le maniglie sulla timeline salvano modifiche strutturate nel progetto e invalidano la preview precedente. La riproduzione nel browser richiede codec compatibili (consigliato MP4 H.264). La trascrizione usa un motore MLX Whisper indipendente, con pacchetti opzionali e download dei modelli solo con consenso. Restano da costruire sottotitoli, audio cleanup, waveform e tagli semantici.
+La modalità **Simulazione** salta tra gli intervalli dell'originale, e può essere imprecisa. Con **Genera preview** produci invece un MP4 a 540×960 tramite lo stesso pipeline FFmpeg dell'export finale per ascoltare e verificare gli stacchi, prima di confermare il montaggio. Le maniglie sulla timeline salvano modifiche strutturate nel progetto e invalidano la preview precedente. La riproduzione nel browser richiede codec compatibili (consigliato MP4 H.264). La trascrizione usa un motore MLX Whisper indipendente, con pacchetti opzionali e download dei modelli solo con consenso. Restano da costruire audio cleanup e tagli semantici.
 
 Vedi [Guida Pausio Studio](docs/STUDIO_UI.md) per workflow, shortcut, privacy e limiti.
 
@@ -63,6 +63,12 @@ pausio transcribe video.mp4 -o outputs/video.transcript.json --allow-model-downl
 ```
 
 In Studio choose the model and language under **Trascrizione locale**, click **Trascrivi il parlato**, and, if weights are absent, check **Scarica il modello se assente** and confirm the prompt. Only the model weights may be downloaded with consent; **no video or audio leaves your Mac**. The default model Large v3 Turbo is approximately 1.6 GB. Returned segment/word timestamps are converted into source-time integer milliseconds in a separate review-only JSON sidecar. No semantic cuts or subtitles are generated yet. Python 3.15 compatibility and real A56 footage are not yet validated. See [local ASR guide](docs/LOCAL_ASR.md).
+
+## Aggiungere sottotitoli al video
+
+Dopo **Trascrivi il parlato**, apri **Trascrizione** → **+ Aggiungi sottotitoli**. Seleziona **Social** o **Minimal**, correggi ciascuna frase con **Salva testo**, e controlla la sovrimpressione durante la riproduzione Originale o Simulazione. Poi usa **Genera preview** per il vero video con sottotitoli impressi, **Conferma montaggio**, **Esporta MP4**. I sottotitoli seguono i tagli del montaggio (anche con due segmenti separati) e restano come istruzioni importabili/esportabili e annullabili nel progetto.
+
+Per l'export FFmpeg deve includere la libreria **libass**. Lo stile va validato su video reali e rispetto agli elementi UI delle piattaforme social; non è ancora disponibile l'export SRT separato.
 
 ## Project principles
 

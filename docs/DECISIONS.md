@@ -54,3 +54,9 @@
 - Validate Pausio MLX runtime and model/weight licensing, download UX and memory requirements with real Apple Silicon footage.
 - Determine UI technology (web local vs packaged desktop), safe-area templates and subtitles format.
 - Quantify performance on real Samsung video, VFR, rotation and audio drift.
+
+## ADR 010 — Captions are portable source-time edit commands
+
+**Decision:** `caption.set` records reviewed source-time subtitle cues (stable IDs, exact text, timestamps, style) as bounded v2 project events, not an entire raw ASR transcript. `caption.correct`, `caption.style`, and `caption.clear` are replayable/undoable. Subtitle edits invalidate approval and stale previews/exports.
+
+**Render:** Pure code segments actual word-aligned transcripts into short captions; absent word alignments, it retains real phrase timings without inventing words. Intersect with KEEP intervals and map to output time, splitting cues crossing removed gaps. FFmpeg ASS/libass burns captions into both preview and final 9:16 MP4. HTML preview is only approximate; confirm quality using rendered preview. Font fallback and social safe areas remain real-device QA.
