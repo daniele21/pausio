@@ -45,6 +45,7 @@ class MobileCapturePlaywrightTests(unittest.TestCase):
 
     def test_record_preview_and_download(self):
         page = self.page
+        page.locator("#edit-gobbo").click()
         page.locator("#script-input").fill("Questo è un take di prova. Il gobbo è solo un overlay.")
         self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"),
                              390)
@@ -97,9 +98,48 @@ class MobileCapturePlaywrightTests(unittest.TestCase):
         self.assertEqual(page.locator("#capture-state").inner_text(), "CAMERA ATTIVA")
         self.assertEqual(self.errors, [])
 
+    def test_full_camera_frame_and_larger_prompter_at_390px(self):
+        page = self.page
+        self.assertEqual(page.locator("#framing-mode").input_value(), "wide")
+        self.assertFalse(page.locator("#gobbo-settings").evaluate("(element) => element.open"))
+        self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"), 390)
+        page.locator("#activate-camera").click()
+        page.locator("#record-start").wait_for(state="visible", timeout=15000)
+        geometry = page.evaluate("""() => {
+            const frame = document.querySelector('#camera-frame').getBoundingClientRect();
+            const prompter = document.querySelector('#prompter-scroll').getBoundingClientRect();
+            const video = document.querySelector('#camera-video');
+            return {frameWidth:frame.width, frameHeight:frame.height,
+                    prompterHeight:prompter.height,
+                    fit:getComputedStyle(video).objectFit,
+                    hasCamera:!!video.srcObject};
+        }""")
+        self.assertGreaterEqual(geometry["frameWidth"], 340, geometry)
+        self.assertGreaterEqual(geometry["frameHeight"], 620, geometry)
+        self.assertGreaterEqual(geometry["prompterHeight"], 150, geometry)
+        self.assertEqual(geometry["fit"], "contain", geometry)
+        self.assertTrue(geometry["hasCamera"])
+        page.locator("#edit-gobbo").click()
+        self.assertTrue(page.locator("#gobbo-settings").evaluate("(element) => element.open"))
+        self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"), 390)
+        previous = page.locator("#prompter-scroll").evaluate("(element) => element.clientHeight")
+        page.locator("#gobbo-lines").focus()
+        page.locator("#gobbo-lines").press("End")
+        extended = page.locator("#prompter-scroll").evaluate("(element) => element.clientHeight")
+        self.assertGreater(extended, previous)
+        page.locator("#framing-mode").select_option("social")
+        page.locator("#record-start").wait_for(state="visible", timeout=15000)
+        self.assertEqual(page.locator("#framing-mode").input_value(), "social")
+        self.assertEqual(self.errors, [])
+
     def test_camera_preview_is_responsive_at_320px(self):
         page = self.page
         page.set_viewport_size({"width":320,"height":700})
         self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"), 320)
         self.assertTrue(page.locator("#activate-camera").is_visible())
+        size = page.locator("#camera-frame").bounding_box()
+        self.assertGreaterEqual(size["height"], 480)
+        self.assertFalse(page.locator("#gobbo-settings").evaluate("(element) => element.open"))
+        page.locator("#edit-gobbo").click()
         self.assertTrue(page.locator("#script-input").is_visible())
+        self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"), 320)

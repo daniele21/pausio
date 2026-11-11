@@ -7,8 +7,8 @@
   <meta name="color-scheme" content="dark">
   <meta name="description" content="Registra video social con gobbo, direttamente sul telefono. Scarica il video senza upload.">
   <title>Registra · Pausio</title>
-  <link rel="stylesheet" href="./capture.css">
-  <script src="./capture.js?v=20261111-camera-fix" defer></script>
+  <link rel="stylesheet" href="./capture.css?v=20261111-layout">
+  <script src="./capture.js?v=20261111-layout" defer></script>
 </head>
 <body>
   <div class="shell">
@@ -36,7 +36,7 @@
           </div>
           <div class="camera-hud">
             <span id="timer" class="timer"><span id="record-dot" class="record-dot"></span><span id="timer-text">00:00</span></span>
-            <span id="format-pill" class="format-pill">9:16 · formato automatico</span>
+            <span id="format-pill" class="format-pill">Campo ampio · formato originale</span>
           </div>
           <div id="countdown" class="countdown" aria-live="assertive" hidden>3</div>
         </div>
@@ -47,6 +47,7 @@
           <button id="new-take" type="button" class="button secondary" hidden>Nuovo take</button>
           <button id="switch-camera" type="button" class="button secondary compact" aria-label="Cambia fotocamera" title="Cambia fotocamera" hidden>↻</button>
           <button id="toggle-scroll" type="button" class="button secondary compact" aria-label="Pausa scorrimento" title="Pausa o riprendi gobbo" hidden>Ⅱ</button>
+          <button id="edit-gobbo" type="button" class="button secondary compact gobbo-quick" aria-label="Regola il gobbo" title="Modifica copione e impostazioni gobbo">Aa</button>
         </div>
         <section id="download-panel" class="download-panel" hidden aria-labelledby="download-title">
           <p class="eyebrow">TAKE PRONTO</p>
@@ -61,6 +62,8 @@
         <p id="status" class="status" role="status" aria-live="polite">Il video resta nel browser finché non lo scarichi. Non viene inviato a Pausio o a servizi esterni.</p>
       </section>
       <aside class="settings" aria-label="Configurazione del gobbo">
+        <details id="gobbo-settings" open>
+          <summary class="settings-summary">Impostazioni gobbo <span>Copione · velocità · dimensione</span></summary>
         <div class="settings-head"><p class="eyebrow">GOBBO / 02</p><h2>Il tuo copione</h2><p>Incolla lo script, poi prova la velocità. Il testo non entra nel video.</p></div>
         <label class="field" for="script-input"><span>Testo da leggere</span>
           <textarea id="script-input" rows="8" spellcheck="true" placeholder="Incolla qui il testo del tuo video...">Puoi costruire l'agente AI più sofisticato del mondo. E poi esporre una password su GitHub per un banale “Don't ask again”.
@@ -69,16 +72,26 @@
 
 La lezione pratica? Controlla sempre i file di configurazione prima di pubblicare il tuo progetto.</textarea>
         </label>
+        <label class="field" for="framing-mode"><span>Inquadratura della fotocamera</span>
+          <select id="framing-mode">
+            <option value="wide">Campo ampio · 3:4, meno ritaglio</option>
+            <option value="social">Social · 9:16, più ravvicinato</option>
+          </select>
+          <small>Il campo ampio evita un ritaglio 9:16 forzato. Il file registra il formato reale della fotocamera; il video social 9:16 si può preparare in Pausio sul PC.</small>
+        </label>
         <div class="slider-line"><label for="speed">Velocità gobbo</label><strong id="speed-value">120 parole/min</strong></div>
         <input id="speed" type="range" min="50" max="220" step="5" value="120">
         <div class="slider-line"><label for="font-size">Dimensione testo</label><strong id="font-value">26 px</strong></div>
         <input id="font-size" type="range" min="20" max="44" step="2" value="26">
+        <div class="slider-line"><label for="gobbo-lines">Righe visibili del gobbo</label><strong id="lines-value">5 righe</strong></div>
+        <input id="gobbo-lines" type="range" min="3" max="7" step="1" value="5">
         <label class="field" for="prompter-position"><span>Posizione del gobbo</span>
           <select id="prompter-position"><option value="top">In alto · vicino alla lente</option><option value="middle">Al centro</option></select>
         </label>
         <label class="checkbox-line" for="auto-scroll"><input id="auto-scroll" type="checkbox" checked> Scorrimento automatico durante il take</label>
         <div class="info"><strong>Per un video più naturale</strong><p>Metti il telefono all'altezza degli occhi, leggi frasi brevi e guarda vicino alla fotocamera. Per 1080p e microfono esterno, verifica il risultato sul tuo dispositivo.</p></div>
         <p class="small">Funziona da browser HTTPS. La fotocamera richiede un permesso esplicito. La scelta del formato dipende dal browser (MP4 o WebM).</p>
+        </details>
       </aside>
     </main>
     <footer>PAUSIO · MOBILE CAPTURE <span>Privacy first · Nessun upload</span></footer>

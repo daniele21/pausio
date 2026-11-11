@@ -22,6 +22,16 @@ Il workflow `.github/workflows/mobile-capture-pages.yml` pubblica solamente i tr
 
 Per test locale desktop, avvia `pausio studio` e apri `http://127.0.0.1:8765/capture` (o la porta comunicata da Pausio). `localhost` è un contesto sicuro, ma lo stesso URL **non funziona** su un telefono diverso. Verifica sempre la disponibilità del Pages URL prima di condividerlo.
 
+## Layout mobile e inquadratura
+
+Su smartphone la camera usa una viewport quasi a tutta altezza con `object-fit: contain`: la preview non fa zoom digitale né ritaglia artificialmente il flusso video per adattarlo al riquadro. Il gobbo sovrapposto è regolabile da 3 a 7 righe, e le impostazioni sono nascoste in un pannello espandibile, accessibile tramite il pulsante `Aa`.
+
+- **Campo ampio 3:4 (default):** richiede al browser un formato più vicino al sensore e normalmente meno ravvicinato rispetto a 9:16, preservando l'intero campo visivo disponibile. Il browser può ignorare le preferenze di risoluzione e rapporto d'aspetto.
+- **Social 9:16:** richiesta più stretta, esplicitamente selezionabile nelle impostazioni; può effettuare un crop della camera stessa.
+- Il file scaricato è **sempre la registrazione raw** scelta dal browser: non aggiungiamo ritagli o sfondi al file in JavaScript. Il formato finale 9:16 viene gestito successivamente nell'editor Pausio sul PC.
+
+Il campo visivo ottico effettivo dipende dall'ottica selezionata dal telefono e dal browser. Né `object-fit: contain` né un rapporto 3:4 possono garantire l'uso della lente ultra-wide o lo zoom ottico minimo su tutti i dispositivi.
+
 ## Compatibilità e limiti
 
 - Browser: Safari iOS recente e Chrome Android recente, previa autorizzazione fotocamera+microfono. L'app non garantisce supporto su browser vecchi o embedded. MediaRecorder sceglie MP4 dove disponibile, altrimenti WebM; Pausio Studio importa entrambi, ma alcuni player di sistema non riproducono WebM.
