@@ -10,7 +10,7 @@ description: Use for implementing captions, SRT or ASS subtitles, Italian text c
 2. Build captions from normalized original-source timestamps, then explicitly remap onto the **output timeline** using approved keep segments. Words spanning cuts must be split, removed or flagged—never silently shifted.
 3. Define a pure subtitle segmentation function separate from FFmpeg rendering. Keep readable phrase boundaries; avoid overfilled lines and one-frame flashes.
 4. Support accessible contrast, speaker-aware changes and a configurable vertical safe area. Do not hardcode social-platform overlays as invariant: preview on target devices.
-5. Keep SRT and ASS export separate from burned-in output. Fonts, effects and template assets require documented licensing/provenance; fallback gracefully when unavailable.
+5. Keep SRT and ASS export separate from burned-in output. Caption font changes must use validated `font_family` in typed project events and ASS Style, never DOM-only CSS. Allowlist system font names, preserve Arial fallback for legacy project events, and warn when an OS font is not installed; do not bundle or download third-party font binaries without licensing/provenance review. Verify libass-rendered preview because platform font substitution can differ from browser CSS.
 6. Test mixed Italian/English AI terms, abbreviations, accents, quotes, emojis, non-ASCII paths, silence and frame boundary transitions.
 7. Require playback review for actual clip readability and sync.
 
