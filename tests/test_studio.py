@@ -524,6 +524,68 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         self.assertEqual(status, 409)
         self.assertIn("Versione", json.loads(data)["error"])
 
+    def test_subtitle_generation_edit_and_real_burned_in_preview(self):
+        self.import_clip()
+        result = {
+            "provider":"pausio-local","model":"mlx-community/whisper-large-v3-turbo",
+            "text":"CIAO MONDO","word_timestamps_available":True,
+            "segments":[{"start_ms":100,"end_ms":1400,"text":"CIAO MONDO",
+                         "words":[
+                             {"start_ms":100,"end_ms":600,"text":"CIAO"},
+                             {"start_ms":650,"end_ms":1400,"text":"MONDO"}]}]
+        }
+        with patch("pausio.studio.transcribe_video_local", return_value=result):
+            status, _, _ = self.post("/api/jobs", {"kind":"transcribe"})
+            self.assertEqual(status,202)
+            self.await_job("transcribe")
+        state = self.get_state()
+        status,_,data=self.post("/api/captions/generate",{
+            "revision":state["project_revision"],"style":"social"
+        })
+        self.assertEqual(status,200,data)
+        state=json.loads(data)
+        self.assertEqual(len(state["captions"]),1)
+        self.assertEqual(state["captions"][0]["text"],"CIAO MONDO")
+        self.assertFalse(state["approved"])
+        cue_id=state["captions"][0]["id"]
+        status,_,data=self.post("/api/command",{
+            "revision":state["project_revision"],"type":"caption.correct",
+            "payload":{"caption_id":cue_id,"text":"CIAO MONDO!"}
+        })
+        self.assertEqual(status,200,data)
+        corrected=json.loads(data)
+        self.assertEqual(corrected["captions"][0]["text"],"CIAO MONDO!")
+        # Preview requires an edit plan, and the same captions as final export.
+        status,_,data=self.post("/api/jobs",{"kind":"analyze"})
+        self.assertEqual(status,202,data)
+        planned=self.await_job("analyze")
+        self.assertGreater(len(planned["output_captions"]),0)
+        status,_,data=self.post("/api/jobs",{"kind":"preview"})
+        self.assertEqual(status,202,data)
+        preview=self.await_job("preview")
+        self.assertTrue(preview["preview_ready"])
+        file_path=self.workspace.directory/"preview.mp4"
+        self.assertTrue(file_path.is_file())
+        # Verify actual white caption pixels on a blue synthetic frame.
+        capture=subprocess.run([
+            "ffmpeg","-hide_banner","-loglevel","error","-ss","0.4",
+            "-i",str(file_path),"-frames:v","1","-f","rawvideo",
+            "-pix_fmt","rgb24","-"
+        ],capture_output=True,timeout=40,check=True)
+        pixels=capture.stdout
+        self.assertGreater(sum(1 for i in range(0,len(pixels),3)
+            if pixels[i]>190 and pixels[i+1]>190 and pixels[i+2]>190),100)
+        exported=json.loads(self.request("GET","/api/project/export")[2])
+        self.assertIn("caption.correct",[c["type"] for c in exported["commands"]])
+        self.assertEqual(
+            [c["text"] for c in self.workspace.tape.view.captions],["CIAO MONDO!"])
+        # Imported caption edits do not depend on a persisted ASR transcript.
+        self.workspace.transcript=None
+        status,_,data=self.post("/api/project/import",exported)
+        self.assertEqual(status,200,data)
+        self.assertEqual(json.loads(data)["captions"][0]["text"],"CIAO MONDO!")
+        self.assertEqual(self.request("GET","/api/captions/generate")[0],404)
+
     def test_export_requires_matching_uploaded_video(self):
         status, _, response = self.request("GET", "/api/project/export")
         self.assertEqual(status, 400)

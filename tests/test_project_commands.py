@@ -70,6 +70,42 @@ class ProjectReplayTests(unittest.TestCase):
         self.assertIsNone(imported.view.detected_silences)
 
 
+    def test_portable_captions_edit_undo_redo_and_approval(self):
+        tape = analyze(ProjectTape(media()))
+        tape = tape.append("caption.set", {
+            "style": "social", "cues": [
+                {"id": "a"*32, "start_ms": 0, "end_ms": 1100, "text": "Tre consigli"},
+                {"id": "b"*32, "start_ms": 2200, "end_ms": 3200, "text": "AI locale"},
+            ]
+        })
+        tape = tape.append("timeline.approve", {})
+        self.assertTrue(tape.view.approved)
+        tape = tape.append("caption.correct", {
+            "caption_id": "a"*32, "text": "Tre consigli AI"
+        })
+        self.assertFalse(tape.view.approved)
+        self.assertEqual(tape.view.captions[0]["text"], "Tre consigli AI")
+        tape = tape.append("caption.style", {"style": "minimal"})
+        self.assertEqual(tape.view.caption_style, "minimal")
+        self.assertEqual(ProjectTape.from_dict(tape.as_dict()).view, tape.view)
+        after_undo = tape.undo()
+        self.assertEqual(after_undo.view.caption_style, "social")
+        self.assertEqual(after_undo.redo().view.caption_style, "minimal")
+        self.assertFalse(tape.append("caption.clear", {}).view.captions)
+        for kind, payload in [
+            ("caption.correct", {"caption_id":"f"*32,"text":"wrong target"}),
+            ("caption.style", {"style":"unexpected"}),
+            ("caption.set", {"style":"social","cues":[{
+                "id":"a"*32,"start_ms":0,"end_ms":1200,"text":"first"
+            },{
+                "id":"b"*32,"start_ms":1000,"end_ms":2000,"text":"overlap"
+            }]}),
+            ("caption.correct", {"caption_id":"a"*32,"text":"{\\unsafe}"}),
+        ]:
+            with self.subTest(kind=kind), self.assertRaises(ProjectFormatError):
+                tape.append(kind, payload)
+        self.assertEqual(tape.view.captions[0]["text"], "Tre consigli AI")
+
     def test_precise_commands_replay_to_same_edit_plan_after_json_import(self):
         tape = analyze(ProjectTape(media()))
         first, second = tape.view.segments
