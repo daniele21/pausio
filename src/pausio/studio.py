@@ -27,13 +27,15 @@ from pausio.domain import EditPlan, Interval
 from pausio.captions import (
     CAPTION_STYLES, CAPTION_PRESETS, CAPTION_FONTS, propose_captions, remap_captions
 )
-from pausio.media import MediaInfo, detect_silences, probe, render, waveform_envelope
+from pausio.media import MediaInfo, detect_silences, probe, probe_audio, render, waveform_envelope
 from pausio.planner import CUT_PRESETS, validate_cut_settings, policy_from_cut_settings, propose_segments
 from pausio.project_commands import ProjectTape, ProjectFormatError, UI_COMMANDS
 from pausio.studio_persistence import StudioSessionStore, RecoveryError, default_studio_directory
 
 MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024
 MAX_JSON_BYTES = 4 * 1024 * 1024
+MAX_AUDIO_BYTES = 60 * 1024 * 1024
+AUDIO_EXTENSIONS = frozenset({'.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg'})
 ALLOWED_VIDEO_EXTENSIONS = frozenset({".mp4", ".mov", ".m4v", ".mkv", ".webm"})
 ASSETS = {
     "/": ("index.html", "text/html; charset=utf-8"),
@@ -140,6 +142,7 @@ class StudioWorkspace:
                 "detected_silences": self.tape.view.detected_silences if self.tape else None,
                 "transcript": self.transcript,
                 "captions": [dict(c) for c in self.tape.view.captions] if self.tape else [],
+                "audio_clips": [{**dict(c), "available": self._audio_path(c["asset_sha256"]).is_file()} for c in self.tape.view.audio_clips] if self.tape else [],
                 "caption_style": self.tape.view.caption_style if self.tape else "social",
                 "caption_config": self.tape.view.caption_config if self.tape else CAPTION_PRESETS["social"],
                 "caption_presets": CAPTION_PRESETS,
@@ -154,6 +157,53 @@ class StudioWorkspace:
                 "importing": self.importing,
                 "job": dict(self.job),
             }
+
+    def _audio_path(self, digest: str) -> Path:
+        if not re.fullmatch(r"[0-9a-f]{64}", digest):
+            raise StudioError("Invalid audio digest.")
+        return self.directory / ("fx-" + digest)
+
+    def begin_audio_import(self, name: str, revision: int) -> tuple[Path, str]:
+        label = Path(name).name.strip()
+        suffix = Path(label).suffix.lower()
+        if not label or "\\" in label or suffix not in AUDIO_EXTENSIONS:
+            raise StudioError("Audio non supportato: usa MP3, WAV, M4A, AAC, FLAC o OGG.")
+        with self.lock:
+            self._ensure_unlocked()
+            if self.tape is None or type(revision) is not int or revision != self.tape.revision:
+                raise StudioError("Versione del progetto non aggiornata. Ricarica e riprova.")
+            self.importing = True
+        return self.directory / f"incoming-fx-{uuid.uuid4().hex}{suffix}", label[:160]
+
+    def finish_audio_import(
+        self, candidate: Path, label: str, duration_ms: int, digest: str,
+        revision: int, start_ms: int
+    ) -> None:
+        with self.lock:
+            try:
+                if self.tape is None or self.source is None or revision != self.tape.revision:
+                    raise StudioError("Progetto modificato durante il caricamento audio.")
+                if type(start_ms) is not int or not 0 <= start_ms < self.tape.media["duration_ms"]:
+                    raise StudioError("Posizione audio fuori dal video.")
+                target = self._audio_path(digest)
+                if target.exists():
+                    if target.is_symlink() or not target.is_file():
+                        raise StudioError("File audio locale non valido.")
+                    candidate.unlink(missing_ok=True)
+                else:
+                    os.replace(candidate, target)
+                    if os.name == "posix":
+                        target.chmod(0o600)
+                # Re-link missing assets after importing a portable project.
+                if not any(c["asset_sha256"] == digest for c in self.tape.view.audio_clips):
+                    clip = {
+                        "id": uuid.uuid4().hex, "asset_sha256": digest,
+                        "filename": label, "start_ms": start_ms,
+                        "duration_ms": duration_ms, "gain_db": -12,
+                    }
+                    self._install_tape(self.tape.append("audio.add", {"clip": clip}))
+            finally:
+                self.importing = False
 
     def begin_import(self, name: str) -> tuple[Path, str]:
         label = Path(name).name.strip()
@@ -466,6 +516,16 @@ class StudioWorkspace:
                 raise StudioError("Conferma il montaggio prima dell'esportazione.")
             if kind == "preview" and self.plan is None:
                 raise StudioError("Analizza o prepara un montaggio prima dell'anteprima.")
+            active_fx = []
+            if kind in {"render", "preview"} and self.tape is not None:
+                for clip in self.tape.view.audio_clips:
+                    path = self._audio_path(clip["asset_sha256"])
+                    if path.is_symlink() or not path.is_file():
+                        raise StudioError("Effetto audio mancante: reimporta il file originale.")
+                    with path.open("rb") as handle:
+                        if hashlib.file_digest(handle, "sha256").hexdigest() != clip["asset_sha256"]:
+                            raise StudioError("Effetto audio modificato: reimporta il file.")
+                    active_fx.append((path, dict(clip)))
             source = self.source
             info = self.info
             plan = self.plan
@@ -531,6 +591,7 @@ class StudioWorkspace:
                         size=(540, 960) if kind == "preview" else (1080, 1920),
                         captions=mapped, caption_style=current_style,
                         caption_config=current_config,
+                        audio_fx=active_fx,
                     )
                     with self.lock:
                         if kind == "preview":
