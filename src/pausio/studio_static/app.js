@@ -763,7 +763,8 @@ function drawFx(){
     for(const [index,frag] of pieces.entries()){
       const mark=document.createElement("button");
       mark.type="button";
-      mark.className="fx-clip-mark"+(clip.available?"":" missing");
+      mark.className="fx-clip-mark"+(clip.available?"":" missing")+
+        ((clip.muted||currentAudioMix().fx_muted)?" is-muted":"");
       mark.dataset.clipId=clip.id;
       mark.title=clip.filename+" · inizio nel montaggio "+msFormat(clip.start_ms,true)+" · trascina o usa le frecce";
       mark.setAttribute("aria-label","Sposta effetto "+clip.filename+", inizio "+
@@ -802,16 +803,78 @@ function drawFx(){
       input.min=min;input.max=max;input.step=step;
       input.value=String(val);input.disabled=working();
       input.setAttribute("aria-label",title+" "+clip.filename);
+      if(key==="gain_db"){
+        input.addEventListener("input",()=>{
+          if(!input.checkValidity())return;
+          const value=Number(input.value);
+          clipMixerDrafts.set(clip.id,{...currentClipMix(clip),gain_db:value});
+          const slider=item.querySelector(".clip-volume-range");
+          const out=item.querySelector(".clip-mixer output");
+          if(slider)slider.value=String(value);
+          if(out)out.textContent=gainText(value);
+          syncLiveFx();
+        });
+      }
       input.addEventListener("change",()=>run(async()=>{
         if(!input.checkValidity()||!Number.isFinite(Number(input.value)))
           throw Error("Valore audio fuori dai limiti.");
         const value=key==="start_ms"?Math.round(Number(input.value)*1000):Number(input.value);
-        await edit("audio.update",{clip_id:clip.id,
-          start_ms:key==="start_ms"?value:clip.start_ms,
-          gain_db:key==="gain_db"?value:clip.gain_db});
+        if(key==="gain_db"){
+          if(value===clip.gain_db)return;
+          await edit("audio.clip.mix",{clip_id:clip.id,gain_db:value,
+            muted:clip.muted===true});
+        }else{
+          await edit("audio.update",{clip_id:clip.id,
+            start_ms:value,gain_db:clip.gain_db});
+        }
       }));
       wrapper.append(input);item.append(wrapper);
     }
+    const clipMixer=document.createElement("div");
+    clipMixer.className="clip-mixer"+(clip.muted?" is-muted":"");
+    const mixLabel=document.createElement("label");mixLabel.textContent="Volume effetto";
+    const slider=document.createElement("input");slider.type="range";
+    slider.className="clip-volume-range";
+    slider.min="-36";slider.max="12";slider.step="1";slider.value=String(clip.gain_db);
+    slider.disabled=working();
+    slider.setAttribute("aria-label","Regola volume "+clip.filename);
+    slider.setAttribute("aria-valuetext",gainText(clip.gain_db));
+    const level=document.createElement("output");level.textContent=gainText(clip.gain_db);
+    const mixerButtons=document.createElement("div");mixerButtons.className="clip-mixer-controls";
+    const clipMute=document.createElement("button");clipMute.type="button";
+    clipMute.className="clip-mute";clipMute.disabled=working();
+    clipMute.textContent=clip.muted?"Riattiva":"Silenzia";
+    clipMute.setAttribute("aria-label",(clip.muted?"Riattiva":"Silenzia")+" effetto "+clip.filename);
+    clipMute.setAttribute("aria-pressed",String(!!clip.muted));
+    clipMute.addEventListener("click",()=>run(()=>edit("audio.clip.mix",{
+      clip_id:clip.id,gain_db:clip.gain_db,muted:!clip.muted
+    })));
+    const clipReset=document.createElement("button");clipReset.type="button";
+    clipReset.className="clip-reset";clipReset.disabled=working();
+    clipReset.textContent="↺";
+    clipReset.title="Ripristina volume effetto al livello iniziale (-12 dB)";
+    clipReset.setAttribute("aria-label","Ripristina volume effetto "+clip.filename);
+    clipReset.addEventListener("click",()=>run(async()=>{
+      if(clip.gain_db===-12&&!clip.muted)return;
+      await edit("audio.clip.mix",{clip_id:clip.id,gain_db:-12,muted:false});
+    }));
+    slider.addEventListener("input",()=>{
+      const value=Number(slider.value);
+      level.textContent=gainText(value);
+      slider.setAttribute("aria-valuetext",gainText(value));
+      const number=item.querySelector('input[aria-label^="Volume (dB)"]');
+      if(number)number.value=String(value);
+      clipMixerDrafts.set(clip.id,{...currentClipMix(clip),gain_db:value});
+      syncLiveFx();
+    });
+    slider.addEventListener("change",()=>run(async()=>{
+      const value=Number(slider.value);
+      if(value===clip.gain_db)return;
+      await edit("audio.clip.mix",{clip_id:clip.id,gain_db:value,muted:!!clip.muted});
+    }));
+    mixerButtons.append(clipMute,clipReset);
+    clipMixer.append(mixLabel,slider,level,mixerButtons);
+    item.append(clipMixer);
     if(clip.available){
       const audio=document.createElement("audio");audio.controls=true;audio.preload="none";
       audio.src="/api/audio/"+clip.asset_sha256;
