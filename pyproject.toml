@@ -17,6 +17,11 @@ classifiers = [
   "Topic :: Multimedia :: Video",
 ]
 
+[project.optional-dependencies]
+# Fully local ASR. Optional to keep Pausio editor lightweight when not transcribing.
+# MLX requires macOS Apple Silicon. The tested integration target is Python 3.11-3.13.
+asr = ["mlx-whisper", "huggingface-hub>=0.26"]
+
 [project.scripts]
 pausio = "pausio.cli:main"
 

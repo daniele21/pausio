@@ -22,7 +22,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 from pausio import __version__
-from pausio.closedroom_asr import transcribe_video_with_closedroom
+from pausio.local_asr import transcribe_video_local, validate_asr_settings
 from pausio.domain import EditPlan, Interval
 from pausio.media import MediaInfo, detect_silences, probe, render, waveform_envelope
 from pausio.planner import CUT_PRESETS, validate_cut_settings, policy_from_cut_settings, propose_segments
@@ -406,13 +406,18 @@ class StudioWorkspace:
                 raise StudioError(str(exc)) from exc
             self._install_tape(incoming)
 
-    def start_job(self, kind: str, *, settings: object | None = None) -> None:
+    def start_job(
+        self, kind: str, *, settings: object | None = None, asr: object | None = None
+    ) -> None:
         if kind not in {"analyze", "render", "transcribe", "preview"}:
             raise StudioError("Operazione sconosciuta.")
         if kind != "analyze" and settings is not None:
             raise StudioError("Le impostazioni di taglio sono valide solo per Analizza.")
+        if kind != "transcribe" and asr is not None:
+            raise StudioError("Le impostazioni ASR sono valide solo per Trascrivi.")
         try:
             cut_settings = validate_cut_settings(settings) if kind == "analyze" else None
+            asr_options = validate_asr_settings(asr) if kind == "transcribe" else None
         except ValueError as exc:
             raise StudioError(str(exc)) from exc
         with self.lock:
@@ -465,7 +470,8 @@ class StudioWorkspace:
                         })
                         self._install_tape(next_tape)
                 elif kind == "transcribe":
-                    result = transcribe_video_with_closedroom(source)
+                    assert asr_options is not None
+                    result = transcribe_video_local(source, **asr_options)
                     with self.lock:
                         self.transcript = result
                 elif kind in {"render", "preview"}:
@@ -610,10 +616,11 @@ class StudioHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/jobs":
                 request = self._read_json()
-                if set(request) - {"kind", "settings"}:
+                if set(request) - {"kind", "settings", "asr"}:
                     raise StudioError("Parametri job sconosciuti.")
                 self.server.workspace.start_job(
-                    request.get("kind", ""), settings=request.get("settings")
+                    request.get("kind", ""), settings=request.get("settings"),
+                    asr=request.get("asr")
                 )
                 self._json(202, self.server.workspace.snapshot())
                 return
