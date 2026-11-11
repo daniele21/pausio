@@ -13,11 +13,13 @@ let captionPositionMode = false;
 let captionPointer = null;
 const captionNumberFields = ["x_pct","y_pct","font_size","outline_size"];
 const captionColorFields = ["text_color","outline_color","background_color"];
+const captionFontFields = ["font_family"];
+const fontFallBack = new Set(["Georgia","Times New Roman","Courier New"]);
 function captionConfig(){ return captionDraft||project?.caption_config||project?.caption_presets?.social; }
 function renderCaptionSettings(){
   if(!captionDraft)return;
   el("caption-style").value=captionDraft.preset;
-  for(const field of [...captionNumberFields,...captionColorFields]){
+  for(const field of [...captionNumberFields,...captionColorFields,...captionFontFields]){
     const input=document.querySelector('[data-caption-setting="'+field+'"]');
     if(input)input.value=captionDraft[field];
   }
@@ -30,6 +32,16 @@ function renderCaptionSettings(){
 function syncCaptionSettings(next,busy){
   const config=next.caption_config||next.caption_presets?.social;
   if(!config)return;
+  const picker=el("caption-font-family");
+  const families=next.caption_fonts||["Arial"];
+  if(picker.options.length!==families.length||
+     families.some((name,i)=>picker.options[i]?.value!==name)){
+    picker.replaceChildren(...families.map(name=>{
+      const option=document.createElement("option");
+      option.value=name;option.textContent=name;option.style.fontFamily='"'+name+'", sans-serif';
+      return option;
+    }));
+  }
   const key=JSON.stringify([next.media_id,config]);
   if(next.media_id!==captionMediaKey){
     captionMediaKey=next.media_id;
@@ -408,6 +420,9 @@ function updateCaptionOverlay(){
   const videoBox=overlay.parentElement.getBoundingClientRect();
   const scale=Math.max(0.1, videoBox.width/1080);
   overlay.style.fontSize=Math.max(8,config.font_size*scale)+"px";
+  const fallback=config.font_family==="Courier New"?"monospace":
+    fontFallBack.has(config.font_family)?"serif":"sans-serif";
+  overlay.style.fontFamily='"'+config.font_family+'", '+fallback;
   overlay.style.color=config.text_color;
   overlay.style.webkitTextStroke=(config.outline_size*scale)+"px "+config.outline_color;
   overlay.style.textShadow="0 1px 2px "+config.outline_color;
@@ -791,7 +806,8 @@ for(const input of document.querySelectorAll("[data-caption-setting]")){
   input.addEventListener("input",()=>{
     if(!(project?.captions||[]).length)return;
     previewCaptionSetting(field,input.type==="checkbox"?input.checked:
-      input.type==="color"?input.value.toUpperCase():Number(input.value));
+      input.type==="color"?input.value.toUpperCase():
+      input.tagName==="SELECT"?input.value:Number(input.value));
   });
   input.addEventListener("change",()=>run(()=>commitCaptionSettings()));
 }
