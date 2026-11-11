@@ -136,6 +136,37 @@ class TestMedia(unittest.TestCase):
             self.assertLess(peak(1.0, muted), 50,
                             "Muting FX bus should remove effect from exported MP4")
 
+    @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "FFmpeg unavailable")
+    def test_voice_track_attenuation_and_mute_affect_rendered_pcm(self):
+        with TemporaryDirectory() as d:
+            root=Path(d)
+            original=root/"speaker.mp4"
+            subprocess.run([
+                "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+                "-f", "lavfi", "-i", "color=c=black:s=160x284:r=15:d=1",
+                "-f", "lavfi", "-i", "sine=frequency=450:duration=1",
+                "-shortest", "-c:v", "mpeg4", "-c:a", "aac", str(original),
+            ],check=True,timeout=40)
+            standard={"voice_gain_db":0,"voice_muted":False,
+                      "fx_gain_db":0,"fx_muted":False}
+            quiet=root/"quiet.mp4"
+            muted=root/"muted.mp4"
+            render(original,quiet,(Interval(0,1000),),has_audio=True,
+                   size=(540,960),audio_mix={**standard,"voice_gain_db":-12})
+            render(original,muted,(Interval(0,1000),),has_audio=True,
+                   size=(540,960),audio_mix={**standard,"voice_muted":True})
+            def peak(path):
+                result=subprocess.run([
+                    "ffmpeg","-hide_banner","-loglevel","error","-nostdin",
+                    "-ss","0.3","-i",str(path),"-t","0.15","-map","0:a:0",
+                    "-ac","1","-ar","16000","-f","s16le","-",
+                ],capture_output=True,check=True,timeout=30)
+                samples=array("h");samples.frombytes(result.stdout)
+                return max((abs(v) for v in samples),default=0)
+            self.assertGreater(peak(original),500)
+            self.assertLess(peak(quiet),peak(original)/2)
+            self.assertLess(peak(muted),50)
+
     def test_render_builds_command_without_execution(self):
         with TemporaryDirectory() as d:
             source = Path(d) / "input.mov"
