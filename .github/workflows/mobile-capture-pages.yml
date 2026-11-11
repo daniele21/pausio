@@ -1,0 +1,38 @@
+name: Publish Mobile Capture (GitHub Pages)
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/pausio/studio_static/capture.*'
+      - '.github/workflows/mobile-capture-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pausio-mobile-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - name: Package only the standalone offline-free recorder
+        run: |
+          mkdir -p _site
+          cp src/pausio/studio_static/capture.html _site/index.html
+          cp src/pausio/studio_static/capture.css _site/capture.css
+          cp src/pausio/studio_static/capture.js _site/capture.js
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
