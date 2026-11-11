@@ -121,6 +121,7 @@ class MobileCapturePlaywrightTests(unittest.TestCase):
         self.assertTrue(geometry["hasCamera"])
         page.locator("#edit-gobbo").click()
         self.assertTrue(page.locator("#gobbo-settings").evaluate("(element) => element.open"))
+        self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"), 390)
         previous = page.locator("#prompter-scroll").evaluate("(element) => element.clientHeight")
         page.locator("#gobbo-lines").focus()
         page.locator("#gobbo-lines").press("End")
@@ -141,3 +142,4 @@ class MobileCapturePlaywrightTests(unittest.TestCase):
         self.assertFalse(page.locator("#gobbo-settings").evaluate("(element) => element.open"))
         page.locator("#edit-gobbo").click()
         self.assertTrue(page.locator("#script-input").is_visible())
+        self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"), 320)
