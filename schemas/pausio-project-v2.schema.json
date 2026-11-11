@@ -146,8 +146,94 @@
                   "items": {
                     "$ref": "#/$defs/segment"
                   }
+                },
+                "settings": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "preset",
+                    "noise_db",
+                    "min_silence_ms",
+                    "min_removed_ms",
+                    "speech_padding_before_ms",
+                    "speech_padding_after_ms",
+                    "min_keep_ms"
+                  ],
+                  "properties": {
+                    "preset": {
+                      "type": "string",
+                      "enum": [
+                        "natural",
+                        "balanced",
+                        "dynamic",
+                        "custom"
+                      ]
+                    },
+                    "noise_db": {
+                      "type": "integer",
+                      "minimum": -55,
+                      "maximum": -15
+                    },
+                    "min_silence_ms": {
+                      "type": "integer",
+                      "minimum": 200,
+                      "maximum": 2000
+                    },
+                    "min_removed_ms": {
+                      "type": "integer",
+                      "minimum": 50,
+                      "maximum": 1000
+                    },
+                    "speech_padding_before_ms": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 600
+                    },
+                    "speech_padding_after_ms": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 600
+                    },
+                    "min_keep_ms": {
+                      "type": "integer",
+                      "minimum": 50,
+                      "maximum": 1000
+                    }
+                  }
+                },
+                "detected_silences": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000,
+                  "description": "Number of FFmpeg detected silence intervals before the cut policy."
                 }
-              }
+              },
+              "allOf": [
+                {
+                  "if": {
+                    "required": [
+                      "settings"
+                    ]
+                  },
+                  "then": {
+                    "required": [
+                      "detected_silences"
+                    ]
+                  }
+                },
+                {
+                  "if": {
+                    "required": [
+                      "detected_silences"
+                    ]
+                  },
+                  "then": {
+                    "required": [
+                      "settings"
+                    ]
+                  }
+                }
+              ]
             }
           }
         },

@@ -23,6 +23,7 @@
 ## Studio UI testing milestone
 
 - [x] Local web UI via `pausio studio` with video import, preview and graphical KEEP timeline.
+- [x] Studio editing presets (Natural/Balanced/Dynamic/Custom), advanced FFmpeg thresholds, reanalysis, diagnostics and portable versioned settings; real-media suitability still needs validation.
 - [x] Editable source-time ranges, restore decisions, original vs edited simulated preview, explicit approval and MP4 export.
 - [x] Optional ClosedRoom transcript panel; existing ASR stack remains upstream.
 - [x] Four tailored Studio UX/UI Agent Skills and automated HTTP/workflow tests.
