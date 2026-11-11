@@ -150,6 +150,125 @@ const outputTime = ms => {
   return elapsed;
 };
 const working = () => uploading || !!project?.importing || project?.job?.status==="running";
+
+/* The video player is the clock: HTML audio elements monitor local FX live,
+   while the FFmpeg preview/export already contain the final mix. Do not double play.
+   Commands/FFmpeg remain the source of truth for the actual rendered sound. */
+let fxMonitoringEnabled = true;
+let fxAudioContext = null;
+const liveFxPlayers = new Map();
+function pauseLiveFx(){
+  for(const {audio} of liveFxPlayers.values())if(!audio.paused)audio.pause();
+}
+function disposeLiveFx(id){
+  const player=liveFxPlayers.get(id);if(!player)return;
+  player.audio.pause();player.audio.removeAttribute("src");player.audio.load();
+  if(player.source)player.source.disconnect();
+  if(player.gain)player.gain.disconnect();
+  liveFxPlayers.delete(id);
+}
+function reconcileLiveFx(){
+  const allowed=new Map((project?.audio_clips||[])
+    .filter(c=>c.available).map(c=>[c.id,c]));
+  for(const [id,player] of liveFxPlayers){
+    if(!allowed.has(id)||allowed.get(id).asset_sha256!==player.sha)disposeLiveFx(id);
+  }
+}
+function unlockFxAudio(){
+  if(!fxMonitoringEnabled||mode==="rendered"||!(project?.audio_clips||[]).length)return;
+  if(!fxAudioContext){
+    const AudioContextType=window.AudioContext||window.webkitAudioContext;
+    if(AudioContextType){
+      try{fxAudioContext=new AudioContextType();}
+      catch{/* HTMLAudioElement fallback still works on supported browsers. */}
+    }
+  }
+  if(fxAudioContext?.state==="suspended")
+    fxAudioContext.resume().catch(()=>toast("Audio FX bloccato dal browser. Tocca Play o genera la preview FFmpeg.","error"));
+}
+function createLiveFxPlayer(clip){
+  const audio=new Audio();
+  audio.preload="auto";
+  audio.src="/api/audio/"+encodeURIComponent(clip.asset_sha256);
+  audio.loop=false;
+  const player={audio,sha:clip.asset_sha256,gain:null,source:null,starting:false,failed:false};
+  if(fxAudioContext){
+    try{
+      const source=fxAudioContext.createMediaElementSource(audio);
+      const gain=fxAudioContext.createGain();
+      source.connect(gain);gain.connect(fxAudioContext.destination);
+      player.source=source;player.gain=gain;
+    }catch{/* If Web Audio is unavailable, the media element uses its own volume. */}
+  }
+  audio.addEventListener("error",()=>{
+    if(!player.failed){
+      player.failed=true;
+      toast("Il browser non riesce a riprodurre questo FX. Usa «Genera preview» per ascoltarlo con FFmpeg.","error");
+    }
+    audio.pause();
+  });
+  liveFxPlayers.set(clip.id,player);
+  return player;
+}
+function monitoredOutputMs(){
+  if(!project?.media||!fxMonitoringEnabled||mode==="rendered"||v.paused||v.ended||v.seeking)
+    return null;
+  const source=Math.round((v.currentTime||0)*1000);
+  if(!project.plan)return source;
+  // FX commands are in the edited timeline: never play them in a removed gap.
+  const kept=segments().some(seg=>source>=seg.start_ms&&source<seg.end_ms);
+  return kept?outputTime(source):null;
+}
+function syncLiveFx(){
+  reconcileLiveFx();
+  const time=monitoredOutputMs();
+  if(time===null){pauseLiveFx();return;}
+  const current=new Set();
+  for(const clip of project.audio_clips||[]){
+    if(!clip.available)continue;
+    const relative=time-clip.start_ms;
+    if(relative<0||relative>=clip.duration_ms)continue;
+    current.add(clip.id);
+    const player=liveFxPlayers.get(clip.id)||createLiveFxPlayer(clip);
+    if(player.failed)continue;
+    const {audio,gain}=player;
+    const effectiveGain=Math.pow(10,clip.gain_db/20)*(v.muted?0:v.volume);
+    if(gain){gain.gain.value=effectiveGain;audio.volume=1;}
+    else{audio.volume=Math.max(0,Math.min(1,effectiveGain));}
+    audio.playbackRate=v.playbackRate;
+    const position=relative/1000;
+    // Resync after seeking or cut simulation jumps; avoid excessive micro-seeks.
+    if(Math.abs((audio.currentTime||0)-position)>.12){
+      try{audio.currentTime=position;}catch{/* Seek will be retried after metadata. */}
+    }
+    if(audio.paused&&!player.starting){
+      player.starting=true;
+      audio.play().catch(()=>{
+        if(!player.failed){
+          player.failed=true;
+          toast("Impossibile ascoltare l'FX live. Prova la preview FFmpeg.","error");
+        }
+      }).finally(()=>{player.starting=false;});
+    }
+  }
+  for(const [id,player] of liveFxPlayers)
+    if(!current.has(id)&&!player.audio.paused)player.audio.pause();
+}
+function updateFxMonitorUI(){
+  const clips=project?.audio_clips||[];
+  const toggle=el("fx-monitor-toggle"),status=el("fx-monitor-status");
+  toggle.hidden=!project?.media||!clips.length;
+  status.hidden=!project?.media||!clips.length;
+  if(!clips.length)return;
+  toggle.disabled=mode==="rendered";
+  toggle.setAttribute("aria-pressed",String(mode==="rendered"||fxMonitoringEnabled));
+  toggle.textContent=mode==="rendered"?"♫ FX nel video":fxMonitoringEnabled?"♫ FX attivi":"♫ FX spenti";
+  status.textContent=mode==="rendered"?
+    "L'anteprima FFmpeg contiene già gli effetti: nessuna duplicazione audio.":
+    fxMonitoringEnabled?"FX udibili durante Play, insieme alla voce. Anteprima live; verifica il mix finale con «Genera preview».":
+    "Ascolto degli FX disattivato: il rendering finale li include comunque.";
+}
+
 function toast(message,kind="success"){
   const n=el("toast");n.textContent=message;n.className="toast"+(kind==="error"?" error":"");n.hidden=false;
   clearTimeout(toastTimeout);toastTimeout=setTimeout(()=>n.hidden=true,6000);
