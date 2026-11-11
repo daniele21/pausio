@@ -174,6 +174,58 @@ class StudioPlaywrightAudit(unittest.TestCase):
         }""",clip["id"]))
         self.page.locator("#play-pause").click()
         self.page.locator("#fx-monitor-toggle").click()
+
+        # The mixer controls must audibly affect voice and FX, and persist as
+        # versioned commands rather than a browser-only setting.
+        self.assertTrue(self.page.locator("#audio-mixer").is_visible())
+        self.assertEqual(self.page.locator("#voice-gain-label").inner_text(),"100% · 0 dB")
+        revision=self.state()["project_revision"]
+        self.page.locator("#voice-gain").evaluate("""el=>{
+          el.value='-9';el.dispatchEvent(new Event('input',{bubbles:true}));
+          el.dispatchEvent(new Event('change',{bubbles:true}));
+        }""")
+        voiced=self.wait_state("revision",revision+1)
+        self.assertEqual(voiced["audio_mix"]["voice_gain_db"],-9)
+        self.assertIn("-9 dB",self.page.locator("#voice-gain-label").inner_text())
+        self.page.locator("#voice-mute").click()
+        muted_voice=self.wait_state("revision",voiced["project_revision"]+1)
+        self.assertTrue(muted_voice["audio_mix"]["voice_muted"])
+        self.assertEqual(self.page.locator("#voice-mute").get_attribute("aria-pressed"),"true")
+        self.page.locator("#voice-reset").click()
+        reset_voice=self.wait_state("revision",muted_voice["project_revision"]+1)
+        self.assertEqual(reset_voice["audio_mix"]["voice_gain_db"],0)
+        self.assertFalse(reset_voice["audio_mix"]["voice_muted"])
+
+        self.page.locator("#fx-gain").evaluate("""el=>{
+          el.value='-6';el.dispatchEvent(new Event('input',{bubbles:true}));
+          el.dispatchEvent(new Event('change',{bubbles:true}));
+        }""")
+        fx_set=self.wait_state("revision",reset_voice["project_revision"]+1)
+        self.assertEqual(fx_set["audio_mix"]["fx_gain_db"],-6)
+        self.page.locator("#fx-mute").click()
+        fx_muted=self.wait_state("revision",fx_set["project_revision"]+1)
+        self.assertTrue(fx_muted["audio_mix"]["fx_muted"])
+        self.page.locator("#fx-reset").click()
+        fx_ready=self.wait_state("revision",fx_muted["project_revision"]+1)
+        self.assertFalse(fx_ready["audio_mix"]["fx_muted"])
+        self.assertEqual(fx_ready["audio_mix"]["fx_gain_db"],0)
+        self.assertEqual(self.page.locator("#fx-gain").input_value(),"0")
+
+        self.page.locator(".clip-volume-range").evaluate("""el=>{
+          el.value='-15';el.dispatchEvent(new Event('input',{bubbles:true}));
+          el.dispatchEvent(new Event('change',{bubbles:true}));
+        }""")
+        clip_set=self.wait_state("revision",fx_ready["project_revision"]+1)
+        self.assertEqual(clip_set["audio_clips"][0]["gain_db"],-15)
+        self.page.locator(".clip-mute").click()
+        clip_muted=self.wait_state("revision",clip_set["project_revision"]+1)
+        self.assertTrue(clip_muted["audio_clips"][0]["muted"])
+        self.page.locator(".clip-reset").click()
+        clip_ready=self.wait_state("revision",clip_muted["project_revision"]+1)
+        self.assertFalse(clip_ready["audio_clips"][0]["muted"])
+        self.assertEqual(clip_ready["audio_clips"][0]["gain_db"],-12)
+        current=clip_ready
+
         # FX is inside the SAME scroll/zoom surface as the source waveform.
         geometry = self.page.evaluate("""() => {
           const bounds=id=>{ const b=document.querySelector(id).getBoundingClientRect();
