@@ -18,6 +18,32 @@ With Python 3.11+, FFmpeg and FFprobe on PATH, install once (`pip install -e .`)
 
 ## UX layout
 
+### Desktop editor (viewport maggiore di 1000 px)
+
+La prima iterazione desktop usa una barra modalità compatta a sinistra:
+**Media**, **Tagli AI**, **Trascrizione**, **Sottotitoli**, **Audio**,
+**Impostazioni**. Le modalità riutilizzano lo stesso stato del video e
+la stessa cronologia: cambiare modalità non esegue comandi né altera
+playhead, clip o preview.
+
+La timeline rimane nel dock inferiore; il mixer delle tracce voce/FX
+è affiancato alla timeline quando esiste un video. Il divisore
+orizzontale sopra la timeline è trascinabile e si può regolare con
+**↑/↓** dopo averlo messo a fuoco. Le preferenze sono salvate solo
+localmente nel browser, non nel progetto portabile.
+
+La toolbar desktop riporta **Annulla**, **Ripeti**, **Conferma montaggio**
+ed **Esporta/Scarica MP4**, collegati alle azioni reali già presenti:
+se il montaggio non è confermato l'export resta bloccato. In modalità
+Audio gli effetti importati sono gestiti nel pannello inspector, usando
+gli stessi controlli della versione precedente.
+
+Su tablet/mobile l'interfaccia esistente resta attiva, con timeline dopo
+il player e prima dell'inspector. La versione desktop non replica ancora
+tutte le funzioni raffigurate nei mockup: consulta
+[il piano UX desktop](DESKTOP_EDITOR_UX.md) per limiti e milestone.
+
+
 - **Top:** recognizable Pausio brand and local processing indicator; no fake cloud-login state.
 - **Left:** four-step flow, selected video metadata and real action buttons.
 - **Center:** large vertical preview and direct playback controls. Desktop / mobile responsive layout.
