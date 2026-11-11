@@ -216,7 +216,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
         state=self.wait_state("revision",initial["project_revision"]+1)
         self.assertEqual(state["analysis_settings"]["preset"],"dynamic")
         self.wait_condition(lambda: self.page.locator("#cut-preset").input_value()=="dynamic")
-        self.assertIn("rilevate",self.page.locator("#cut-result").inner_text())
+        self.wait_condition(lambda: "rilevate" in self.page.locator("#cut-result").inner_text())
         self.page.locator("#cut-advanced summary").click()
         self.page.locator('[data-cut-setting="noise_db"]').fill("-23")
         self.page.locator('[data-cut-setting="noise_db"]').press("Tab")
