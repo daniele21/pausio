@@ -332,6 +332,7 @@ class StudioSessionStore:
         for path in self.directory.iterdir():
             if path.is_file() and (
                 MEDIA_FILE_PATTERN.fullmatch(path.name)
+                or re.fullmatch(r"fx-[0-9a-f]{64}", path.name)
                 or path.name.startswith("incoming-")
                 or path.name == "export.mp4"
                 or path.name.startswith(".pausio-save-")
