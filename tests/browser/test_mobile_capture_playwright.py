@@ -78,6 +78,25 @@ class MobileCapturePlaywrightTests(unittest.TestCase):
         self.assertFalse(page.locator("#prompter").is_visible())
         self.assertEqual(self.errors, [])
 
+    def test_camera_activation_shows_preview_even_when_play_promise_never_resolves(self):
+        """Regression: mobile Safari may defer play() until the video becomes visible."""
+        page = self.page
+        page.add_init_script("""
+            HTMLMediaElement.prototype.play = function() {
+                return new Promise(() => {});
+            };
+        """)
+        page.reload(wait_until="networkidle")
+        self.assertIn("Pagina pronta", page.locator("#status").inner_text())
+        page.locator("#activate-camera").click()
+        page.locator("#record-start").wait_for(state="visible", timeout=12000)
+        self.assertTrue(page.evaluate("""() => {
+            const video = document.getElementById('camera-video');
+            return !video.hidden && !!video.srcObject && video.srcObject.active;
+        }"""))
+        self.assertEqual(page.locator("#capture-state").inner_text(), "CAMERA ATTIVA")
+        self.assertEqual(self.errors, [])
+
     def test_camera_preview_is_responsive_at_320px(self):
         page = self.page
         page.set_viewport_size({"width":320,"height":700})
