@@ -10,9 +10,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from pausio import __version__
-from pausio.closedroom_asr import (
-    ClosedRoomError, DEFAULT_CLOSEDROOM_URL, transcribe_video_with_closedroom,
-)
+from pausio.local_asr import LocalASRError, DEFAULT_ASR_MODEL, transcribe_video_local
 from pausio.domain import EditPlan, Interval
 from pausio.media import MediaError, detect_silences, probe, render
 from pausio.planner import AI_NATURAL, propose_segments
@@ -49,13 +47,16 @@ def build_parser() -> argparse.ArgumentParser:
     plan_cmd.add_argument("--overwrite", action="store_true")
 
     transcript_cmd = commands.add_parser(
-        "transcribe", help="Transcribe locally via an already running ClosedRoom ASR service"
+        "transcribe", help="Transcribe with standalone MLX Whisper, without ClosedRoom"
     )
     transcript_cmd.add_argument("input", type=Path)
     transcript_cmd.add_argument("--output", "-o", type=Path, required=True)
-    transcript_cmd.add_argument("--closedroom-url", default=DEFAULT_CLOSEDROOM_URL)
     transcript_cmd.add_argument("--language", default="it")
-    transcript_cmd.add_argument("--model", default=None)
+    transcript_cmd.add_argument("--model", default=DEFAULT_ASR_MODEL)
+    transcript_cmd.add_argument(
+        "--allow-model-download", action="store_true",
+        help="Explicitly authorize downloading a missing MLX model from Hugging Face"
+    )
     transcript_cmd.add_argument("--overwrite", action="store_true")
 
     render_cmd = commands.add_parser("render", help="Render an approved plan with FFmpeg")
@@ -112,8 +113,9 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError("source video and transcript output must differ")
             if output.exists() and not args.overwrite:
                 raise ValueError("transcript already exists; pass --overwrite")
-            transcript = transcribe_video_with_closedroom(
-                source, url=args.closedroom_url, language=args.language, model=args.model
+            transcript = transcribe_video_local(
+                source, language=args.language, model=args.model,
+                allow_model_download=args.allow_model_download
             )
             output.parent.mkdir(parents=True, exist_ok=True)
             with TemporaryDirectory(prefix=".pausio-", dir=output.parent) as temp:
@@ -151,7 +153,7 @@ def main(argv: list[str] | None = None) -> int:
             }), end="")
             return 0
         raise ValueError(f"unknown command: {args.command}")
-    except (MediaError, ClosedRoomError, ValueError, OSError, json.JSONDecodeError) as exc:
+    except (MediaError, LocalASRError, ValueError, OSError, json.JSONDecodeError) as exc:
         print(f"pausio: {exc}", file=sys.stderr)
         return 2
 

@@ -4,11 +4,11 @@
 
 A local-first toolkit for natural-sounding, talking-head social videos. Pausio is designed to make post-production **reviewable**, not fully automatic at the expense of speech or pacing.
 
-> **Status: early foundation (v0.1.0).** The current CLI inspects videos, suggests cuts using FFmpeg's signal-level silence detection, writes a human-editable JSON timeline, and exports a vertical 1080x1920 MP4. It can now request a transcript from the **existing, separately running ClosedRoom local ASR service**, but does not yet make semantic cuts, generate subtitles, denoise or export CapCut projects.
+> **Status: early foundation (v0.1.0).** The current CLI inspects videos, suggests cuts using FFmpeg's signal-level silence detection, writes a human-editable JSON timeline, and exports a vertical 1080x1920 MP4. It now has optional standalone MLX Whisper ASR on Apple Silicon (no ClosedRoom app or service required), but does not yet make semantic cuts, generate subtitles, denoise or export CapCut projects.
 
 ## Pausio Studio — interfaccia per test reali
 
-Un editor web locale senza npm, cloud o account. L'area di lavoro offre anteprima 9:16, **waveform reale, zoom timeline, maniglie di trim modificabili con mouse/tastiera, preview FFmpeg a 540×960**, trascrizione ClosedRoom opzionale e download MP4.
+Un editor web locale senza npm, cloud o account. L'area di lavoro offre anteprima 9:16, **waveform reale, zoom timeline, maniglie di trim modificabili con mouse/tastiera, preview FFmpeg a 540×960**, trascrizione locale MLX Whisper opzionale e download MP4.
 
 ```bash
 brew install ffmpeg
@@ -22,7 +22,7 @@ pausio studio
 
 Il browser si apre su **http://127.0.0.1:8765** quando la porta è libera. Se è occupata da un altro servizio, Studio prova automaticamente **8766, 8767, ...**, senza terminare il processo esistente; il terminale mostra l'indirizzo effettivo e il browser apre quello corretto. Puoi scegliere la porta iniziale con `pausio studio --port 8877 --no-open`. Il blocco di sicurezza della cartella della sessione resta attivo: una seconda istanza non può usare contemporaneamente gli stessi dati locali. Il server usa solo loopback e **salva automaticamente la sessione sul Mac**, inclusa una copia privata del video importato, per permettere il recupero dopo la chiusura o un'interruzione. La sezione Progetto offre **Annulla / Ripeti**, scorciatoie ⌘Z / ⌘⇧Z e **Elimina dati locali**. Il percorso predefinito su macOS è `~/Library/Application Support/Pausio/Studio`; puoi personalizzarlo con `pausio studio --data-dir /percorso/privato`. Chiudere Pausio **non elimina** il video salvato: usa esplicitamente «Elimina dati locali» per rimuoverlo. **Importa progetto / Esporta progetto** salva o ricostruisce i tagli come comandi versionati in un file `.pausio.json` **v2**, senza includere il video. I file v1 sono importabili e vengono convertiti automaticamente in memoria. Undo/Redo conserva l'eventuale cronologia futura nel progetto portabile. Reimporta prima il video originale: il sistema verifica il suo SHA-256. Supporta MP4/MOV/MKV/WebM fino a 2 GiB. Importa, analizza le pause, rivedi gli intervalli da mantenere, **conferma il montaggio** ed esporta.
 
-La modalità **Simulazione** salta tra gli intervalli dell'originale, e può essere imprecisa. Con **Genera preview** produci invece un MP4 a 540×960 tramite lo stesso pipeline FFmpeg dell'export finale per ascoltare e verificare gli stacchi, prima di confermare il montaggio. Le maniglie sulla timeline salvano modifiche strutturate nel progetto e invalidano la preview precedente. La riproduzione nel browser richiede codec compatibili (consigliato MP4 H.264). La trascrizione richiede ClosedRoom già in esecuzione. Restano da costruire sottotitoli, audio cleanup, waveform e tagli semantici.
+La modalità **Simulazione** salta tra gli intervalli dell'originale, e può essere imprecisa. Con **Genera preview** produci invece un MP4 a 540×960 tramite lo stesso pipeline FFmpeg dell'export finale per ascoltare e verificare gli stacchi, prima di confermare il montaggio. Le maniglie sulla timeline salvano modifiche strutturate nel progetto e invalidano la preview precedente. La riproduzione nel browser richiede codec compatibili (consigliato MP4 H.264). La trascrizione usa un motore MLX Whisper indipendente, con pacchetti opzionali e download dei modelli solo con consenso. Restano da costruire sottotitoli, audio cleanup, waveform e tagli semantici.
 
 Vedi [Guida Pausio Studio](docs/STUDIO_UI.md) per workflow, shortcut, privacy e limiti.
 
@@ -39,7 +39,7 @@ python -m pip install -e .
 pausio doctor
 pausio inspect video.mp4
 pausio plan video.mp4 -o plan.json
-# Optional: ClosedRoom local server must already be running on 127.0.0.1:1236
+# Optional on Apple Silicon: python -m pip install -e '.[asr]'
 pausio transcribe video.mp4 -o outputs/video.transcript.json
 # Review and edit the JSON keep segments first.
 pausio render plan.json -o final.mp4
@@ -47,20 +47,22 @@ pausio render plan.json -o final.mp4
 
 The edit plan stores versioned integer-millisecond KEEP intervals. Editing decisions remain reversible; source video is never overwritten. Exports are padded 9:16, 30 fps H.264/AAC MP4. Use `pausio render plan.json -o final.mp4 --dry-run` to inspect the FFmpeg command.
 
-## Transcription: reuse ClosedRoom, do not rebuild ASR
+## Transcription: standalone Pausio ASR (no ClosedRoom required)
 
-[ClosedRoom](https://github.com/daniele21/closedroom) already implements on-device MLX Whisper/Nemotron, VAD, model management, cache and transcription. Pausio only calls the **same-machine local API** on `127.0.0.1:1236` and adapts its response for editing. The integration follows the ClosedRoom `dev` endpoint `POST /v1/audio/transcriptions/path`.
+Pausio runs **MLX Whisper directly on Apple Silicon** using an independent, optional local ASR module inspired by ClosedRoom's design. No running ClosedRoom app, localhost ASR server or cloud account is needed.
 
 ```bash
-# Start the existing ClosedRoom server using its own repository instructions.
+# Use Python 3.12 on Apple Silicon for the best-tested setup:
+python -m pip install -e '.[asr]'
+
+# Offline by default: requires a previously downloaded cached model.
 pausio transcribe video.mp4 -o outputs/video.transcript.json
-# Optional: --model mlx-community/whisper-large-v3-turbo
-# Optional: --closedroom-url http://127.0.0.1:1236
+
+# Explicitly authorize downloading an uncached MLX model from Hugging Face:
+pausio transcribe video.mp4 -o outputs/video.transcript.json --allow-model-download
 ```
 
-Pausio uses FFmpeg to extract a temporary mono WAV, requests ClosedRoom's `verbose_json` response with `asr_provider=local`, normalizes segments and available word timestamps to **source-time milliseconds**, and deletes the temporary audio. It rejects non-loopback destinations and HTTP redirects. No model is installed or started automatically by Pausio. Pre-provision your desired ClosedRoom model to avoid unexpected upstream download behavior.
-
-The output is a separate reviewable transcript JSON, **not yet wired into cut decisions or subtitle rendering**. If ClosedRoom returns no word-level alignment, the sidecar reports `word_timestamps_available: false`; it never invents word timings. A live ClosedRoom integration test with real recordings is still outstanding. See [ClosedRoom integration](docs/CLOSEDROOM_INTEGRATION.md).
+In Studio choose the model and language under **Trascrizione locale**, click **Trascrivi il parlato**, and, if weights are absent, check **Scarica il modello se assente** and confirm the prompt. Only the model weights may be downloaded with consent; **no video or audio leaves your Mac**. The default model Large v3 Turbo is approximately 1.6 GB. Returned segment/word timestamps are converted into source-time integer milliseconds in a separate review-only JSON sidecar. No semantic cuts or subtitles are generated yet. Python 3.15 compatibility and real A56 footage are not yet validated. See [local ASR guide](docs/LOCAL_ASR.md).
 
 ## Project principles
 
@@ -85,14 +87,14 @@ CI tests Python 3.11–3.13 and synthetic FFmpeg E2E cases. Real Galaxy A56 foot
 
 Pausio ships **thirteen task-specific Agent Skills** under [`.agents/skills/`](.agents/skills/README.md), covering Python architecture, FFmpeg, natural editing, local speech AI, subtitles, test engineering, security/releases and PR review. Read [`AGENTS.md`](AGENTS.md) for repo invariants and [`docs/AGENT_SKILLS.md`](docs/AGENT_SKILLS.md) for task triggers, agent compatibility, source references, validation and evaluation prompts.
 
-These are guidance for coding agents, not runtime features. ClosedRoom is the sole ASR implementation; the optional local adapter does not install any transcription models.
+These are guidance for coding agents. Pausio owns optional on-device ASR; weights download only after explicit opt-in.
 
 ## Current modules and documentation
 
 - `src/pausio/domain.py`: validated immutable edit-plan model.
 - `src/pausio/planner.py`: deterministic AI Natural cut policy.
 - `src/pausio/media.py`: FFprobe / FFmpeg adapters.
-- `src/pausio/closedroom_asr.py`: existing ClosedRoom ASR API integration; no duplicate model stack.
+- `src/pausio/local_asr.py`: independent local MLX Whisper engine, offline-first model resolver.
 - `src/pausio/project_commands.py`: registro di istruzioni, Undo/Redo e formato portabile v2.
 - `src/pausio/studio_persistence.py`: checkpoint atomici, autosalvataggio privato e recupero dopo crash.
 - `src/pausio/cli.py`: `studio`, `doctor`, `inspect`, `plan`, `transcribe`, `render`.

@@ -529,19 +529,28 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         self.assertEqual(status, 400)
         self.assertIn("Importa", json.loads(response)["error"])
 
-    def test_transcription_uses_closedroom_adapter_only(self):
+    def test_transcription_uses_pausio_internal_asr_without_external_server(self):
         self.import_clip()
         result = {
-            "provider": "closedroom-local",
+            "provider": "pausio-local", "backend": "mlx-whisper",
             "text": "Ciao", "segments": [{"start_ms": 0, "end_ms": 900, "text": "Ciao"}],
             "word_timestamps_available": False
         }
-        with patch("pausio.studio.transcribe_video_with_closedroom", return_value=result) as call:
-            status, _, _ = self.post("/api/jobs", {"kind": "transcribe"})
-            self.assertEqual(status, 202)
+        options = {"model": "mlx-community/whisper-large-v3-turbo",
+                   "language": "it", "allow_model_download": False}
+        with patch("pausio.studio.transcribe_video_local", return_value=result) as runner:
+            status, _, body = self.post("/api/jobs", {"kind": "transcribe", "asr": options})
+            self.assertEqual(status, 202, body)
             state = self.await_job("transcribe")
             self.assertEqual(state["transcript"]["text"], "Ciao")
-            call.assert_called_once()
+            runner.assert_called_once()
+            self.assertEqual(runner.call_args.kwargs, options)
+        status, _, body = self.post("/api/jobs", {"kind": "transcribe", "asr": {
+            **options, "allow_model_download": 1
+        }})
+        self.assertEqual(status, 400, body)
+        status, _, body = self.post("/api/jobs", {"kind": "analyze", "asr": options})
+        self.assertEqual(status, 400, body)
 
 
 class StudioStaticCodeTests(unittest.TestCase):

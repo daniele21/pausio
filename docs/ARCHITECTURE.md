@@ -9,19 +9,19 @@ video.mp4 → inspect → analyze → propose **editable** timeline → review �
 - domain.py: Interval and EditPlan (schema_version=1, integer milliseconds, validated, portable serialisation).
 - planner.py: deterministic AI_NATURAL pause policy, completely independent of any ASR/vendor and unit-testable.
 - media.py: FFprobe adapter (metadata), FFmpeg silencedetect adapter, bounded PCM waveform envelope and FFmpeg filter-based renderer with common temporal pipeline for full and draft preview profiles.
-- closedroom_asr.py: localhost adapter to the **existing** ClosedRoom ASR service; source-time transcript sidecar (currently independent of edit planning).
+- local_asr.py: standalone on-device MLX Whisper adapter with explicit model download opt-in; normalized source-time transcript sidecar (independent of edit planning).
 - cli.py: CLI entrypoint, including `pausio studio`.
 - project_commands.py: pure deterministic event reducer, versioned `.pausio.json` v2 tape with active history cursor, monotonic revision, v1 import migration, media fingerprint binding and state reconstruction. **Canonical source of truth** for UI edits.
 - studio_persistence.py: private persistent local workspace, media fingerprint verification, process lock, atomic checkpoint with previous-state fallback and explicit privacy cleanup (separate from portable project JSON).
 - studio.py: local HTTP server, private autosaved workspace, restart recovery and asynchronous jobs; every edit and Undo/Redo is a validated command or cursor transition, not an untracked UI state mutation. Delegates to existing modules.
-- studio_static/: offline HTML/CSS/JS workspace with extracted audio waveform, source-time timeline zoom/trim handles (typed commands), simulated or FFmpeg-rendered preview, ClosedRoom transcript, and MP4 download. Python remains the plan's source of truth.
+- studio_static/: offline HTML/CSS/JS workspace with extracted audio waveform, source-time timeline zoom/trim handles (typed commands), simulated or FFmpeg-rendered preview, Pausio local transcript, and MP4 download. Python remains the plan's source of truth.
 
 ## Future boundaries
 
     input media (immutable)
       ├── probe adapter [ffprobe]
       ├── silence detector [ffmpeg; baseline signal-energy heuristic]
-      ├── ASR/VAD [ClosedRoom local API; existing implementation]
+      ├── ASR [Pausio local MLX Whisper; optional packages and model cache]
       └── denoise adapter [optional, never destructive]
              ↓
     analysis bundle (timestamps + confidence + provenance)

@@ -1,30 +1,27 @@
 ---
 name: pausio-speech-ai
-description: Use when integrating, validating or benchmarking Pausio transcription, Italian word alignment or VAD evidence. ClosedRoom dev owns all actual ASR/VAD engines, model management and caching; do not implement a second ML stack in Pausio.
+description: Integrate and test Pausio-owned, independent on-device MLX Whisper transcription, language selection, explicit offline-first model provisioning, timestamps and local resource safeguards. ClosedRoom is a reference, not an operational dependency.
 ---
 
-# Reuse ClosedRoom local ASR — never reinvent transcription
+# Pausio standalone local ASR
 
-## Owner and source of truth
+Pausio MUST transcribe without ClosedRoom installed, running or exposing an HTTP service. ClosedRoom `dev` informs architecture and proven MLX Whisper options, but Pausio implements and owns `src/pausio/local_asr.py`.
 
-The existing implementation lives in [daniele21/closedroom](https://github.com/daniele21/closedroom), branch `dev` (review upstream commit before changing contracts). ClosedRoom already supports on-device MLX Whisper / Nemotron, VAD, ASR worker, progress reporting, model configuration, caching and transcripts.
+## Engineering rules
 
-**Do not add faster-whisper, WhisperX, whisper.cpp, standalone Silero or another ASR runtime to Pausio.** Pausio must be a consumer, not a fork. ClosedRoom contains optional cloud providers but Pausio MUST explicitly select its local provider.
+1. Read `docs/LOCAL_ASR.md`, `src/pausio/local_asr.py`, `docs/DECISIONS.md` and the latest ClosedRoom `dev` transcriber when comparing optimization ideas.
+2. Load MLX Whisper directly **on Apple Silicon**, with optional `pip install -e '.[asr]'`; no local HTTP service, cloud ASR, or hidden ClosedRoom process.
+3. Always resolve model names to an existing local model directory **before** entering MLX Whisper. `snapshot_download(local_files_only=True)` by default; network downloads require the explicit `allow_model_download=true` UI approval or CLI `--allow-model-download`.
+4. FFmpeg extracts 16 kHz mono PCM WAV into an ephemeral private directory; do not mutate or upload original audio/video. Clean temporary files on success and failure.
+5. Preserve model/back-end metadata and actual segment and word timestamps in source-time integer milliseconds. Never invent word timestamps, confidence, speakers or diarization.
+6. Keep transcripts as reviewable sidecar material, separate from the canonical edit-command timeline. Speech-derived edit proposals require new typed deterministic commands and explicit approval.
+7. Model memory/latency, VAD, quality filtering, caching, cancellation and diarization are separate, staged improvements. Do not claim parity with ClosedRoom or verified quality until tested with real footage.
+8. Installation failures, missing weights, CPU platform mismatches and malformed ASR output must be actionable, never silently route to a remote service.
 
-## Current API boundary
+## Test gates
 
-1. Read `docs/CLOSEDROOM_INTEGRATION.md`, `src/pausio/closedroom_asr.py` and upstream `src/local_asr_server/routers/transcriptions.py`, `schemas.py`, `services/transcription_service.py` on `dev`.
-2. Use existing `POST /v1/audio/transcriptions/path` on `http://127.0.0.1:1236` with `file` absolute local WAV path, `language=it`, `asr_provider=local`, `response_format=verbose_json`, `word_timestamps=true`. Require same-machine loopback, no redirects or proxies; never silently select Speechmatics.
-3. Keep video/audio files immutable. An FFmpeg-extracted WAV exists only for the request and must be cleaned after completion or failure. Server must be explicitly started/configured by user and models pre-provisioned if network downloads are forbidden.
-4. Normalize ClosedRoom start/end seconds to source-time integer milliseconds. Preserve exact transcript text, model/backend provenance and actually returned word timings. Never fabricate word-level alignment, confidence or diarization.
-5. Keep the reviewable transcript sidecar separate from Pausio EditPlan until the schema and source→output timeline remapping are explicitly implemented and tested. Do not automatically approve a text-derived cut.
-6. Diagnose failures at the actual boundary (ClosedRoom unavailable, model missing, HTTP errors, response schema/timestamps, FFmpeg extraction, timebase offsets) before suggesting a new ASR library.
-7. On need for shared engine code or a stable SDK, implement/extract it upstream in ClosedRoom, version a contract there, and consume via dependency/adapter. Do not copy model code into Pausio.
+- Pure validation and normalization tests, offline model cache tests with a fake HF resolver, explicit download opt-in forwarding and negative timestamps.
+- Studio HTTP transcription job and CLI sidecar tests with mocked inference, Playwright import+transcribe UI, no running ClosedRoom.
+- Real Mac Apple Silicon test on consented Italian footage, model output, audio sync and latency/memory budget before claiming product parity.
 
-## Testing gate
-
-- Local adapter unit tests with fake ClosedRoom payload (including missing word alignment, negative/nonfinite timestamps, local-only provider).
-- Synthetic FFmpeg video→temporary WAV→mocked API checks.
-- Before claiming production compatibility, run **real** ClosedRoom `dev` service with an A56 video, verify Italian jargon, word alignment, VFR, resampling offset, progress and cache behavior, and inspect transcript sidecar.
-
-See [actual ClosedRoom contract](references/asr-contract.md).
+See [local ASR reference](references/asr-contract.md).

@@ -146,11 +146,32 @@
             <span class="tool-icon muted-icon">
               <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"/></svg>
             </span>
-            <span class="tool-copy"><strong>Trascrivi il parlato</strong><small>Con ClosedRoom locale</small></span>
+            <span class="tool-copy"><strong>Trascrivi il parlato</strong><small>MLX Whisper · sul tuo Mac</small></span>
             <span class="action-arrow" aria-hidden="true">↗</span>
           </button>
         </div>
 
+        <section class="rail-section asr-settings" aria-labelledby="asr-settings-title">
+          <div class="section-heading"><span id="asr-settings-title">TRASCRIZIONE LOCALE</span></div>
+          <label for="asr-model">Modello</label>
+          <select id="asr-model">
+            <option value="mlx-community/whisper-large-v3-turbo">Whisper Large v3 Turbo · qualità</option>
+            <option value="mlx-community/whisper-turbo">Whisper Turbo · alternativo</option>
+          </select>
+          <label for="asr-language">Lingua</label>
+          <select id="asr-language">
+            <option value="it">Italiano</option>
+            <option value="auto">Rilevamento automatico</option>
+            <option value="en">Inglese</option>
+            <option value="es">Spagnolo</option>
+            <option value="fr">Francese</option>
+            <option value="de">Tedesco</option>
+          </select>
+          <label class="asr-download-optin" for="asr-download">
+            <input id="asr-download" type="checkbox">
+            <span>Scarica il modello se assente <small>Solo su tua conferma. I pesi restano sul Mac; l'audio non viene caricato.</small></span>
+          </label>
+        </section>
         <div class="rail-footer">
           <span class="micro-icon" aria-hidden="true">✧</span>
           <p><strong>Nessuna magia nascosta.</strong> Ogni taglio è modificabile prima dell'export.</p>
@@ -246,10 +267,10 @@
           <div class="inspector-empty" id="transcript-empty">
             <div class="empty-minimal-icon" aria-hidden="true">“ ”</div>
             <h3>La voce, in parole.</h3>
-            <p>Usa «Trascrivi il parlato» per chiedere a ClosedRoom, già avviato sul tuo Mac, il testo del video.</p>
+            <p>Usa «Trascrivi il parlato» per generare il testo direttamente in Pausio con MLX Whisper. Non serve aprire ClosedRoom.</p>
           </div>
           <div id="transcript-content" hidden>
-            <div class="transcript-source"><span class="private-dot" aria-hidden="true"></span> ClosedRoom · locale <span id="transcript-model" class="truncate"></span></div>
+            <div class="transcript-source"><span class="private-dot" aria-hidden="true"></span> Pausio ASR · locale <span id="transcript-model" class="truncate"></span></div>
             <p class="transcript-note" id="transcript-note"></p>
             <div class="transcript-list" id="transcript-list"></div>
           </div>
