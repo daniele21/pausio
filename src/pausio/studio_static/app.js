@@ -578,7 +578,7 @@ function drawFx(){
     if(!clip.available)status.className="fx-missing";
     name.append(label,status);item.append(name);
     const controls=[
-      ["Inizio (sec)","start_ms",clip.start_ms/1000,.1,0,Math.max(0,((project.plan?editedDuration():duration)-1)/1000)],
+      ["Inizio (sec)","start_ms",clip.start_ms/1000,.001,0,Math.max(0,((project.plan?editedDuration():duration)-1)/1000)],
       ["Volume (dB)","gain_db",clip.gain_db,1,-36,12]
     ];
     for(const [title,key,val,step,min,max] of controls){
