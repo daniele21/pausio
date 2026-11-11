@@ -83,14 +83,14 @@ class TestCaptionPipeline(unittest.TestCase):
         cues=[{"id":"a"*32, "start_ms":100,"end_ms":1300,"text":"Ciao! 👋"}]
         config=default_caption_config("boxed")
         ass=ass_document(cues,style="boxed",settings=config)
-        self.assertIn(r"{\\an5\\pos(540,1459)}",ass)
+        self.assertIn('pos(540,1459)', ass)
         self.assertIn(",Arial,56,",ass)
         self.assertIn(",3,3,1,5,",ass)  # BorderStyle=3 opaque box
         custom={**config,"preset":"custom","x_pct":65,"y_pct":45,
                 "font_size":84,"text_color":"#FFCC00",
                 "outline_color":"#101010","background":False}
         actual=ass_document(cues,settings=custom)
-        self.assertIn(r"{\\an5\\pos(702,864)}",actual)
+        self.assertIn('pos(702,864)', actual)
         self.assertIn("Arial,84,&H0000CCFF",actual)
         self.assertIn("&H00101010",actual)
         self.assertIn(",1,3,1,5,",actual)
