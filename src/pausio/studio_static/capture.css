@@ -40,7 +40,7 @@
   .heading .eyebrow { font-size: 11px; margin: 0; }
   .camera {
     width: min(100%, 460px);
-    height: min(calc(100svh - 177px), calc(min(100vw - 28px, 460px) * 1.777778));
+    height: clamp(300px, calc(100svh - 177px), 680px);
     min-height: 300px;
     max-width: none;
     max-height: none;
