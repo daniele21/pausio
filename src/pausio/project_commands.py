@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from pausio.domain import EditPlan, Interval
+from pausio.planner import CUT_PRESETS, validate_cut_settings
 
 FORMAT = "pausio.project"
 VERSION = 2
@@ -115,6 +116,8 @@ class ProjectView:
     segments: tuple[dict, ...] = ()
     suggested: tuple[dict, ...] | None = None
     approved: bool = False
+    analysis_settings: dict | None = None
+    detected_silences: int | None = None
 
 
 def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
@@ -122,6 +125,8 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
     current: list[dict] = []
     suggestion: list[dict] | None = None
     approved = False
+    analysis_settings: dict | None = None
+    detected_silences: int | None = None
     used_events: set[str] = set()
 
     for command in commands:
@@ -135,13 +140,33 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
             raise ProjectFormatError(f"unknown command type: {kind}")
         payload = cmd["payload"]
         if kind == "analysis.propose":
-            _object(payload, {"segments", "engine", "policy", "noise_db"}, kind)
+            legacy_fields = {"segments", "engine", "policy", "noise_db"}
+            new_fields = legacy_fields | {"settings", "detected_silences"}
+            if not isinstance(payload, dict) or set(payload) not in (legacy_fields, new_fields):
+                raise ProjectFormatError("analysis.propose: invalid or incomplete payload")
             if payload["engine"] != "ffmpeg.silencedetect" or payload["policy"] != "ai-natural":
                 raise ProjectFormatError("unsupported analysis engine or policy")
-            if not isinstance(payload["noise_db"], int) or isinstance(payload["noise_db"], bool):
-                raise ProjectFormatError("noise_db must be integer")
-            if not -90 <= payload["noise_db"] <= -5:
+            if type(payload["noise_db"]) is not int or not -90 <= payload["noise_db"] <= -5:
                 raise ProjectFormatError("noise_db out of bounds")
+            if set(payload) == new_fields:
+                try:
+                    analysis_settings = validate_cut_settings(payload["settings"])
+                except ValueError as exc:
+                    raise ProjectFormatError(str(exc)) from exc
+                if analysis_settings["noise_db"] != payload["noise_db"]:
+                    raise ProjectFormatError("analysis noise threshold does not match settings")
+                count = payload["detected_silences"]
+                if type(count) is not int or not 0 <= count <= 1_000_000:
+                    raise ProjectFormatError("detected_silences must be a nonnegative integer")
+                detected_silences = count
+            else:
+                # Legacy proposals omitted full policy parameters.
+                settings = {"preset": "custom", **CUT_PRESETS["natural"]}
+                settings["noise_db"] = payload["noise_db"]
+                if payload["noise_db"] == CUT_PRESETS["natural"]["noise_db"]:
+                    settings["preset"] = "natural"
+                analysis_settings = settings
+                detected_silences = None
             current = _segments(payload["segments"], duration)
             suggestion = copy.deepcopy(current)
             approved = False
@@ -195,6 +220,8 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
         segments=tuple(copy.deepcopy(current)),
         suggested=tuple(copy.deepcopy(suggestion)) if suggestion is not None else None,
         approved=approved,
+        analysis_settings=copy.deepcopy(analysis_settings),
+        detected_silences=detected_silences,
     )
 
 
