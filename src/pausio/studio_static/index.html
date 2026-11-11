@@ -386,7 +386,21 @@
       </div>
     </section>
 
+    <section class="fx-panel" id="fx-panel" aria-labelledby="fx-title" hidden>
+      <div class="fx-header">
+        <div>
+          <h2 id="fx-title">Effetti audio <span class="fx-pill">OPZIONALE</span></h2>
+          <p>Importa un riser, un whoosh o un altro suono. Il file rimane sul tuo Mac.</p>
+        </div>
+        <button class="button button-outline" id="fx-import" type="button">+ Importa audio</button>
+      </div>
+      <div class="fx-lane" id="fx-lane" role="group" aria-label="Traccia FX sul video montato"></div>
+      <p class="fx-hint" id="fx-hint">Nessun effetto. Seleziona un punto nel video e importa un file MP3, WAV, M4A, AAC, FLAC o OGG.</p>
+      <div class="fx-list" id="fx-list"></div>
+    </section>
+
     <input type="file" id="file-input" accept="video/mp4,video/quicktime,video/webm,video/x-matroska,.m4v,.mov,.mkv" hidden>
+    <input type="file" id="fx-input" accept=".mp3,.wav,.m4a,.aac,.flac,.ogg,audio/*" hidden>
     <input type="file" id="project-input" accept=".json,.pausio.json,application/json" hidden>
     <div class="job-banner" id="job-banner" role="status" aria-live="polite" hidden>
       <span class="spinner" aria-hidden="true"></span>
