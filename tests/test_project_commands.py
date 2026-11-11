@@ -153,8 +153,9 @@ class ProjectReplayTests(unittest.TestCase):
         project = json.loads(json.dumps(tape.as_dict()))
         restored = ProjectTape.from_dict(project)
         self.assertEqual(restored.view.caption_config, tape.view.caption_config)
-        self.assertEqual(restored.undo().view.caption_config["font_family"], "Arial")
-        self.assertEqual(restored.redo().view.caption_config["font_family"], "Georgia")
+        before_font_change = restored.undo()
+        self.assertEqual(before_font_change.view.caption_config["font_family"], "Arial")
+        self.assertEqual(before_font_change.redo().view.caption_config["font_family"], "Georgia")
         # Simulate the exact older event representation without a font field.
         legacy_project = json.loads(json.dumps(project))
         legacy_project["commands"][-1]["payload"]["config"].pop("font_family")
