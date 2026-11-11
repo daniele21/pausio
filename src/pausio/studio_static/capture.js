@@ -3,14 +3,15 @@
   "use strict";
   const $ = id => document.getElementById(id);
   const els = {
-    live: $("camera-video"), playback: $("result-video"), placeholder: $("camera-placeholder"),
+    live: $("camera-video"), canvas: $("portrait-canvas"), playback: $("result-video"),
+    placeholder: $("camera-placeholder"),
     frame: $("camera-frame"), prompter: $("prompter"), scroll: $("prompter-scroll"),
     text: $("prompter-text"), status: $("status"), state: $("capture-state"),
     timer: $("timer"), clock: $("timer-text"), format: $("format-pill"),
     camera: $("activate-camera"), start: $("record-start"), stop: $("record-stop"),
     next: $("new-take"), flip: $("switch-camera"), pause: $("toggle-scroll"),
     countdown: $("countdown"), panel: $("download-panel"), download: $("download-video"),
-    share: $("share-video"), details: $("file-details"), script: $("script-input"),
+    share: $("share-video"), fileDetails: $("file-details"), script: $("script-input"),
     speed: $("speed"), font: $("font-size"), lines: $("gobbo-lines"),
     position: $("prompter-position"), framing: $("framing-mode"),
     details: $("gobbo-settings"), edit: $("edit-gobbo"),
@@ -21,6 +22,8 @@
   let outputName = "", mode = "idle", facing = "user", raf = 0, lastFrame = 0;
   let startedAt = 0, pausedScroll = false, countdownId = 0;
   let savedAfterRecording = false, recordedMime = "";
+  let compositorFrame = 0, recordingStream = null, sourceSize = "";
+  const PORTRAIT_WIDTH = 720, PORTRAIT_HEIGHT = 1280, COMPOSITE_FPS = 24;
 
   function notice(message, error = false) {
     els.status.textContent = message;
@@ -40,6 +43,8 @@
     els.placeholder.hidden = !["idle", "error", "starting"].includes(next);
     els.live.hidden = ["finished", "idle", "error", "starting"].includes(next);
     els.playback.hidden = next !== "finished";
+    els.canvas.hidden = !["preview", "countdown", "recording", "stopping"].includes(next)
+      || !els.frame.classList.contains("composited");
     els.prompter.hidden = next === "finished" || next === "idle" || next === "error";
     els.timer.classList.toggle("live", next === "recording");
     els.state.textContent = {idle:"PRONTO", error:"ERRORE", starting:"APERTURA…", preview:"CAMERA ATTIVA",
@@ -108,7 +113,72 @@
     ];
     return candidates.find(type => MediaRecorder.isTypeSupported(type)) || "";
   }
+  // Camera constraints are preferences, not an output-format contract. The
+  // phone can send 1920×1080 even with a portrait 9:16 request. Draw the same
+  // 720×1280 composition in the preview and the file we record.
+  function drawFitted(ctx, sourceWidth, sourceHeight, fit) {
+    const scale = (fit === "cover" ? Math.max : Math.min)(
+      PORTRAIT_WIDTH / sourceWidth, PORTRAIT_HEIGHT / sourceHeight
+    );
+    const width = sourceWidth * scale, height = sourceHeight * scale;
+    ctx.drawImage(els.live,
+      (PORTRAIT_WIDTH - width) / 2, (PORTRAIT_HEIGHT - height) / 2, width, height);
+  }
+  function drawPortraitFrame() {
+    const ctx = els.canvas.getContext("2d", {alpha:false});
+    if (!ctx) return;
+    ctx.fillStyle = "#08101a";
+    ctx.fillRect(0, 0, PORTRAIT_WIDTH, PORTRAIT_HEIGHT);
+    const width = els.live.videoWidth, height = els.live.videoHeight;
+    if (!width || !height || els.live.readyState < 2) return;
+    ctx.imageSmoothingEnabled = true;
+    if (els.framing.value === "wide") {
+      // Fill the vertical background, then preserve the complete camera field
+      // of view in the foreground. No digital zoom or fake camera rotation.
+      ctx.save();
+      ctx.filter = "blur(22px) brightness(0.48)";
+      drawFitted(ctx, width, height, "cover");
+      ctx.restore();
+      drawFitted(ctx, width, height, "contain");
+    } else {
+      // A physically narrower 9:16 crop is unavoidable when a 16:9 source
+      // must fully cover a portrait canvas.
+      drawFitted(ctx, width, height, "cover");
+    }
+  }
+  function compositorTick() {
+    if (!["preview", "countdown", "recording", "stopping"].includes(mode) || !stream) {
+      compositorFrame = 0;
+      return;
+    }
+    drawPortraitFrame();
+    compositorFrame = requestAnimationFrame(compositorTick);
+  }
+  function stopCompositor() {
+    if (compositorFrame) cancelAnimationFrame(compositorFrame);
+    compositorFrame = 0;
+    els.frame.classList.remove("composited");
+    els.canvas.hidden = true;
+  }
+  function startCompositor() {
+    if (typeof els.canvas.captureStream !== "function"
+        || !els.canvas.getContext("2d", {alpha:false})) return false;
+    els.frame.classList.add("composited");
+    els.canvas.classList.toggle("mirrored", facing === "user");
+    els.canvas.hidden = false;
+    compositorFrame = requestAnimationFrame(compositorTick);
+    return true;
+  }
+  function stopRecordingStream() {
+    // The original audio track belongs to "stream": never stop it while
+    // MediaRecorder is still finalising its last dataavailable event.
+    if (recordingStream) {
+      for (const track of recordingStream.getVideoTracks()) track.stop();
+      recordingStream = null;
+    }
+  }
   async function releaseCamera() {
+    stopCompositor();
     if (stream) for (const track of stream.getTracks()) track.stop();
     stream = null;
     els.live.pause();
@@ -150,6 +220,9 @@
       // Reveal the video BEFORE asking the browser to play it. Safari can leave
       // play() pending indefinitely when its target is display:none.
       setMode("preview");
+      if (!startCompositor()) {
+        throw new Error("Il browser non supporta la registrazione verticale su canvas");
+      }
       try {
         const playback = els.live.play();
         if (playback && typeof playback.catch === "function") {
@@ -164,13 +237,11 @@
       }
       const dimensions = candidate.getVideoTracks()[0]?.getSettings?.() || {};
       const width = dimensions.width, height = dimensions.height;
-      els.format.textContent = width && height ? width + "×" + height + " · originale" :
-        (social ? "9:16 richiesto" : "Campo ampio richiesto");
-      if (width && height && width >= height) {
-        notice("La fotocamera registra in orizzontale (" + width + "×" + height + "). Ruota il telefono in verticale e riattiva la fotocamera prima del take.", true);
-      } else {
-        notice("Controlla l'inquadratura, poi tocca Registra. Il gobbo sarà visibile solo sullo schermo.");
-      }
+      sourceSize = width && height ? width + "×" + height : "dimensioni automatiche";
+      els.format.textContent = PORTRAIT_WIDTH + "×" + PORTRAIT_HEIGHT + " · verticale";
+      const method = social ? "ritaglio a schermo pieno" : "campo completo con sfondo sfocato";
+      notice("Fotocamera " + sourceSize + " → video verticale " +
+        PORTRAIT_WIDTH + "×" + PORTRAIT_HEIGHT + " (" + method + "). Il gobbo non viene registrato.");
     } catch (error) {
       await releaseCamera();
       setMode("error");
@@ -203,8 +274,19 @@
     if (seq !== countdownId || !stream || mode !== "countdown") return;
     els.countdown.hidden = true;
     try {
+      if (typeof els.canvas.captureStream !== "function") {
+        throw new Error("Questo browser non supporta l'export video verticale");
+      }
+      drawPortraitFrame();
+      const composedVideo = els.canvas.captureStream(COMPOSITE_FPS);
+      recordingStream = new MediaStream([
+        ...composedVideo.getVideoTracks(), ...stream.getAudioTracks()
+      ]);
+      if (!recordingStream.getVideoTracks().length) {
+        throw new Error("Non è possibile acquisire il video verticale dal canvas");
+      }
       const mimeType = supportedMime();
-      recorder = new MediaRecorder(stream, mimeType ? {mimeType} : undefined);
+      recorder = new MediaRecorder(recordingStream, mimeType ? {mimeType} : undefined);
       recordedMime = recorder.mimeType || mimeType || "video/webm";
       chunks = [];
       recorder.ondataavailable = event => { if (event.data && event.data.size) chunks.push(event.data); };
@@ -217,8 +299,10 @@
       raf = requestAnimationFrame(tick);
     } catch (error) {
       recorder = null;
+      stopRecordingStream();
       setMode("preview");
-      notice("Impossibile avviare la registrazione su questo browser (" + (error?.name || "formato non supportato") + ").", true);
+      notice("Impossibile avviare la registrazione verticale: " +
+        (error?.message || error?.name || "formato non supportato") + ".", true);
     }
   }
   function stopRecording() {
@@ -236,6 +320,7 @@
   async function finishRecording() {
     if (mode !== "stopping" && mode !== "recording") return;
     stopAnimation();
+    stopRecordingStream();
     await releaseCamera();
     const type = recordedMime.includes("mp4") ? "video/mp4" : "video/webm";
     output = new Blob(chunks, {type});
@@ -255,8 +340,9 @@
     els.download.href = blobUrl;
     els.download.download = outputName;
     const seconds = Math.round((performance.now() - startedAt) / 1000);
-    els.details.textContent = outputName.split(".").pop().toUpperCase() + " · " +
-      (output.size / (1024 * 1024)).toFixed(1) + " MB · " + seconds + " s · senza gobbo";
+    els.fileDetails.textContent = outputName.split(".").pop().toUpperCase() + " · " +
+      (output.size / (1024 * 1024)).toFixed(1) + " MB · " + seconds +
+      " s · " + PORTRAIT_WIDTH + "×" + PORTRAIT_HEIGHT + " verticale · senza gobbo";
     savedAfterRecording = false;
     const file = new File([output], outputName, {type});
     els.share.hidden = !(navigator.canShare && navigator.canShare({files:[file]}));
@@ -295,8 +381,10 @@
   els.framing.addEventListener("change", async () => {
     remember();
     if (mode === "preview") {
-      notice("Aggiorno il campo visivo della fotocamera…");
-      await activateCamera();
+      drawPortraitFrame();
+      const composition = els.framing.value === "social" ?
+        "video verticale con ritaglio" : "video verticale con campo completo";
+      notice("Anteprima aggiornata: " + composition + ". Il file registrato userà la stessa inquadratura.");
     }
   });
   els.live.addEventListener("click", () => {
