@@ -7,6 +7,50 @@ let lastJobNotice = "", toastTimeout = 0, dragLevel = 0;
 let didNotifyRecovery = false;
 let waveformData = null, waveformRequestedFor = null, timelineZoom = 1, previewSourceMode = "original";
 let dragHandleActive = false;
+let cutDraft = null, cutSource = null;
+const cutDescriptions = {
+  natural: "Preserva il ritmo del parlato. Riduce solo pause sufficientemente lunghe.",
+  balanced: "Accorcia più pause per un ritmo social equilibrato.",
+  dynamic: "Proposte più frequenti per Reels; riascolta sempre gli stacchi.",
+  custom: "Usa le soglie impostate sotto. Modifiche applicate alla prossima analisi."
+};
+const cutNames = ["noise_db", "min_silence_ms", "min_removed_ms",
+  "speech_padding_before_ms", "speech_padding_after_ms", "min_keep_ms"];
+function renderCutControls(){
+  if(!cutDraft)return;
+  el("cut-preset").value=cutDraft.preset;
+  for(const name of cutNames)
+    document.querySelector('[data-cut-setting="'+name+'"]').value=cutDraft[name];
+  el("cut-preset-help").textContent=cutDescriptions[cutDraft.preset]||cutDescriptions.custom;
+}
+function syncCutControls(next, busy){
+  const defaultPreset=next.cut_presets?.natural;
+  const effective=next.analysis_settings||(defaultPreset?{preset:"natural",...defaultPreset}:null);
+  if(!effective)return;
+  const source=JSON.stringify([next.media_id, effective]);
+  if(source!==cutSource){
+    cutSource=source;
+    cutDraft={...effective};
+    renderCutControls();
+  }
+  el("cut-preset").disabled=busy;
+  for(const input of document.querySelectorAll("[data-cut-setting]"))input.disabled=busy;
+  const detected=next.detected_silences;
+  const duration=next.media?.duration_ms||0;
+  const retained=(next.plan?.segments||[]).reduce((sum,s)=>sum+s.end_ms-s.start_ms,0);
+  const saved=Math.max(0,duration-retained);
+  const dirty=!!next.plan&&JSON.stringify(cutDraft)!==JSON.stringify(effective);
+  const message=dirty?"Parametri modificati: clicca «Rianalizza le pause» per applicarli.":
+    !next.plan?"Scegli un preset, poi avvia l'analisi.":
+    detected===0?"Nessuna pausa rilevata: prova Bilanciato o Dinamico.":
+    saved===0?"Pause rilevate"+(detected===null?"":": "+detected)+
+      ", ma nessuna idonea al taglio. Prova un preset più dinamico.":
+    (detected===null?"Analisi precedente":detected+" pause rilevate")+
+      " · "+(saved/1000).toFixed(1)+" s esclusi. Rivedi ogni taglio.";
+  el("cut-result").textContent=message;
+  el("analyze-action").querySelector(".tool-copy strong").textContent=
+    next.plan?"Rianalizza le pause":"Analizza le pause";
+}
 const msFormat = (value, exact=false) => {
   const x = Math.max(0, Math.floor(Number(value) || 0));
   const base = String(Math.floor(x/60000)).padStart(2,"0") + ":" +
@@ -55,6 +99,7 @@ function update(next){
   project=next;
   const has=!!next.file, plan=!!next.plan, approved=!!next.approved, ready=!!next.export_ready, busy=working();
   document.body.classList.toggle("has-media",has);
+  syncCutControls(next, busy);
   if(next.media_id && mediaKey!==next.media_id){
     mediaKey=next.media_id;mode="original";previewSourceMode="original";
     waveformData=null;waveformRequestedFor=null;
@@ -380,7 +425,14 @@ async function edit(type, payload={}){
     : "Modifica registrata nelle istruzioni del progetto.");
 }
 async function startJob(kind){
-  update(await post("/api/jobs",{kind}));
+  if(kind==="analyze" && !cutDraft)throw Error("Impostazioni non ancora disponibili.");
+  const body=kind==="analyze"?{kind,settings:{...cutDraft}}:{kind};
+  if(kind==="analyze"){
+    for(const input of document.querySelectorAll("[data-cut-setting]")){
+      if(!input.checkValidity())throw Error("Controlla i limiti dei parametri avanzati.");
+    }
+  }
+  update(await post("/api/jobs",body));
   el("job-banner").hidden=false;el("job-message").textContent=busyLabel(kind);
 }
 async function approve(){
@@ -504,6 +556,31 @@ drop.addEventListener("dragenter",event=>{
 drop.addEventListener("dragover",event=>{if(event.dataTransfer?.types?.includes("Files"))event.preventDefault();});
 drop.addEventListener("dragleave",()=>{dragLevel=Math.max(0,dragLevel-1);if(!dragLevel)el("drag-overlay").hidden=true;});
 drop.addEventListener("drop",event=>{event.preventDefault();dragLevel=0;el("drag-overlay").hidden=true;importVideo(event.dataTransfer?.files?.[0]);});
+el("cut-preset").addEventListener("change",event=>{
+  const preset=event.target.value;
+  if(preset!=="custom"){
+    cutDraft={preset,...project.cut_presets[preset]};
+    renderCutControls();
+  }else{
+    cutDraft={...cutDraft,preset:"custom"};
+    renderCutControls();
+    el("cut-advanced").open=true;
+  }
+  syncCutControls(project,working());
+});
+for(const input of document.querySelectorAll("[data-cut-setting]")){
+  input.addEventListener("change",()=>{
+    if(!cutDraft)return;
+    const value=Number(input.value);
+    if(!Number.isInteger(value)||!input.checkValidity()){
+      toast("Parametro non valido: correggi il numero nell'intervallo indicato.","error");
+      return;
+    }
+    cutDraft={...cutDraft,preset:"custom",[input.dataset.cutSetting]:value};
+    renderCutControls();
+    syncCutControls(project,working());
+  });
+}
 el("analyze-action").addEventListener("click",()=>run(()=>startJob("analyze")));
 el("transcribe-action").addEventListener("click",()=>run(()=>startJob("transcribe")));
 el("export-action").addEventListener("click",()=>run(()=>startJob("render")));

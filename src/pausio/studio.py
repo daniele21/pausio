@@ -24,7 +24,7 @@ from pausio import __version__
 from pausio.closedroom_asr import transcribe_video_with_closedroom
 from pausio.domain import EditPlan, Interval
 from pausio.media import MediaInfo, detect_silences, probe, render, waveform_envelope
-from pausio.planner import propose_segments
+from pausio.planner import CUT_PRESETS, validate_cut_settings, policy_from_cut_settings, propose_segments
 from pausio.project_commands import ProjectTape, ProjectFormatError, UI_COMMANDS
 from pausio.studio_persistence import StudioSessionStore, RecoveryError, default_studio_directory
 
@@ -130,6 +130,9 @@ class StudioWorkspace:
                 "media": self.info.as_dict() if self.info else None,
                 "plan": self.plan.as_dict() if self.plan else None,
                 "suggested_plan": self.suggested_plan.as_dict() if self.suggested_plan else None,
+                "cut_presets": CUT_PRESETS,
+                "analysis_settings": self.tape.view.analysis_settings if self.tape else None,
+                "detected_silences": self.tape.view.detected_silences if self.tape else None,
                 "transcript": self.transcript,
                 "export_ready": self.export_ready,
                 "preview_ready": self.preview_ready,
@@ -402,9 +405,15 @@ class StudioWorkspace:
                 raise StudioError(str(exc)) from exc
             self._install_tape(incoming)
 
-    def start_job(self, kind: str) -> None:
+    def start_job(self, kind: str, *, settings: object | None = None) -> None:
         if kind not in {"analyze", "render", "transcribe", "preview"}:
             raise StudioError("Operazione sconosciuta.")
+        if kind != "analyze" and settings is not None:
+            raise StudioError("Le impostazioni di taglio sono valide solo per Analizza.")
+        try:
+            cut_settings = validate_cut_settings(settings) if kind == "analyze" else None
+        except ValueError as exc:
+            raise StudioError(str(exc)) from exc
         with self.lock:
             self._ensure_unlocked()
             if self.source is None or self.info is None:
@@ -425,13 +434,19 @@ class StudioWorkspace:
         def worker() -> None:
             try:
                 if kind == "analyze":
+                    assert cut_settings is not None
+                    policy = policy_from_cut_settings(cut_settings)
                     silences = (
-                        detect_silences(source, info.duration_ms) if info.has_audio else []
+                        detect_silences(
+                            source, info.duration_ms,
+                            noise_db=int(cut_settings["noise_db"]),
+                            min_detection_ms=min(550, policy.min_silence_ms),
+                        ) if info.has_audio else []
                     )
                     proposal = EditPlan(
                         source=str(source), source_duration_ms=info.duration_ms,
                         has_audio=info.has_audio,
-                        segments=propose_segments(info.duration_ms, silences),
+                        segments=propose_segments(info.duration_ms, silences, policy),
                     )
                     with self.lock:
                         assert self.tape is not None
@@ -443,7 +458,9 @@ class StudioWorkspace:
                             ],
                             "engine": "ffmpeg.silencedetect",
                             "policy": "ai-natural",
-                            "noise_db": -35,
+                            "noise_db": cut_settings["noise_db"],
+                            "settings": cut_settings,
+                            "detected_silences": len(silences),
                         })
                         self._install_tape(next_tape)
                 elif kind == "transcribe":
@@ -578,7 +595,12 @@ class StudioHandler(BaseHTTPRequestHandler):
                 self._json(200, self.server.workspace.snapshot())
                 return
             if path == "/api/jobs":
-                self.server.workspace.start_job(self._read_json().get("kind", ""))
+                request = self._read_json()
+                if set(request) - {"kind", "settings"}:
+                    raise StudioError("Parametri job sconosciuti.")
+                self.server.workspace.start_job(
+                    request.get("kind", ""), settings=request.get("settings")
+                )
                 self._json(202, self.server.workspace.snapshot())
                 return
             self._failed(404, "Endpoint non trovato.")

@@ -38,6 +38,38 @@ def analyze(tape, items=None):
 
 
 class ProjectReplayTests(unittest.TestCase):
+    def test_cut_settings_roundtrip_undo_and_strict_validation(self):
+        from pausio.planner import CUT_PRESETS, validate_cut_settings
+        natural=validate_cut_settings()
+        self.assertEqual(natural["preset"], "natural")
+        custom={"preset":"custom",**CUT_PRESETS["dynamic"]}
+        custom["noise_db"]=-22
+        tape=ProjectTape(media()).append("analysis.propose",{
+            "engine":"ffmpeg.silencedetect", "policy":"ai-natural",
+            "noise_db":custom["noise_db"], "segments":proposed(),
+            "settings":custom, "detected_silences":4,
+        })
+        self.assertEqual(tape.view.analysis_settings,custom)
+        self.assertEqual(tape.view.detected_silences,4)
+        self.assertEqual(ProjectTape.from_dict(tape.as_dict()).view,tape.view)
+        self.assertIsNone(tape.undo().view.analysis_settings)
+        self.assertEqual(tape.undo().redo().view.analysis_settings,custom)
+        invalid=copy.deepcopy(tape.as_dict())
+        invalid["commands"][0]["payload"]["settings"]["noise_db"]=-35
+        with self.assertRaises(ProjectFormatError):
+            ProjectTape.from_dict(invalid)
+        for change in [{"preset":"natural"}, {"noise_db":True}, {"min_silence_ms":50}]:
+            malformed={**custom,**change}
+            with self.assertRaises(ValueError):
+                validate_cut_settings(malformed)
+
+    def test_legacy_analysis_import_retains_historical_defaults(self):
+        tape=analyze(ProjectTape(media()))
+        imported=ProjectTape.from_dict(tape.as_dict())
+        self.assertEqual(imported.view.analysis_settings["preset"],"natural")
+        self.assertIsNone(imported.view.detected_silences)
+
+
     def test_precise_commands_replay_to_same_edit_plan_after_json_import(self):
         tape = analyze(ProjectTape(media()))
         first, second = tape.view.segments

@@ -110,6 +110,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.wait_state("waveform","ready",timeout=30000)
         self.wait_condition(lambda: "Waveform" in self.page.locator("#waveform-state").inner_text(),
                             timeout=12000)
+        self.assertEqual(self.page.locator("#cut-preset").input_value(),"natural")
         self.page.locator("#analyze-action").click()
         result=self.wait_state("analyze","completed")
         self.wait_condition(lambda: self.page.locator(".segment-card").count()>=2,
@@ -203,6 +204,32 @@ class StudioPlaywrightAudit(unittest.TestCase):
           "preview_ready":draft["preview_ready"],
           "export_ready":final["export_ready"],
           "errors":self.errors})
+        self.assertFalse(self.errors,self.errors)
+
+    def test_preset_selection_reanalysis_and_mobile_layout(self):
+        initial=self.upload_analyze()
+        self.assertEqual(initial["analysis_settings"]["preset"],"natural")
+        self.page.locator("#cut-preset").select_option("dynamic")
+        self.assertEqual(self.page.locator("#cut-preset").input_value(),"dynamic")
+        self.assertEqual(self.page.locator('[data-cut-setting="min_silence_ms"]').input_value(),"350")
+        self.page.locator("#analyze-action").click()
+        state=self.wait_state("revision",initial["project_revision"]+1)
+        self.assertEqual(state["analysis_settings"]["preset"],"dynamic")
+        self.wait_condition(lambda: self.page.locator("#cut-preset").input_value()=="dynamic")
+        self.wait_condition(lambda: "rilevate" in self.page.locator("#cut-result").inner_text())
+        self.page.locator("#cut-advanced summary").click()
+        self.page.locator('[data-cut-setting="noise_db"]').fill("-23")
+        self.page.locator('[data-cut-setting="noise_db"]').press("Tab")
+        self.assertEqual(self.page.locator("#cut-preset").input_value(),"custom")
+        self.page.locator("#analyze-action").click()
+        changed=self.wait_state("revision",state["project_revision"]+1)
+        self.assertEqual(changed["analysis_settings"]["preset"],"custom")
+        self.assertEqual(changed["analysis_settings"]["noise_db"],-23)
+        for width,height in [(1440,900),(390,844),(320,700)]:
+            self.page.set_viewport_size({"width":width,"height":height})
+            self.page.wait_for_timeout(120)
+            self.assertLessEqual(metrics(self.page)["scrollWidth"],width+3)
+            self.shot("cut-presets-"+str(width))
         self.assertFalse(self.errors,self.errors)
 
     def test_pointer_trim_is_single_edit(self):

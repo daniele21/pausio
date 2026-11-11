@@ -136,6 +136,37 @@ class StudioMediaWorkflowTests(StudioHttpTests):
             self.assertEqual(json.loads(payload)["file"], "test footage.mp4")
         return original
 
+    def test_configurable_presets_persist_and_invalid_requests_are_safe(self):
+        self.import_clip()
+        state=self.get_state()
+        self.assertIn("balanced",state["cut_presets"])
+        custom={"preset":"custom",**state["cut_presets"]["dynamic"]}
+        custom["noise_db"]=-20
+        previous_revision=state["project_revision"]
+        status,_,error=self.post("/api/jobs",{"kind":"analyze","settings":{**custom,"noise_db":True}})
+        self.assertEqual(status,400,error)
+        self.assertEqual(self.get_state()["project_revision"],previous_revision)
+        status,_,data=self.post("/api/jobs",{"kind":"analyze","settings":custom})
+        self.assertEqual(status,202,data)
+        state=self.await_job("analyze")
+        self.assertEqual(state["analysis_settings"],custom)
+        self.assertIsInstance(state["detected_silences"],int)
+        status,_,export=self.request("GET","/api/project/export")
+        self.assertEqual(status,200)
+        tape=json.loads(export)
+        payload=tape["commands"][-1]["payload"]
+        self.assertEqual(payload["settings"],custom)
+        self.assertEqual(payload["noise_db"],-20)
+        self.assertEqual(payload["detected_silences"],state["detected_silences"])
+        status,_,data=self.post("/api/jobs",{"kind":"analyze","settings":
+            {"preset":"balanced",**state["cut_presets"]["balanced"]}})
+        self.assertEqual(status,202,data)
+        new_state=self.await_job("analyze")
+        self.assertEqual(new_state["analysis_settings"]["preset"],"balanced")
+        self.assertEqual(new_state["project_revision"],previous_revision+2)
+        self.assertFalse(new_state["approved"])
+        self.assertEqual(len(self.workspace.tape.commands),2)
+
     def test_import_analyze_review_approve_export_download(self):
         original = self.import_clip()
         status, headers, bytes_ = self.request("GET", "/api/media", headers={"Range": "bytes=0-99"})

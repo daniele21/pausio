@@ -94,6 +94,45 @@
           </button>
         </div>
 
+        <section class="rail-section cut-settings" aria-labelledby="cut-settings-title">
+          <div class="section-heading"><span id="cut-settings-title">IMPOSTAZIONI TAGLI</span><span class="small-muted">PRESET</span></div>
+          <label class="cut-preset-label" for="cut-preset">Stile di montaggio</label>
+          <select id="cut-preset" aria-describedby="cut-preset-help">
+            <option value="natural">Naturale · pause lunghe</option>
+            <option value="balanced">Bilanciato · social</option>
+            <option value="dynamic">Dinamico · ritmo rapido</option>
+            <option value="custom">Personalizzato</option>
+          </select>
+          <p class="cut-help" id="cut-preset-help">Preserva il ritmo del parlato e taglia solo le pause più lunghe.</p>
+          <details class="cut-advanced" id="cut-advanced">
+            <summary>Parametri avanzati</summary>
+            <div class="cut-fields">
+              <label>Soglia di silenzio <span class="cut-unit">dB</span>
+                <input type="number" data-cut-setting="noise_db" min="-55" max="-15" step="1" value="-35">
+                <small>Valori più alti rilevano più pause, anche con rumore di fondo.</small>
+              </label>
+              <label>Durata minima pausa <span class="cut-unit">ms</span>
+                <input type="number" data-cut-setting="min_silence_ms" min="200" max="2000" step="10" value="900">
+              </label>
+              <label>Durata minima taglio <span class="cut-unit">ms</span>
+                <input type="number" data-cut-setting="min_removed_ms" min="50" max="1000" step="10" value="500">
+              </label>
+              <label>Margine dopo il parlato <span class="cut-unit">ms</span>
+                <input type="number" data-cut-setting="speech_padding_before_ms" min="0" max="600" step="5" value="200">
+              </label>
+              <label>Margine prima del parlato <span class="cut-unit">ms</span>
+                <input type="number" data-cut-setting="speech_padding_after_ms" min="0" max="600" step="5" value="250">
+              </label>
+              <label>Clip minima mantenuta <span class="cut-unit">ms</span>
+                <input type="number" data-cut-setting="min_keep_ms" min="50" max="1000" step="10" value="350">
+              </label>
+            </div>
+          </details>
+          <p class="cut-result" id="cut-result" role="status" aria-live="polite">
+            Scegli un preset, poi avvia l'analisi.
+          </p>
+        </section>
+
         <div class="rail-section tools">
           <div class="section-heading"><span>STRUMENTI</span><span class="small-muted">01 / 02</span></div>
           <button class="tool-action" id="analyze-action" type="button" disabled>

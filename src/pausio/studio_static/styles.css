@@ -287,6 +287,25 @@ a { color: inherit; text-decoration: none; }
 .toast.error { background: #3d262c; border-color: #965766; color: #ffe0e1; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* Preset controls fit the narrow desktop rail and remain keyboard-accessible. */
+.cut-settings { min-width: 0; }
+.cut-preset-label { display: block; font-size: 12px; color: var(--ink-secondary); margin-bottom: 7px; }
+#cut-preset, .cut-fields input {
+  display: block; width: 100%; min-width: 0;
+  background: var(--surface-raised); color: var(--ink);
+  border: 1px solid #526276; border-radius: 8px;
+  padding: 9px 8px; font-size: 12px;
+}
+.cut-help, .cut-result { margin: 9px 0 0; color: var(--ink-secondary); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.cut-result { border-left: 2px solid var(--keep); padding: 7px 0 7px 10px; background: rgba(134,212,197,.04); }
+.cut-advanced { margin-top: 11px; }
+.cut-advanced summary { cursor: pointer; color: var(--accent); font-size: 12px; padding: 7px 0; }
+.cut-fields { display: grid; grid-template-columns: minmax(0,1fr); gap: 12px; margin-top: 8px; }
+.cut-fields label { display: block; min-width: 0; font-size: 11px; color: var(--ink-secondary); }
+.cut-fields input { margin-top: 5px; font-variant-numeric: tabular-nums; }
+.cut-unit { float: right; color: var(--muted); }
+.cut-fields small { display: block; color: var(--muted); line-height: 1.4; margin-top: 4px; }
+.cut-settings :is(select,input):disabled { opacity: .5; }
 @media (max-width: 1280px) {
   .workbench { grid-template-columns: 236px minmax(330px, 1fr) 305px; }
   .rail { padding-left: 17px; padding-right: 14px; }
