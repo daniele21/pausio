@@ -13,6 +13,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
+from pausio.captions import CAPTION_STYLES, MAX_CAPTIONS, MAX_CAPTION_LENGTH
 from pausio.domain import EditPlan, Interval
 from pausio.planner import CUT_PRESETS, validate_cut_settings
 
@@ -34,6 +35,10 @@ _TYPES = frozenset({
     "timeline.restore_suggestion",
     "timeline.keep_all",
     "timeline.approve",
+    "caption.set",
+    "caption.correct",
+    "caption.style",
+    "caption.clear",
 })
 UI_COMMANDS = frozenset(_TYPES - {"analysis.propose", "timeline.replace"})
 
@@ -111,6 +116,39 @@ def _check_timeline(rows: list[dict], duration_ms: int) -> None:
         previous = s["end_ms"]
 
 
+def _caption_text(value: Any) -> str:
+    if (
+        not isinstance(value, str) or not value.strip()
+        or len(value) > MAX_CAPTION_LENGTH
+        or any(ord(ch) < 32 or ord(ch) == 127 for ch in value)
+        or any(ch in value for ch in "{}\\")
+    ):
+        raise ProjectFormatError("Testo sottotitolo non valido (massimo 300 caratteri).")
+    return value.strip()
+
+
+def _captions(raw: Any, duration_ms: int) -> list[dict]:
+    if not isinstance(raw, list) or not 1 <= len(raw) <= MAX_CAPTIONS:
+        raise ProjectFormatError("I sottotitoli devono essere tra 1 e 500.")
+    last_end = 0
+    ids = set()
+    result = []
+    for row in raw:
+        cue = _object(row, {"id", "start_ms", "end_ms", "text"}, "caption")
+        ident = _id(cue["id"], "caption.id")
+        start = _integer(cue["start_ms"], "caption.start_ms")
+        end = _integer(cue["end_ms"], "caption.end_ms")
+        if ident in ids or start < last_end or not start < end <= duration_ms:
+            raise ProjectFormatError("Sottotitoli sovrapposti, duplicati o fuori dal video.")
+        ids.add(ident)
+        last_end = end
+        result.append({
+            "id": ident, "start_ms": start, "end_ms": end,
+            "text": _caption_text(cue["text"])
+        })
+    return result
+
+
 @dataclass(frozen=True)
 class ProjectView:
     segments: tuple[dict, ...] = ()
@@ -118,6 +156,8 @@ class ProjectView:
     approved: bool = False
     analysis_settings: dict | None = None
     detected_silences: int | None = None
+    captions: tuple[dict, ...] = ()
+    caption_style: str = "social"
 
 
 def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
@@ -127,6 +167,8 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
     approved = False
     analysis_settings: dict | None = None
     detected_silences: int | None = None
+    captions: list[dict] = []
+    caption_style = "social"
     used_events: set[str] = set()
 
     for command in commands:
@@ -215,6 +257,36 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
             if not current:
                 raise ProjectFormatError("cannot approve an empty timeline")
             approved = True
+        elif kind == "caption.set":
+            _object(payload, {"cues", "style"}, kind)
+            if payload["style"] not in CAPTION_STYLES:
+                raise ProjectFormatError("Stile sottotitoli non supportato.")
+            captions = _captions(payload["cues"], duration)
+            caption_style = payload["style"]
+            approved = False
+        elif kind == "caption.correct":
+            _object(payload, {"caption_id", "text"}, kind)
+            ident = _id(payload["caption_id"], "caption_id")
+            text = _caption_text(payload["text"])
+            if not any(c["id"] == ident for c in captions):
+                raise ProjectFormatError("Sottotitolo non trovato.")
+            captions = [
+                {**c, "text": text} if c["id"] == ident else c
+                for c in captions
+            ]
+            approved = False
+        elif kind == "caption.style":
+            _object(payload, {"style"}, kind)
+            if payload["style"] not in CAPTION_STYLES or not captions:
+                raise ProjectFormatError("Stile sottotitoli non disponibile.")
+            caption_style = payload["style"]
+            approved = False
+        elif kind == "caption.clear":
+            _object(payload, set(), kind)
+            if not captions:
+                raise ProjectFormatError("Nessun sottotitolo da rimuovere.")
+            captions = []
+            approved = False
 
     return ProjectView(
         segments=tuple(copy.deepcopy(current)),
@@ -222,6 +294,8 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
         approved=approved,
         analysis_settings=copy.deepcopy(analysis_settings),
         detected_silences=detected_silences,
+        captions=tuple(copy.deepcopy(captions)),
+        caption_style=caption_style,
     )
 
 
