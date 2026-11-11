@@ -137,7 +137,62 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertTrue(self.page.locator("#fx-panel").is_visible())
         self.assertEqual(self.page.locator(".fx-item").count(), 1)
         self.assertEqual(self.page.locator(".fx-item audio").count(), 1)
-        revision = current["project_revision"]
+        # FX is inside the SAME scroll/zoom surface as the source waveform.
+        geometry = self.page.evaluate("""() => {
+          const bounds=id=>{ const b=document.querySelector(id).getBoundingClientRect();
+            return {left:b.left,right:b.right,top:b.top,bottom:b.bottom,width:b.width}; };
+          return {source:bounds('#timeline-track'),fx:bounds('#timeline-fx-track'),
+            playhead:bounds('#playhead')};
+        }""")
+        self.assertAlmostEqual(geometry["source"]["left"], geometry["fx"]["left"], delta=2)
+        self.assertAlmostEqual(geometry["source"]["right"], geometry["fx"]["right"], delta=2)
+        self.assertGreater(geometry["fx"]["top"], geometry["source"]["bottom"])
+        self.assertGreaterEqual(geometry["playhead"]["bottom"], geometry["fx"]["bottom"]-4)
+        self.assertEqual(self.page.locator("#fx-lane .fx-clip-mark").count(), 1)
+        self.assertEqual(self.page.locator("#fx-panel #fx-lane").count(), 0)
+        # The waveform must come from decoded audio rather than decorative CSS.
+        self.wait_condition(lambda: self.page.evaluate("""() => {
+          const c=document.querySelector('.fx-clip-waveform');if(!c||!c.width)return false;
+          const data=c.getContext('2d').getImageData(0,0,c.width,c.height).data;
+          for(let i=3;i<data.length;i+=4)if(data[i]>0)return true;
+          return false;
+        }"""),timeout=20000)
+        # One source-time region per KEEP span when an FX crosses the cuts.
+        projection = self.page.evaluate("""() => {
+          const fx={start_ms:0,duration_ms:editedDuration()};
+          return fxSourcePieces(fx).map(p=>[p.sourceStart,p.sourceEnd]);
+        }""")
+        self.assertEqual(projection, [
+          [s["start_ms"], s["end_ms"]] for s in current["editor_segments"]
+        ])
+        fx_mark=self.page.locator("#fx-lane .fx-clip-mark").first
+        fx_mark.focus();fx_mark.press("ArrowRight")
+        moved=self.wait_state("revision",current["project_revision"]+1)
+        self.assertEqual(moved["audio_clips"][0]["start_ms"],
+                         current["audio_clips"][0]["start_ms"]+100)
+        # One scale, one horizontal scroll offset at 4x zoom.
+        self.page.locator("#timeline-zoom").select_option("4")
+        scale=self.page.evaluate("""() => {
+          const s=document.querySelector('#timeline-track').getBoundingClientRect(),
+                f=document.querySelector('#timeline-fx-track').getBoundingClientRect();
+          return [s.left,f.left,s.width,f.width];
+        }""")
+        self.assertAlmostEqual(scale[0],scale[1],delta=2)
+        self.assertAlmostEqual(scale[2],scale[3],delta=2)
+        self.page.evaluate("document.querySelector('#timeline-surface').scrollLeft=140")
+        self.wait_condition(lambda: self.page.evaluate("""() =>
+          Math.abs(document.querySelector('#timeline-ruler').scrollLeft-
+                   document.querySelector('#timeline-surface').scrollLeft)<2"""))
+        self.page.locator("#timeline-zoom").select_option("1")
+        fx_mark=self.page.locator("#fx-lane .fx-clip-mark").first
+        box=fx_mark.bounding_box()
+        self.assertIsNotNone(box)
+        x,y=box["x"]+box["width"]/2,box["y"]+box["height"]/2
+        self.page.mouse.move(x,y);self.page.mouse.down()
+        self.page.mouse.move(x+65,y,steps=6);self.page.mouse.up()
+        dragged=self.wait_state("revision",moved["project_revision"]+1)
+        self.assertGreater(dragged["audio_clips"][0]["start_ms"],moved["audio_clips"][0]["start_ms"])
+        revision = dragged["project_revision"]
         self.page.locator('.fx-item input[aria-label^="Volume"]').fill("-18")
         self.page.locator('.fx-item input[aria-label^="Volume"]').dispatch_event("change")
         self.wait_state("revision", revision + 1)
