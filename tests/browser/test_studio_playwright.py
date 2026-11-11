@@ -345,7 +345,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertGreater(second,first)
         self.assertEqual(self.page.evaluate("localStorage.getItem('pausio-studio-dock-height')"),
                          str(second))
-        self.assertFalse(self.page.locator("#desktop-approve-action").is_disabled() and
+        self.assertEqual(self.page.locator("#desktop-approve-action").is_disabled(),
                          self.page.locator("#approve-action").is_disabled())
         self.page.reload(wait_until="networkidle")
         self.assertEqual(self.page.locator("#app").get_attribute("data-workspace"), "audio")
