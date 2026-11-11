@@ -518,6 +518,7 @@ function update(next){
   }
   drawSegments();drawTimeline();drawFx();drawTranscript();drawCaptionEditor();
   updateFxMonitorUI();drawAudioMixer();syncVoicePlayback();syncLiveFx();transport();
+  syncDesktopCommands();
   if(has&&next.waveform_status==="ready"&&waveformRequestedFor!==next.media_id){
     waveformRequestedFor=next.media_id;
     fetch("/api/waveform",{cache:"no-store"}).then(async response=>{
@@ -1063,6 +1064,100 @@ function transport(){
   el("play-pause").setAttribute("aria-label",v.paused?"Riproduci":"Pausa");
   el("video-workspace").classList.toggle("playing",!v.paused);
 }
+
+/* Presentation state for desktop workspace. Video edits still flow only through
+   typed project commands; the current view and dock height are not project edits. */
+const WORKSPACE_LABELS = {
+  media: ["Media del progetto","Importa e gestisci il video originale.","Revisione tagli"],
+  cuts: ["Tagli AI","Scegli il ritmo, analizza le pause e rivedi gli intervalli.","Revisione tagli"],
+  transcript: ["Trascrizione","Trascrivi localmente e rivedi le parole riconosciute.","Trascrizione"],
+  captions: ["Sottotitoli","Genera, correggi e posiziona i sottotitoli nella preview.","Sottotitoli"],
+  audio: ["Audio e riser","Importa effetti, spostali sulla timeline e regola il volume.","Effetti audio"],
+  settings: ["Progetto e impostazioni","Gestisci autosalvataggio, cronologia e file di progetto.","Revisione tagli"]
+};
+function setWorkspace(name, persist=true){
+  if(!Object.hasOwn(WORKSPACE_LABELS,name))name="media";
+  const [title,description,inspectorTitle]=WORKSPACE_LABELS[name];
+  el("app").dataset.workspace=name;
+  el("workspace-context-title").textContent=title;
+  el("workspace-context-description").textContent=description;
+  document.querySelector(".inspector-head h2").textContent=inspectorTitle;
+  for(const button of document.querySelectorAll("[data-workspace-nav]")){
+    const active=button.dataset.workspaceNav===name;
+    button.classList.toggle("active",active);
+    if(active)button.setAttribute("aria-current","page");
+    else button.removeAttribute("aria-current");
+  }
+  if(name==="transcript"||name==="captions")tab("transcript");
+  else tab("cuts");
+  if(persist){try{localStorage.setItem("pausio-studio-workspace",name);}catch(_error){}}
+}
+function syncDesktopCommands(){
+  for(const [target,source] of [
+    ["desktop-undo-action","undo-action"],
+    ["desktop-redo-action","redo-action"],
+    ["desktop-approve-action","approve-action"]]){
+    el(target).disabled=el(source).disabled;
+  }
+  const canDownload=!el("download-action").hidden;
+  el("desktop-export-action").disabled=!canDownload&&el("export-action").disabled;
+  el("desktop-export-action").textContent=canDownload?"Scarica MP4":"Esporta MP4";
+}
+function initializeDesktopWorkspace(){
+  let chosen="media";
+  try{chosen=localStorage.getItem("pausio-studio-workspace")||"media";}catch(_error){}
+  setWorkspace(chosen,false);
+  for(const button of document.querySelectorAll("[data-workspace-nav]")){
+    button.addEventListener("click",()=>setWorkspace(button.dataset.workspaceNav));
+  }
+  el("desktop-undo-action").addEventListener("click",()=>el("undo-action").click());
+  el("desktop-redo-action").addEventListener("click",()=>el("redo-action").click());
+  el("desktop-approve-action").addEventListener("click",()=>el("approve-action").click());
+  el("desktop-export-action").addEventListener("click",()=>{
+    if(!el("download-action").hidden)el("download-action").click();
+    else el("export-action").click();
+  });
+  const dock=el("editor-dock"),handle=el("dock-resizer");
+  const min=210,max=440;
+  function applyHeight(value,save=true){
+    const upper=Math.max(min,Math.min(max,window.innerHeight-350));
+    const height=Math.round(Math.max(min,Math.min(upper,value)));
+    dock.style.setProperty("--dock-height",height+"px");
+    handle.setAttribute("aria-valuenow",String(height));
+    handle.setAttribute("aria-valuemax",String(upper));
+    if(save){try{localStorage.setItem("pausio-studio-dock-height",String(height));}catch(_error){}}
+    resizeTimeline();
+  }
+  let initial=285;
+  try{initial=Number(localStorage.getItem("pausio-studio-dock-height"))||285;}catch(_error){}
+  applyHeight(initial,false);
+  let drag=null;
+  handle.addEventListener("pointerdown",event=>{
+    if(event.button!==0||window.matchMedia("(max-width: 1000px)").matches)return;
+    drag={y:event.clientY,height:dock.getBoundingClientRect().height};
+    handle.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  });
+  handle.addEventListener("pointermove",event=>{
+    if(!drag)return;
+    applyHeight(drag.height+drag.y-event.clientY,false);
+  });
+  handle.addEventListener("pointerup",event=>{
+    if(!drag)return;
+    drag=null;
+    if(handle.hasPointerCapture(event.pointerId))handle.releasePointerCapture(event.pointerId);
+    applyHeight(dock.getBoundingClientRect().height);
+  });
+  handle.addEventListener("pointercancel",()=>{drag=null;});
+  handle.addEventListener("keydown",event=>{
+    if(!["ArrowUp","ArrowDown","Home"].includes(event.key))return;
+    event.preventDefault();
+    const current=dock.getBoundingClientRect().height;
+    applyHeight(event.key==="Home"?285:current+(event.key==="ArrowUp"?20:-20));
+  });
+  window.addEventListener("resize",()=>applyHeight(dock.getBoundingClientRect().height,false));
+}
+
 function tab(name){
   for(const key of ["cuts","transcript"]){
     el(key+"-panel").hidden=key!==name;
@@ -1517,8 +1612,10 @@ function syncTimelineOrder(){
   if(window.matchMedia("(max-width: 650px)").matches){
     if(timeline.parentElement!==workbench || timeline.nextElementSibling!==inspector)
       inspector.before(timeline);
-  }else if(timeline.parentElement===workbench){
-    workbench.after(timeline);
+  }else{
+    const dock=el("editor-dock"),handle=el("dock-resizer");
+    if(timeline.parentElement!==dock || timeline.previousElementSibling!==handle)
+      handle.after(timeline);
   }
 }
 window.addEventListener("resize",()=>{
@@ -1527,4 +1624,5 @@ window.addEventListener("resize",()=>{
 });
 syncTimelineOrder();
 resizeTimeline();
+initializeDesktopWorkspace();
 
