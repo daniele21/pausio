@@ -12,12 +12,12 @@
 
 ## Phase 1 — Speech-aware editing
 
-- [x] Consume ClosedRoom's existing localhost ASR path endpoint with local-only provider; produce timestamped JSON sidecar.
-- [ ] E2E compatibility verification with running ClosedRoom `dev`, A56 footage, VFR audio offset and actual model output.
-- [ ] Reuse ClosedRoom's speech/VAD evidence via an upstream shared contract; do **not** create another Silero/Whisper stack.
-- [ ] Integrate ClosedRoom transcript with reviewable edit proposals without automatically removing speech.
+- [x] Standalone Pausio MLX Whisper transcription without running ClosedRoom; local-only model resolution and optional explicit weight download.
+- [ ] Test real MLX inference with Italian Samsung A56 footage, VFR audio offsets, model latency and resource usage on Apple Silicon.
+- [ ] Evaluate VAD/ASR quality controls inspired by ClosedRoom, retaining strict no-silent-speech-removal policy.
+- [ ] Integrate Pausio transcript with reviewable edit proposals without automatically removing speech.
 - [ ] Detect suspected repeats and fillers as **review prompts**, never silent deletion.
-- [ ] Editable subtitles using **actual** ClosedRoom word timestamps when available, otherwise segment-level review; safe-area previews.
+- [ ] Editable subtitles using **actual** Pausio ASR word timestamps when available, otherwise segment-level review; safe-area previews.
 - [ ] Test natural pacing vs aggressive auto cuts using three real clips.
 
 ## Studio UI testing milestone
@@ -25,7 +25,7 @@
 - [x] Local web UI via `pausio studio` with video import, preview and graphical KEEP timeline.
 - [x] Studio editing presets (Natural/Balanced/Dynamic/Custom), advanced FFmpeg thresholds, reanalysis, diagnostics and portable versioned settings; real-media suitability still needs validation.
 - [x] Editable source-time ranges, restore decisions, original vs edited simulated preview, explicit approval and MP4 export.
-- [x] Optional ClosedRoom transcript panel; existing ASR stack remains upstream.
+- [x] Optional Pausio local transcription panel with model/language controls and explicit download approval.
 - [x] Four tailored Studio UX/UI Agent Skills and automated HTTP/workflow tests.
 - [x] Playwright Chromium browser audit on Linux with synthetic FFmpeg media: 320/390/768/1024/1440 viewport screenshots, complete editing/export, keyboard + pointer trim, responsive regression checks and JSON project round-trip.
 - [x] Playwright-found responsive fixes: 320px horizontal overflow, desktop timeline below fold, hidden approval control, waveform status refresh and mobile timeline order.

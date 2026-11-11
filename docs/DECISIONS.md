@@ -24,11 +24,13 @@
 
 **Decision:** versioned JSON in integer milliseconds, source references relative to plan directory or absolute. Future CapCut export will be a translator layer, not the primary storage format.
 
-## ADR 007 — Reuse ClosedRoom transcription
+## ADR 007 — Pausio-owned standalone transcription (supersedes ClosedRoom API adapter)
 
-**Decision:** ClosedRoom (`daniele21/closedroom`, `dev`) is Pausio's sole transcription implementation. Pausio uses the existing local `POST /v1/audio/transcriptions/path` endpoint with `response_format=verbose_json` and `asr_provider=local` over loopback. It extracts a temporary audio track from video, normalizes segment/word timestamps into source-time milliseconds and saves a reviewable sidecar; MLX Whisper, Nemotron, model settings, cache and VAD remain owned by ClosedRoom. No copied/forked ASR code and no secondary Pausio ASR runtime.
+**Decision:** Pausio directly implements an **independent** optional MLX Whisper ASR adapter in `src/pausio/local_asr.py`, using ClosedRoom `dev` as a design/reference, not an operational dependency. Users never need to open ClosedRoom, launch its HTTP service, or install it alongside Pausio. The local pipeline uses FFmpeg to extract temporary 16 kHz mono WAV, MLX Whisper to transcribe, and strict source-time timestamp normalization to produce a separate reviewable transcript.
 
-**Future:** if local API distribution is unsuitable, extract a reusable library **inside ClosedRoom** and version it for both consumers. Pin and contract-test any stable version before distributing. Live compatibility and source timing have not yet been verified with real A56 video.
+**Security/runtime:** No model download by default. Resolve installed/cached local weight snapshots and pass only a local model path into MLX; allow a Hugging Face model download only after explicit consent in Studio or `--allow-model-download` on CLI. Audio is never uploaded. The core install stays dependency-light; use `pip install -e '.[asr]'` for optional Apple Silicon MLX packages.
+
+**Limitations:** This first migration implements local Whisper, not full feature parity with ClosedRoom (Nemotron, diarization, VAD optimizations and persistent ASR jobs are out of scope). Model quality, A56 timing and Python 3.15 need validation on actual hardware. See [local ASR](LOCAL_ASR.md).
 
 ## ADR 008 — Typed edit commands are Pausio's canonical project format
 
@@ -44,11 +46,11 @@
 
 **Decision:** Studio's default runtime maintains one private, local, autosaved session on disk (including imported media) separately from the portable project. It commits a validated JSON snapshot atomically before exposing a UI change; retains one previous checkpoint for corruption fallback; verifies original-media SHA-256; and uses a single-process lock. On recoverability failure, do not silently delete the user's stored media. A deliberate UI action deletes managed local media and checkpoints. Users can select `--data-dir` for storage location.
 
-**Limitations:** autosave covers active project, media and history; it does not restore ClosedRoom transcript, unfinished renders, or multiple project workspaces. The exported portable file remains media-free.
+**Limitations:** autosave covers active project, media and history; it does not restore in-memory Pausio transcript, unfinished renders, or multiple project workspaces. The exported portable file remains media-free.
 
 ## Unresolved
 
 - Choose Pausio repository license intentionally before inviting source reuse.
-- Validate ClosedRoom adapter and model/weight distribution policy; engine choice stays in ClosedRoom.
+- Validate Pausio MLX runtime and model/weight licensing, download UX and memory requirements with real Apple Silicon footage.
 - Determine UI technology (web local vs packaged desktop), safe-area templates and subtitles format.
 - Quantify performance on real Samsung video, VFR, rotation and audio drift.
