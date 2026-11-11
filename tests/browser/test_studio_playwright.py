@@ -231,6 +231,12 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertEqual(self.state()["audio_clips"][0]["gain_db"], -18)
         self.page.locator("#preview-action").click()
         self.wait_state("preview", "completed")
+        self.wait_condition(lambda: self.page.evaluate("() => mode==='rendered'"))
+        self.assertTrue(self.page.evaluate("""(id) => {
+          const player=liveFxPlayers.get(id);
+          return !player||player.audio.paused;
+        }""",clip["id"]), "FX monitor must not duplicate rendered FFmpeg sound")
+        self.assertTrue(self.page.locator("#fx-monitor-toggle").is_disabled())
         for width in (390, 320):
             self.page.set_viewport_size({"width":width,"height":844})
             self.page.wait_for_timeout(120)
