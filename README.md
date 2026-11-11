@@ -4,7 +4,24 @@
 
 A local-first toolkit for natural-sounding, talking-head social videos. Pausio is designed to make post-production **reviewable**, not fully automatic at the expense of speech or pacing.
 
-> **Status: early foundation (v0.1.0).** The current CLI inspects videos, suggests cuts using FFmpeg's signal-level silence detection, writes a human-editable JSON timeline, and exports a vertical 1080x1920 MP4. It now has optional standalone MLX Whisper ASR on Apple Silicon (no ClosedRoom app or service required), but does not yet make semantic cuts, denoise or export CapCut projects; its on-device transcripts can now drive **editable burned-in captions**.
+> **Status: v0.1.0 Early Access (technical preview).** The current CLI inspects videos, suggests cuts using FFmpeg's signal-level silence detection, writes a human-editable JSON timeline, and exports a vertical 1080x1920 MP4. It now has optional standalone MLX Whisper ASR on Apple Silicon (no ClosedRoom app or service required), but does not yet make semantic cuts, denoise or export CapCut projects; its on-device transcripts can now drive **editable burned-in captions**.
+
+## Download — GitHub Early Access v0.1.0
+
+**[Scarica Pausio v0.1.0 da GitHub Releases](https://github.com/daniele21/pausio/releases/tag/v0.1.0)**. I file disponibili sono un pacchetto Python `.whl`, una distribuzione sorgente `.tar.gz` e `SHA256SUMS.txt`. **Non è ancora un'app `.dmg` installabile con doppio clic.**
+
+Su macOS puoi installare il pacchetto senza clonare GitHub (scarica prima il file wheel negli Assets della release):
+
+```bash
+brew install python@3.12 ffmpeg
+python3.12 -m venv ~/.local/share/pausio/venv
+source ~/.local/share/pausio/venv/bin/activate
+python -m pip install ~/Downloads/pausio-0.1.0-py3-none-any.whl
+# opzionale su Apple Silicon: python -m pip install mlx-whisper "huggingface-hub>=0.26"
+pausio studio
+```
+
+Segui le [note ufficiali della release](.github/release/v0.1.0.md) per i limiti e le istruzioni complete; il flusso via `git clone` qui sotto resta utile a chi vuole sviluppare il progetto.
 
 ## Pausio Studio — interfaccia per test reali
 
