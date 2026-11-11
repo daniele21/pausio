@@ -156,6 +156,29 @@ const working = () => uploading || !!project?.importing || project?.job?.status=
    Commands/FFmpeg remain the source of truth for the actual rendered sound. */
 let fxMonitoringEnabled = true;
 let fxAudioContext = null;
+let voiceGainNode = null, voiceSourceNode = null;
+let audioMixerDraft = null;
+const clipMixerDrafts = new Map();
+const baseAudioMix = () => ({voice_gain_db:0,voice_muted:false,fx_gain_db:0,fx_muted:false});
+const currentAudioMix = () => audioMixerDraft || project?.audio_mix || baseAudioMix();
+const currentClipMix = clip => clipMixerDrafts.get(clip.id) || clip;
+const gainPercent = db => Math.round(Math.pow(10,db/20)*100);
+const gainText = db => gainPercent(db)+"% · "+(db>0?"+":"")+db+" dB";
+const gainScalar = db => Math.pow(10,db/20);
+
+function syncVoicePlayback(){
+  if(!project?.media)return;
+  const mix=currentAudioMix();
+  // FFmpeg preview includes voice gain/mute already; never apply it twice.
+  const level=mode==="rendered"?1:mix.voice_muted?0:gainScalar(mix.voice_gain_db);
+  if(voiceGainNode){
+    v.volume=1;
+    voiceGainNode.gain.value=level;
+  }else{
+    v.volume=Math.max(0,Math.min(1,level));
+  }
+}
+
 const liveFxPlayers = new Map();
 function pauseLiveFx(){
   for(const {audio} of liveFxPlayers.values())if(!audio.paused)audio.pause();
@@ -175,7 +198,7 @@ function reconcileLiveFx(){
   }
 }
 function unlockFxAudio(){
-  if(!fxMonitoringEnabled||mode==="rendered"||!(project?.audio_clips||[]).length)return;
+  if(!project?.media)return;
   if(!fxAudioContext){
     const AudioContextType=window.AudioContext||window.webkitAudioContext;
     if(AudioContextType){
@@ -183,8 +206,20 @@ function unlockFxAudio(){
       catch{/* HTMLAudioElement fallback still works on supported browsers. */}
     }
   }
+  if(fxAudioContext&&!voiceGainNode){
+    try{
+      voiceSourceNode=fxAudioContext.createMediaElementSource(v);
+      voiceGainNode=fxAudioContext.createGain();
+      voiceSourceNode.connect(voiceGainNode);
+      voiceGainNode.connect(fxAudioContext.destination);
+    }catch{
+      // Native volume is a safe fallback; amplification above 0 dB needs Web Audio.
+      voiceGainNode=null;
+    }
+  }
+  syncVoicePlayback();
   if(fxAudioContext?.state==="suspended")
-    fxAudioContext.resume().catch(()=>toast("Audio FX bloccato dal browser. Tocca Play o genera la preview FFmpeg.","error"));
+    fxAudioContext.resume().catch(()=>toast("Audio del browser sospeso. Premi Play o ascolta la preview FFmpeg.","error"));
 }
 function createLiveFxPlayer(clip){
   const audio=new Audio();
@@ -232,7 +267,9 @@ function syncLiveFx(){
     const player=liveFxPlayers.get(clip.id)||createLiveFxPlayer(clip);
     if(player.failed)continue;
     const {audio,gain}=player;
-    const effectiveGain=Math.pow(10,clip.gain_db/20)*(v.muted?0:v.volume);
+    const mix=currentAudioMix(),selected=currentClipMix(clip);
+    const effectiveGain=(mix.fx_muted||selected.muted||v.muted)?0:
+      gainScalar(selected.gain_db+mix.fx_gain_db);
     if(gain){gain.gain.value=effectiveGain;audio.volume=1;}
     else{audio.volume=Math.max(0,Math.min(1,effectiveGain));}
     audio.playbackRate=v.playbackRate;
@@ -294,6 +331,7 @@ function busyLabel(kind){
 }
 function update(next){
   project=next;
+  audioMixerDraft=null;clipMixerDrafts.clear();
   const has=!!next.file, plan=!!next.plan, approved=!!next.approved, ready=!!next.export_ready, busy=working();
   if(mode==="edited"&&(!plan||(next.media&&editedDuration()>=next.media.duration_ms))){
     mode="original";
@@ -304,6 +342,7 @@ function update(next){
   syncCutControls(next, busy);
   syncCaptionSettings(next, busy);
   el("fx-panel").hidden=!has;
+  el("audio-mixer").hidden=!has;
   el("fx-import").disabled=!has||busy;
   if(next.media_id && mediaKey!==next.media_id){
     mediaKey=next.media_id;mode="original";previewSourceMode="original";
@@ -394,7 +433,7 @@ function update(next){
     el("keep-time").textContent=shortDuration(editedDuration());
   }
   drawSegments();drawTimeline();drawFx();drawTranscript();drawCaptionEditor();
-  updateFxMonitorUI();syncLiveFx();transport();
+  updateFxMonitorUI();drawAudioMixer();syncVoicePlayback();syncLiveFx();transport();
   if(has&&next.waveform_status==="ready"&&waveformRequestedFor!==next.media_id){
     waveformRequestedFor=next.media_id;
     fetch("/api/waveform",{cache:"no-store"}).then(async response=>{
@@ -939,6 +978,7 @@ function changeMode(chosen){
   const nextTime=chosen==="rendered"?outputTime(sourceTime):
     chosen==="edited"?nextSimulatedSourceTime(sourceTime):sourceTime;
   v.pause();pauseLiveFx();mode=chosen;
+  syncVoicePlayback();
   if(chosen==="rendered"||oldMode==="rendered"){
     const url=chosen==="rendered"?"/api/preview?v="+encodeURIComponent(mediaKey)+
       "&rev="+project.project_revision:"/api/media?v="+encodeURIComponent(mediaKey);
