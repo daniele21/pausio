@@ -12,3 +12,65 @@
 @media(max-width:850px){.layout{grid-template-columns:1fr;gap:20px}.camera{margin:auto}.transport{margin-left:auto;margin-right:auto}.settings{margin-top:5px}.heading{max-width:540px;margin-left:auto;margin-right:auto}.capture-column{max-width:640px;margin:auto;width:100%}}
 @media(max-width:440px){.shell{padding:0 14px}.topbar{height:59px}.brand{font-size:19px}.brand-page{font-size:11px}.privacy{font-size:10px}.layout{padding:23px 0}.heading{margin-bottom:14px}.heading h1{font-size:27px}.state-chip{padding:6px 8px;font-size:9px}.camera{max-height:min(67svh,690px);width:auto;max-width:100%;margin:auto;aspect-ratio:9/16}.transport{width:100%}.settings{padding:17px}.download-panel{padding:16px}.format-pill{font-size:9px}.prompter{left:5%;right:5%;top:4%}.prompter-scroll{height:calc(var(--font-size,26px) * 3.2)}footer span{display:none}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* Mobile-first capture v2: show the ENTIRE camera frame, never enlarge/crop it
+   simply to fill a decorative 9:16 viewport. A wider camera source is preserved. */
+.camera video { object-fit: contain; object-position: center; }
+.camera { background: #050a10; }
+.prompter { left: 4%; right: 4%; top: 3%; padding: 10px 13px 12px;
+  background: linear-gradient(180deg, rgba(7,13,21,.84), rgba(7,13,21,.68));
+}
+.prompter.middle { top: 34%; }
+.prompter-scroll {
+  height: min(calc(var(--font-size, 26px) * 1.33 * var(--prompter-lines, 5)), 32svh);
+}
+.prompter-scroll > div { line-height: 1.33; text-align: center; }
+.settings-summary { display: none; }
+.settings-details, .settings details { display: block; }
+.gobbo-quick { font-weight: 800; letter-spacing: -.5px; }
+.settings .field small { color: #a6b9c9; line-height: 1.5; font-weight: 400; font-size: 11px; }
+@media (max-width: 850px) {
+  .shell { padding: 0 14px; }
+  .topbar { height: 52px; }
+  .layout { grid-template-columns: 1fr; gap: 14px; padding: 12px 0 25px; }
+  .capture-column { max-width: 510px; }
+  .heading { min-height: 30px; align-items: center; margin-bottom: 9px; }
+  .heading h1 { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+  .heading .eyebrow { font-size: 11px; margin: 0; }
+  .camera {
+    width: min(100%, 460px);
+    height: min(calc(100svh - 177px), calc(min(100vw - 28px, 460px) * 1.777778));
+    min-height: 300px;
+    max-width: none;
+    max-height: none;
+    aspect-ratio: auto;
+    margin-inline: auto;
+    border-radius: 15px;
+  }
+  .prompter { left: 3%; right: 3%; top: 2.5%; padding: 9px 12px 11px; }
+  .prompter.middle { top: 32%; }
+  .lens-hint { margin-bottom: 7px; }
+  .transport { margin: 9px auto 0; width: min(100%, 460px); gap: 8px; }
+  .transport .button { min-height: 51px; padding: 10px 13px; }
+  .transport .button.compact { width: 49px; flex: 0 0 49px; font-size: 20px; }
+  .camera-hud { bottom: 10px; left: 10px; right: 10px; }
+  .settings { padding: 0; margin-top: 2px; }
+  .settings-summary { display: flex; align-items: center; flex-wrap: wrap;
+    justify-content: space-between; column-gap: 12px; min-height: 53px;
+    padding: 14px 17px; font-size: 13px; font-weight: 750; cursor: pointer;
+    list-style-position: inside; }
+  .settings-summary span { color: #a8b8c8; font-weight: 450; font-size: 11px; }
+  .settings details[open] > .settings-summary { border-bottom: 1px solid #2d3d4f; }
+  .settings-head { padding-top: 18px; }
+  .settings details > :not(summary) { margin-left: 17px; margin-right: 17px; }
+  .settings details > :last-child { margin-bottom: 20px; }
+  .status { width: min(100%, 460px); margin: 5px auto 0; padding: 9px 0; }
+  .download-panel { margin-left: auto; margin-right: auto; }
+}
+@media (max-width: 360px) {
+  .privacy { font-size: 9px; }
+  .format-pill { font-size: 9px; padding: 7px 9px; }
+  .prompter-scroll { height: min(calc(var(--font-size, 26px) * 1.33 * var(--prompter-lines, 5)), 29svh); }
+  .settings-summary span { font-size: 10px; }
+}
