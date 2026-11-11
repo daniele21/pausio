@@ -2,7 +2,7 @@
 
 ## Start in one command
 
-With Python 3.11+, FFmpeg and FFprobe on PATH, install once (`pip install -e .`) and launch `pausio studio`. A browser opens `http://127.0.0.1:8765`; use `--port 8877` for an alternative, or `--no-open` to skip launching the browser. Stop with Ctrl+C. The session remains privately stored on disk until explicitly deleted. No Node.js, internet, account, CDN or app-server framework is required.
+With Python 3.11+, FFmpeg and FFprobe on PATH, install once (`pip install -e .`) and launch `pausio studio`. A browser opens `http://127.0.0.1:8765` if available. When occupied, Pausio binds the next free loopback port (`8766`, `8767`, ...), prints the actual URL and opens that URL. `--port 8877` changes the starting port; `--no-open` disables browser launch. Port fallback does not bypass the one-process-per-workspace lock: stop an existing Pausio instance using the same saved session or explicitly select another data directory. Stop with Ctrl+C. The session remains privately stored on disk until explicitly deleted. No Node.js, internet, account, CDN or app-server framework is required.
 
 ## Creator workflow
 

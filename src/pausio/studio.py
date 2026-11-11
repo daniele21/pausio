@@ -6,6 +6,7 @@ Every imported video remains in this server's temporary workspace until exit.
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
 import os
@@ -759,9 +760,26 @@ class StudioHandler(BaseHTTPRequestHandler):
 
 
 def create_server(*, port: int = 8765, workspace: StudioWorkspace | None = None) -> StudioServer:
+    """Bind directly to the first free loopback TCP port at or above `port`.
+
+    Bind itself is the availability check: a separate probe followed by bind
+    would have a race. Port 0 deliberately retains its ephemeral-port meaning
+    for tests. Only EADDRINUSE permits retry; permission and other socket errors
+    must be surfaced rather than hidden.
+    """
     if not 0 <= port <= 65535:
         raise ValueError("port must be 0..65535")
-    return StudioServer(("127.0.0.1", port), workspace or StudioWorkspace())
+    active_workspace = workspace if workspace is not None else StudioWorkspace()
+    candidates = (0,) if port == 0 else range(port, 65536)
+    for candidate in candidates:
+        try:
+            return StudioServer(("127.0.0.1", candidate), active_workspace)
+        except OSError as exc:
+            if exc.errno != errno.EADDRINUSE:
+                raise
+    raise OSError(
+        errno.EADDRINUSE, f"Nessuna porta disponibile tra {port} e 65535."
+    )
 
 
 def run_studio(
@@ -774,6 +792,11 @@ def run_studio(
         workspace.close()
         raise
     url = f"http://127.0.0.1:{server.server_port}"
+    if port != 0 and server.server_port != port:
+        print(
+            f"Porta {port} già occupata: avvio sulla prima porta libera "
+            f"({server.server_port})."
+        )
     print(
         f"Pausio Studio • {url}\n"
         f"Sessione salvata localmente in: {workspace.directory}\n"

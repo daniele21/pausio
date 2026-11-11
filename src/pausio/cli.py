@@ -32,7 +32,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     commands.add_parser("doctor", help="Check FFmpeg/FFprobe availability")
     studio_cmd = commands.add_parser("studio", help="Open the local Pausio Studio UI")
-    studio_cmd.add_argument("--port", type=int, default=8765)
+    studio_cmd.add_argument(
+        "--port", type=int, default=8765,
+        help="Porta TCP iniziale (default: 8765); se occupata prova +1, +2, ..."
+    )
     studio_cmd.add_argument("--no-open", action="store_true")
     studio_cmd.add_argument("--data-dir", type=Path, help="Private local Studio autosave folder")
 

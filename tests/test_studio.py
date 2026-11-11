@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import errno
 import json
+import socket
 import shutil
 import subprocess
 import tempfile
@@ -12,9 +14,9 @@ import unittest
 import urllib.error
 import urllib.request
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import call, patch, sentinel
 
-from pausio.studio import STATIC_DIR, StudioWorkspace, create_server
+from pausio.studio import STATIC_DIR, StudioWorkspace, create_server, run_studio
 from pausio.media import waveform_envelope, probe
 
 
@@ -108,6 +110,87 @@ class StudioHttpTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn("Formato", json.loads(payload)["error"])
         self.assertIsNone(self.get_state()["file"])
+
+
+class StudioPortSelectionTests(unittest.TestCase):
+    def test_real_occupied_port_is_skipped_without_touching_listener(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as occupied:
+            occupied.bind(("127.0.0.1", 0))
+            occupied.listen()
+            starting_port = occupied.getsockname()[1]
+            if starting_port == 65535:
+                self.skipTest("OS picked the last TCP port")
+            workspace = StudioWorkspace()
+            server = None
+            try:
+                server = create_server(port=starting_port, workspace=workspace)
+                self.assertGreater(server.server_port, starting_port)
+                self.assertEqual(server.server_address[0], "127.0.0.1")
+                # The original listener is still bound: Pausio never stops it.
+                self.assertEqual(occupied.getsockname()[1], starting_port)
+            finally:
+                if server is not None:
+                    server.server_close()
+                workspace.close()
+
+    def test_falls_forward_one_port_per_address_in_use(self):
+        with patch("pausio.studio.StudioServer") as factory:
+            factory.side_effect = [
+                OSError(errno.EADDRINUSE, "port occupied"),
+                OSError(errno.EADDRINUSE, "port occupied"),
+                sentinel.server,
+            ]
+            result = create_server(port=8765, workspace=sentinel.workspace)
+            self.assertIs(result, sentinel.server)
+            self.assertEqual(factory.call_args_list, [
+                call(("127.0.0.1", 8765), sentinel.workspace),
+                call(("127.0.0.1", 8766), sentinel.workspace),
+                call(("127.0.0.1", 8767), sentinel.workspace),
+            ])
+
+    def test_port_zero_and_other_socket_failures_are_not_retried(self):
+        with patch("pausio.studio.StudioServer", return_value=sentinel.server) as factory:
+            self.assertIs(create_server(port=0, workspace=sentinel.workspace),
+                          sentinel.server)
+            factory.assert_called_once_with(("127.0.0.1", 0), sentinel.workspace)
+        with patch("pausio.studio.StudioServer",
+                   side_effect=OSError(errno.EACCES, "permission denied")) as factory:
+            with self.assertRaises(OSError) as caught:
+                create_server(port=8765, workspace=sentinel.workspace)
+            self.assertEqual(caught.exception.errno, errno.EACCES)
+            self.assertEqual(factory.call_count, 1)
+
+    def test_last_port_does_not_wrap_around(self):
+        with patch("pausio.studio.StudioServer",
+                   side_effect=OSError(errno.EADDRINUSE, "occupied")) as factory:
+            with self.assertRaises(OSError) as caught:
+                create_server(port=65535, workspace=sentinel.workspace)
+            self.assertEqual(caught.exception.errno, errno.EADDRINUSE)
+            factory.assert_called_once_with(("127.0.0.1", 65535), sentinel.workspace)
+
+    def test_startup_opens_url_of_actual_port(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as occupied:
+            occupied.bind(("127.0.0.1", 0))
+            occupied.listen()
+            starting_port = occupied.getsockname()[1]
+            if starting_port == 65535:
+                self.skipTest("OS picked the last TCP port")
+            with tempfile.TemporaryDirectory() as directory:
+                from io import StringIO
+                from contextlib import redirect_stdout
+                with patch("pausio.studio.webbrowser.open") as open_browser, \\
+                     patch("pausio.studio.StudioServer.serve_forever"):
+                    output = StringIO()
+                    with redirect_stdout(output):
+                        run_studio(port=starting_port, data_dir=Path(directory))
+                    printed = output.getvalue()
+                    self.assertIn("Porta " + str(starting_port) + " già occupata", printed)
+                    open_browser.assert_called_once()
+                    self.assertIn(open_browser.call_args.args[0], printed)
+                    self.assertNotEqual(
+                        open_browser.call_args.args[0],
+                        f"http://127.0.0.1:{starting_port}"
+                    )
 
 
 @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "FFmpeg unavailable")
