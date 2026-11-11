@@ -9,6 +9,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 from pausio.studio import StudioWorkspace, create_server
+from pausio.media import probe
 
 
 class MobileCapturePlaywrightTests(unittest.TestCase):
@@ -67,6 +68,12 @@ class MobileCapturePlaywrightTests(unittest.TestCase):
         download.save_as(path)
         self.assertGreater(path.stat().st_size, 1000)
         self.assertIn(path.suffix, (".mp4", ".webm"))
+        # A real media parser must accept the downloaded bytes as a Pausio input.
+        info = probe(path)
+        self.assertGreater(info.duration_ms, 700)
+        self.assertTrue(info.has_audio, "Recorded take must retain microphone audio")
+        self.assertGreater(info.width, 0)
+        self.assertGreater(info.height, 0)
         self.assertTrue(page.locator("#result-video").is_visible())
         self.assertFalse(page.locator("#prompter").is_visible())
         self.assertEqual(self.errors, [])
