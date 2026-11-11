@@ -46,6 +46,8 @@ _TYPES = frozenset({
     "audio.add",
     "audio.update",
     "audio.remove",
+    "audio.mixer.configure",
+    "audio.clip.mix",
 })
 UI_COMMANDS = frozenset(_TYPES - {"analysis.propose", "timeline.replace"})
 
@@ -156,9 +158,28 @@ def _captions(raw: Any, duration_ms: int) -> list[dict]:
     return result
 
 
+def default_audio_mix() -> dict:
+    """Canonical default for old projects without mixer events."""
+    return {"voice_gain_db": 0, "voice_muted": False,
+            "fx_gain_db": 0, "fx_muted": False}
+
+
+def validate_audio_mix(raw: Any) -> dict:
+    mix = _object(raw, set(default_audio_mix()), "audio.mixer.configure")
+    for key in ("voice_gain_db", "fx_gain_db"):
+        if type(mix[key]) is not int or not -36 <= mix[key] <= 12:
+            raise ProjectFormatError(f"{key} must be an integer from -36 to +12 dB")
+    for key in ("voice_muted", "fx_muted"):
+        if type(mix[key]) is not bool:
+            raise ProjectFormatError(f"{key} must be boolean")
+    return dict(mix)
+
+
 def _audio_clip(raw: Any, media_duration: int) -> dict:
     fields = {"id", "asset_sha256", "filename", "start_ms", "duration_ms", "gain_db"}
-    clip = _object(raw, fields, "audio clip")
+    if not isinstance(raw, dict) or not fields <= set(raw) or set(raw) - fields - {"muted"}:
+        raise ProjectFormatError("audio clip has missing or unknown fields")
+    clip = raw
     ident = _id(clip["id"], "audio clip.id")
     digest = clip["asset_sha256"]
     if not isinstance(digest, str) or not _HEX.fullmatch(digest):
@@ -175,10 +196,15 @@ def _audio_clip(raw: Any, media_duration: int) -> dict:
         raise ProjectFormatError("audio effect start/duration outside bounds")
     if type(gain) is not int or not -36 <= gain <= 12:
         raise ProjectFormatError("audio gain_db must be between -36 and 12")
-    return {
+    if "muted" in clip and type(clip["muted"]) is not bool:
+        raise ProjectFormatError("audio clip.muted must be boolean")
+    result = {
         "id": ident, "asset_sha256": digest, "filename": name,
         "start_ms": start, "duration_ms": length, "gain_db": gain
     }
+    if "muted" in clip:
+        result["muted"] = clip["muted"]
+    return result
 
 
 @dataclass(frozen=True)
@@ -192,6 +218,7 @@ class ProjectView:
     caption_style: str = "social"
     caption_config: dict | None = None
     audio_clips: tuple[dict, ...] = ()
+    audio_mix: dict | None = None
 
 
 def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
@@ -205,6 +232,7 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
     caption_style = "social"
     caption_config = default_caption_config()
     audio_clips: list[dict] = []
+    audio_mix = default_audio_mix()
     used_events: set[str] = set()
 
     for command in commands:
@@ -353,6 +381,22 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
                 if item["id"] == target else item for item in audio_clips
             ]
             approved = False
+        elif kind == "audio.mixer.configure":
+            audio_mix = validate_audio_mix(payload)
+            approved = False
+        elif kind == "audio.clip.mix":
+            _object(payload, {"clip_id", "gain_db", "muted"}, kind)
+            target = _id(payload["clip_id"], "audio clip.id")
+            if not any(item["id"] == target for item in audio_clips):
+                raise ProjectFormatError("audio effect not found")
+            if type(payload["muted"]) is not bool:
+                raise ProjectFormatError("audio clip.muted must be boolean")
+            audio_clips = [
+                _audio_clip({**item, "gain_db": payload["gain_db"],
+                             "muted": payload["muted"]}, duration)
+                if item["id"] == target else item for item in audio_clips
+            ]
+            approved = False
         elif kind == "audio.remove":
             _object(payload, {"clip_id"}, kind)
             target = _id(payload["clip_id"], "audio clip.id")
@@ -371,6 +415,7 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
         caption_style=caption_style,
         caption_config=copy.deepcopy(caption_config),
         audio_clips=tuple(copy.deepcopy(audio_clips)),
+        audio_mix=copy.deepcopy(audio_mix),
     )
 
 
