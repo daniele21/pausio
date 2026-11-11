@@ -74,3 +74,7 @@
 **Backward compatibility:** Old project v2 `caption.configure` events omit `font_family`; the replay validator accepts only that known omission and defaults to `Arial`. The JSON schema therefore permits the new key but does not require it, preserving historical project imports. New UI edits include it, and every font change invalidates approval and cached preview/render via existing typed-event semantics.
 
 **Limits:** The operating system/libass must have the requested font installed; substitution can differ between the HTML canvas and exported MP4 on another machine. Display a warning and require real FFmpeg preview before delivery. Supporting user-supplied font uploads will need separate validated asset packaging and licensing policy.
+
+## ADR 013 — Audio FX importato e local-first
+
+**Decisione:** traccia FX opzionale per audio personale (riser, whoosh, impact). I comandi versionati `audio.add/update/remove` sono la sola fonte per il rendering, con undo/redo e riferimento al SHA-256 dell'asset privato; nessun percorso assoluto entra nel progetto portabile. Il video sorgente resta immutato. L'anteprima FFmpeg e l'export condividono il mix; la simulazione browser non è un'anteprima audio finale. Nessuna libreria di audio terzi viene vendorizzata senza verifica della licenza.
