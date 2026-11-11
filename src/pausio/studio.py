@@ -502,6 +502,19 @@ class StudioHandler(BaseHTTPRequestHandler):
     server: StudioServer
     protocol_version = "HTTP/1.1"
 
+    def handle_one_request(self) -> None:
+        """Close idle/aborted browser connections without a server traceback.
+
+        Browsers may cancel or reset an HTTP/1.1 keep-alive socket while Studio
+        is waiting for its next request or writing a response. These are
+        transport-level disconnects, not application errors; all other
+        exceptions still propagate for diagnosis.
+        """
+        try:
+            super().handle_one_request()
+        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+            self.close_connection = True
+
     def log_message(self, format: str, *args: object) -> None:
         # Do not print full video paths, transcript text or other private content.
         if self.path.startswith("/api/"):
@@ -642,6 +655,12 @@ class StudioHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         path = urlsplit(self.path).path
+        if path == "/favicon.ico":
+            # Browsers request this even without a declared icon. A deliberately
+            # empty response avoids a misleading 404 without adding new assets.
+            self._headers(204, 0, "image/x-icon")
+            self.end_headers()
+            return
         if path in ASSETS:
             file_name, mime = ASSETS[path]
             try:
@@ -686,6 +705,10 @@ class StudioHandler(BaseHTTPRequestHandler):
 
     def do_HEAD(self) -> None:
         path = urlsplit(self.path).path
+        if path == "/favicon.ico":
+            self._headers(204, 0, "image/x-icon")
+            self.end_headers()
+            return
         if path in {"/api/media", "/api/export", "/api/preview"}:
             self._media(path == "/api/export", True, preview=path == "/api/preview")
         else:

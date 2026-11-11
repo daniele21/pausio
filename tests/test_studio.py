@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import errno
 import json
+from http.server import BaseHTTPRequestHandler
 import socket
 import shutil
 import subprocess
@@ -16,7 +17,7 @@ import urllib.request
 from pathlib import Path
 from unittest.mock import call, patch, sentinel
 
-from pausio.studio import STATIC_DIR, StudioWorkspace, create_server, run_studio
+from pausio.studio import STATIC_DIR, StudioWorkspace, StudioHandler, create_server, run_studio
 from pausio.media import waveform_envelope, probe
 
 
@@ -82,6 +83,41 @@ class StudioHttpTests(unittest.TestCase):
             self.assertIn("frame-ancestors 'none'", headers["Content-Security-Policy"])
         self.assertIn(b'role="tablist"', self.request("GET", "/")[2])
         self.assertIn(b'id="approve-action"', self.request("GET", "/")[2])
+
+    def test_browser_favicon_request_is_not_a_spurious_404(self):
+        for method in ("GET", "HEAD"):
+            with self.subTest(method=method):
+                status, headers, body = self.request(method, "/favicon.ico")
+                self.assertEqual(status, 204)
+                self.assertEqual(body, b"")
+                self.assertEqual(headers["Content-Length"], "0")
+                self.assertEqual(headers["Cross-Origin-Resource-Policy"], "same-origin")
+        self.assertEqual(self.get_state()["job"]["status"], "idle")
+        self.assertEqual(self.request("GET", "/unknown-resource")[0], 404)
+
+    def test_http_client_disconnects_are_silent_but_other_failures_propagate(self):
+        for exception in (
+            ConnectionResetError(54, "Connection reset by peer"),
+            ConnectionAbortedError(53, "Software caused connection abort"),
+            BrokenPipeError(32, "Broken pipe"),
+        ):
+            with self.subTest(exception=type(exception).__name__):
+                handler = object.__new__(StudioHandler)
+                handler.close_connection = False
+                with patch.object(
+                    BaseHTTPRequestHandler, "handle_one_request", side_effect=exception
+                ):
+                    handler.handle_one_request()
+                self.assertTrue(handler.close_connection)
+
+        # Do not blanket-catch arbitrary exceptions, e.g. an application bug.
+        handler = object.__new__(StudioHandler)
+        with patch.object(
+            BaseHTTPRequestHandler, "handle_one_request",
+            side_effect=RuntimeError("application failure")
+        ):
+            with self.assertRaisesRegex(RuntimeError, "application failure"):
+                handler.handle_one_request()
 
     def test_cross_origin_and_missing_client_token_are_rejected(self):
         status, _, data = self.request(
