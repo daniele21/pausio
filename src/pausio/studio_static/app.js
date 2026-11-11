@@ -104,7 +104,7 @@ async function refresh(){
 }
 function busyLabel(kind){
   return ({analyze:"Analisi delle pause in corso…",preview:"Rendering anteprima FFmpeg…",render:"Creazione MP4 in corso…",
-    transcribe:"ClosedRoom sta trascrivendo sul tuo Mac…"})[kind]||"Elaborazione…";
+    transcribe:"Pausio sta trascrivendo localmente con MLX Whisper…"})[kind]||"Elaborazione…";
 }
 function update(next){
   project=next;
@@ -148,6 +148,7 @@ function update(next){
   for(const id of ["import-action","empty-import"])el(id).disabled=busy;
   el("analyze-action").disabled=!has||busy;
   el("transcribe-action").disabled=!has||!next.media.has_audio||busy;
+  for(const name of ["asr-model","asr-language","asr-download"])el(name).disabled=busy;
   for(const id of ["back-five","forward-five","play-pause"])el(id).disabled=!has;
   el("segment-count").textContent=plan?String(next.plan.segments.length).padStart(2,"0"):"—";
   el("inspector-empty").hidden=plan;el("cuts-content").hidden=!plan;
@@ -449,6 +450,16 @@ async function edit(type, payload={}){
 async function startJob(kind){
   if(kind==="analyze" && !cutDraft)throw Error("Impostazioni non ancora disponibili.");
   const body=kind==="analyze"?{kind,settings:{...cutDraft}}:{kind};
+  if(kind==="transcribe"){
+    const allow=el("asr-download").checked;
+    if(allow&&!window.confirm(
+      "Autorizzi Pausio a scaricare dal sito Hugging Face il modello selezionato, "+
+      "solo se non è già presente? Il modello Large Turbo richiede circa 1,6 GB "+
+      "di spazio. Il video e l'audio non vengono inviati online."
+    ))return;
+    body.asr={model:el("asr-model").value,language:el("asr-language").value,
+      allow_model_download:allow};
+  }
   if(kind==="analyze"){
     for(const input of document.querySelectorAll("[data-cut-setting]")){
       if(!input.checkValidity())throw Error("Controlla i limiti dei parametri avanzati.");
