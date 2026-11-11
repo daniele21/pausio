@@ -52,6 +52,10 @@ Design language: cinematic neutral ink surfaces, warm amber action, mint kept sp
 - ClosedRoom is external, separately running, and is the sole ASR engine. Pausio does not install ASR weights; keep upstream model downloads explicit.
 - Local-only does not mean hostile multi-user isolation: do not expose the port with reverse proxies or host forwarding. The v0 Studio is not designed for shared-machine access.
 
+## Expected browser disconnects
+
+Studio uses a local HTTP/1.1 server. If the browser abandons a keep-alive connection (for example after navigation or cancelling media playback), Pausio closes that connection without printing a noisy `ConnectionResetError` or `BrokenPipeError` traceback. This does **not** swallow application errors; failed jobs remain visible in the UI. Browsers probing `/favicon.ico` receive an empty HTTP 204 instead of a misleading 404. Python 3.11–3.13 are exercised in CI; newer Python versions are not yet part of the tested matrix.
+
 ## Known limits / honest quality boundaries
 
 - Audio-level silencedetect cannot distinguish quiet speech from silence; all proposals demand listening review.
