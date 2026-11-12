@@ -1,6 +1,7 @@
 """Simulated mobile camera E2E: actual MediaRecorder video download in Chromium."""
 from __future__ import annotations
 
+import os
 import tempfile
 import threading
 import unittest
@@ -10,6 +11,8 @@ from playwright.sync_api import sync_playwright
 
 from pausio.studio import StudioWorkspace, create_server
 from pausio.media import probe
+
+ARTIFACTS=Path(os.environ.get("PAUSIO_UI_ARTIFACTS","/tmp/pausio-ui-audit"))
 
 
 class MobileCapturePlaywrightTests(unittest.TestCase):
@@ -129,6 +132,8 @@ class DesktopCapturePlaywrightTests(unittest.TestCase):
         dimensions=page.locator("#portrait-canvas").evaluate(
             "(canvas)=>[canvas.width,canvas.height]")
         self.assertEqual(dimensions,[720,1280])
+        ARTIFACTS.mkdir(parents=True,exist_ok=True)
+        page.screenshot(path=str(ARTIFACTS/"capture-desktop-portrait-1440.png"),full_page=True)
         self.assertTrue(page.locator("#capture-tech-info").inner_text().count("9:16"))
         self.assertGreaterEqual(page.locator("#video-device option").count(),2)
         self.assertGreaterEqual(page.locator("#audio-device option").count(),2)
@@ -146,6 +151,7 @@ class DesktopCapturePlaywrightTests(unittest.TestCase):
         page.locator("#record-stop").click()
         page.locator("#download-panel").wait_for(state="visible",timeout=20000)
         self.assertTrue(page.locator("#open-in-studio").is_visible())
+        page.screenshot(path=str(ARTIFACTS/"capture-desktop-take-ready-1440.png"),full_page=True)
         self.assertFalse(page.locator("#portrait-canvas").is_visible())
         with page.expect_download(timeout=20000) as info:
             page.locator("#download-video").click()
@@ -177,4 +183,7 @@ class DesktopCapturePlaywrightTests(unittest.TestCase):
                                  f"Capture layout overflow at {width}: {overflow}")
             self.assertTrue(page.locator("#activate-camera").is_visible())
             self.assertTrue(page.locator("#video-device").is_visible())
+            if width in (950,390,320):
+                ARTIFACTS.mkdir(parents=True,exist_ok=True)
+                page.screenshot(path=str(ARTIFACTS/f"capture-responsive-{width}.png"),full_page=True)
         self.assertEqual(self.errors,[])
