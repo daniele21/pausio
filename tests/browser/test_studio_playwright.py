@@ -119,6 +119,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
 
     def test_custom_audio_fx_import_in_real_browser(self):
         self.upload_analyze()
+        self.page.locator('[data-workspace-nav="audio"]').click()
         wav_path = self.root / "personal-riser.wav"
         effect = self.root / "personal-riser.mp3"
         with wave.open(str(wav_path), "wb") as wav:
@@ -141,8 +142,27 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertTrue(current["audio_clips"][0]["available"])
         self.assertGreaterEqual(current["audio_clips"][0]["start_ms"], 1000)
         self.assertTrue(self.page.locator("#fx-panel").is_visible())
+        self.assertTrue(self.page.locator("#workspace-audio-library").is_visible())
+        self.assertEqual(self.page.locator(".workspace-audio-item").count(),1)
         self.assertEqual(self.page.locator(".fx-item").count(), 1)
+        self.shot("audio-fx-workspace-1440")
         self.assertEqual(self.page.locator(".fx-item audio").count(), 1)
+        selected_revision=self.state()["project_revision"]
+        self.page.locator(".fx-select").first.click()
+        self.assertTrue(self.page.locator("#selection-inspector").is_visible())
+        self.assertEqual(self.page.locator(".workspace-audio-item.is-selected").count(),1)
+        self.assertEqual(self.page.locator("#app").get_attribute("data-workspace"),"audio")
+        input_rect=self.page.locator(".fx-item.is-selected input[aria-label^='Inizio']").bounding_box()
+        approve_rect=self.page.locator("#approve-action").bounding_box()
+        self.assertLess(input_rect["y"]+input_rect["height"],approve_rect["y"]+2,
+                        "Selected FX timing must remain visible above approval")
+        self.shot("audio-fx-selected-1440")
+        self.assertEqual(self.page.locator(".fx-clip-mark.is-selected").count(),
+                         self.page.locator(".fx-clip-mark").count())
+        self.assertEqual(self.state()["project_revision"],selected_revision)
+        self.page.locator("#selection-goto").click()
+        self.assertTrue(self.page.locator(".fx-item.is-selected input").first.evaluate(
+            "(node)=>document.activeElement===node"))
         # Regression: FX used to be displayed as a waveform but silent during
         # ordinary video playback. The live monitor must follow the video clock.
         self.assertTrue(self.page.locator("#fx-monitor-toggle").is_visible())
@@ -316,6 +336,91 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.wait_condition(lambda: len(self.state()["audio_clips"])==1)
         self.assertFalse(self.errors,self.errors)
 
+
+
+    def test_timeline_selection_updates_existing_inspector_without_edit(self):
+        self.upload_analyze()
+        revision=self.state()["project_revision"]
+        self.assertGreaterEqual(self.page.locator(".region-select").count(),2)
+        self.page.locator(".segment-select").first.click()
+        self.assertTrue(self.page.locator("#selection-inspector").is_visible())
+        self.assertEqual(self.page.locator("#app").get_attribute("data-workspace"),"cuts")
+        self.assertEqual(self.page.locator(".segment-card.is-selected").count(),1)
+        self.assertEqual(self.page.locator(".timeline-region.is-selected").count(),1)
+        input_rect=self.page.locator(".segment-card.is-selected .start-input").bounding_box()
+        approve_rect=self.page.locator("#approve-action").bounding_box()
+        self.assertLess(input_rect["y"]+input_rect["height"],approve_rect["y"]+2,
+                        "Selected cut properties should be visible above approval")
+        self.shot("selected-cut-workspace-1440")
+        self.assertEqual(self.state()["project_revision"],revision)
+        self.page.locator("#selection-goto").click()
+        self.assertTrue(self.page.locator(".segment-card.is-selected .start-input").evaluate(
+            "(node)=>document.activeElement===node"))
+        self.page.locator(".region-select").last.focus()
+        self.page.locator(".region-select").last.press("Enter")
+        self.assertEqual(self.page.locator(".region-select[aria-pressed='true']").count(),1)
+        self.assertTrue(self.page.locator("#selection-title").inner_text().startswith(
+            "Intervallo "))
+        self.assertEqual(self.state()["project_revision"],revision)
+        self.page.locator("#selection-clear").click()
+        self.assertFalse(self.page.locator("#selection-inspector").is_visible())
+        self.assertEqual(self.page.locator(".timeline-region.is-selected").count(),0)
+        self.assertEqual(self.state()["project_revision"],revision)
+        self.assertFalse(self.errors,self.errors)
+
+    def test_desktop_navigation_and_resizable_timeline(self):
+        self.assertTrue(self.page.locator(".studio-navigation").is_visible())
+        self.assertTrue(self.page.locator("#analyze-action").is_visible())
+        self.page.locator('[data-workspace-nav="cuts"]').click()
+        self.assertEqual(self.page.locator("#app").get_attribute("data-workspace"), "cuts")
+        self.assertTrue(self.page.locator(".cut-settings").is_visible())
+        self.assertTrue(self.page.locator("#cuts-panel").is_visible())
+        self.page.locator('[data-workspace-nav="transcript"]').click()
+        self.assertTrue(self.page.locator(".asr-settings").is_visible())
+        self.assertTrue(self.page.locator("#transcript-panel").is_visible())
+        self.page.locator('[data-workspace-nav="captions"]').click()
+        self.assertTrue(self.page.locator("#transcript-panel").is_visible())
+        self.assertTrue(self.page.locator("#transcript-empty").is_visible())
+        self.page.locator('[data-workspace-nav="media"]').click()
+        self.assertTrue(self.page.locator("#import-action").is_visible())
+        self.upload_analyze()
+        revision=self.state()["project_revision"]
+        self.page.evaluate("document.getElementById(\'preview-video\').currentTime=1")
+        self.page.locator('[data-workspace-nav="audio"]').click()
+        self.assertEqual(self.state()["project_revision"],revision)
+        self.assertGreaterEqual(self.page.evaluate("document.getElementById(\'preview-video\').currentTime"),.99)
+        self.assertTrue(self.page.locator("#fx-panel").is_visible())
+        self.assertTrue(self.page.locator("#audio-mixer").is_visible())
+        self.assertEqual(self.page.locator("#app").get_attribute("data-workspace"), "audio")
+        handle=self.page.locator("#dock-resizer")
+        first=int(handle.get_attribute("aria-valuenow"))
+        handle.focus()
+        handle.press("ArrowUp")
+        second=int(handle.get_attribute("aria-valuenow"))
+        self.assertGreater(second,first)
+        self.assertEqual(self.page.evaluate("localStorage.getItem('pausio-studio-dock-height')"),
+                         str(second))
+        self.assertEqual(self.page.locator("#desktop-approve-action").is_disabled(),
+                         self.page.locator("#approve-action").is_disabled())
+        self.page.reload(wait_until="networkidle")
+        self.assertEqual(self.page.locator("#app").get_attribute("data-workspace"), "audio")
+        self.assertEqual(int(self.page.locator("#dock-resizer").get_attribute("aria-valuenow")),
+                         second)
+        for width,height in [(1920,1080),(1440,900),(1280,720),(390,844)]:
+            self.page.set_viewport_size({"width":width,"height":height})
+            self.page.wait_for_timeout(180)
+            info=metrics(self.page)
+            self.assertLessEqual(info["scrollWidth"],width+3,
+                                 f"Workspace overflow at {width}px: {info}")
+            if width>=1001:
+                self.assertLessEqual(info["timeline"]["bottom"],height+2)
+                self.assertLessEqual(info["approve"]["bottom"],height+2)
+            else:
+                self.assertFalse(self.page.locator(".studio-navigation").is_visible())
+                self.assertLessEqual(info["timeline"]["bottom"],info["inspector"]["y"]+2)
+                self.assertEqual(self.page.evaluate("document.getElementById(\'fx-panel\').parentElement.id"),"app")
+        self.assertFalse(self.errors,self.errors)
+
     def test_layout_across_five_viewports(self):
         results={}
         for width,height in [(1440,900),(1024,768),(768,900),(390,844),(320,700)]:
@@ -407,6 +512,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
 
     def test_preset_selection_reanalysis_and_mobile_layout(self):
         initial=self.upload_analyze()
+        self.page.locator('[data-workspace-nav="cuts"]').click()
         self.assertEqual(initial["analysis_settings"]["preset"],"natural")
         self.page.locator("#cut-preset").select_option("dynamic")
         self.assertEqual(self.page.locator("#cut-preset").input_value(),"dynamic")
@@ -477,6 +583,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
     def test_standalone_asr_ui_transcribes_without_closedroom_server(self):
         from unittest.mock import patch
         self.upload_analyze()
+        self.page.locator('[data-workspace-nav="transcript"]').click()
         self.assertFalse(self.page.locator("#asr-download").is_checked())
         self.assertEqual(self.page.locator("#asr-language").input_value(),"it")
         self.page.locator("#asr-model").select_option(
@@ -502,6 +609,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
     def test_generate_edit_and_preview_social_captions_in_browser(self):
         from unittest.mock import patch
         initial=self.upload_analyze()
+        self.page.locator('[data-workspace-nav="transcript"]').click()
         transcript={
             "provider":"pausio-local","backend":"mlx-whisper",
             "model":"mlx-community/whisper-large-v3-turbo",
@@ -528,12 +636,43 @@ class StudioPlaywrightAudit(unittest.TestCase):
         updated=self.state()
         self.assertEqual(updated["last_command"],"caption.set")
         self.assertFalse(updated["approved"])
+        self.assertEqual(self.page.locator(".caption-cue-mark").count(),len(updated["captions"]))
+        self.assertTrue(self.page.locator("#timeline-caption-track").is_visible())
+        cue=updated["captions"][0]
+        cue_ratio=self.page.locator(".caption-cue-mark").first.evaluate(
+            "(node)=>parseFloat(node.style.left)")
+        self.assertAlmostEqual(cue_ratio,100*cue["start_ms"]/updated["media"]["duration_ms"],delta=.02)
+        selection_revision=updated["project_revision"]
+        self.page.locator(".caption-cue-mark").first.click()
+        self.assertEqual(self.page.locator("#app").get_attribute("data-workspace"),"captions")
+        self.assertTrue(self.page.locator(".social-safe-guide").is_visible())
+        self.assertFalse(self.page.locator("#audio-mixer").is_visible())
+        self.assertTrue(self.page.locator("#workspace-caption-library").is_visible())
+        self.assertEqual(self.page.locator(".workspace-caption-item").count(),len(updated["captions"]))
+        self.assertEqual(self.page.locator(".workspace-caption-item.is-selected").count(),1)
+        text_rect=self.page.locator(".caption-edit-card.is-selected textarea").bounding_box()
+        approve_rect=self.page.locator("#approve-action").bounding_box()
+        self.assertLess(text_rect["y"]+text_rect["height"],approve_rect["y"]+2,
+                        "Selected caption text should be accessible above approval")
+        self.shot("caption-workspace-1440")
+        self.page.locator("#workspace-caption-search").fill("Nessuna frase corrispondente")
+        self.assertEqual(self.page.locator(".workspace-caption-item").count(),0)
+        self.page.locator("#workspace-caption-search").fill("")
+        self.assertEqual(self.page.locator(".workspace-caption-item").count(),len(updated["captions"]))
+        self.assertEqual(self.page.locator(".caption-edit-card.is-selected").count(),1)
+        self.assertEqual(self.page.locator(".caption-cue-mark[aria-pressed='true']").count(),1)
+        self.assertEqual(self.state()["project_revision"],selection_revision)
+        self.page.locator("#selection-goto").click()
+        self.assertTrue(self.page.locator(".caption-edit-card.is-selected textarea").evaluate(
+            "(node)=>document.activeElement===node"))
+        self.page.locator("#selection-clear").click()
+        self.assertEqual(self.state()["project_revision"],selection_revision)
         self.page.evaluate("() => document.querySelector('#preview-video').currentTime=.45")
         self.wait_condition(lambda:self.page.locator("#caption-overlay").is_visible())
         self.assertIn("Tre",self.page.locator("#caption-overlay").inner_text())
         edit=self.page.locator(".caption-edit-card").first
         edit.locator("textarea").fill("Tre consigli AI!")
-        edit.locator("button").click()
+        edit.locator("button.text-button").click()
         state=self.wait_state("revision",updated["project_revision"]+1)
         self.assertEqual(state["captions"][0]["text"],"Tre consigli AI!")
         self.page.locator("#caption-style").select_option("minimal")
@@ -590,6 +729,8 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.wait_condition(lambda:self.page.locator('[data-mode="rendered"]').get_attribute(
             "aria-pressed")=="true")
         self.assertTrue(self.page.locator("#caption-overlay").is_hidden())
+        self.page.locator('[data-workspace-nav="media"]').click()
+        self.assertTrue(self.page.locator("#project-export").is_visible())
         with self.page.expect_download() as download:
             self.page.locator("#project-export").click()
         saved=self.root/"caption-project.pausio.json"

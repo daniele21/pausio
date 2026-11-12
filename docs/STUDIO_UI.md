@@ -18,6 +18,50 @@ With Python 3.11+, FFmpeg and FFprobe on PATH, install once (`pip install -e .`)
 
 ## UX layout
 
+### Desktop editor (viewport maggiore di 1000 px)
+
+La prima iterazione desktop usa una barra modalità compatta a sinistra:
+**Media**, **Tagli AI**, **Trascrizione**, **Sottotitoli**, **Audio**,
+**Impostazioni**. Le modalità riutilizzano lo stesso stato del video e
+la stessa cronologia: cambiare modalità non esegue comandi né altera
+playhead, clip o preview.
+
+La timeline rimane nel dock inferiore; il mixer delle tracce voce/FX
+è affiancato alla timeline quando esiste un video. Il divisore
+orizzontale sopra la timeline è trascinabile e si può regolare con
+**↑/↓** dopo averlo messo a fuoco. Le preferenze sono salvate solo
+localmente nel browser, non nel progetto portabile.
+
+La toolbar desktop riporta **Annulla**, **Ripeti**, **Conferma montaggio**
+ed **Esporta/Scarica MP4**, collegati alle azioni reali già presenti:
+se il montaggio non è confermato l'export resta bloccato. In modalità
+Audio gli effetti importati sono gestiti nel pannello inspector, usando
+gli stessi controlli della versione precedente.
+
+Il pannello strumenti Audio ora elenca gli effetti **realmente importati**,
+permette di selezionarli e di aggiungerne altri tramite l'import esistente.
+Il click su un FX nella timeline o nella lista seleziona l'effetto e mostra
+l'inspector corrispondente, senza registrare un comando di modifica.
+
+In modalità Sottotitoli, a sinistra c'è una lista delle frasi reali,
+ricercabile per contenuto. La timeline mostra inoltre una traccia di
+cue con gli intervalli **sulla scala temporale del video sorgente**.
+Selezionare una frase nella lista o nella traccia porta al suo campo
+di correzione già esistente; i timestamp della traccia non sono ancora
+modificabili trascinando i blocchi. Per modificare il testo usa «Salva
+testo», che registra un comando `caption.correct` versionato.
+
+Il click su un intervallo video seleziona invece il KEEP segment e
+apre i relativi campi Da/A. Su desktop l'inspector rimane contestuale;
+la selezione e il ridimensionamento dei pannelli non vengono esportati
+nel `.pausio.json` e non invalidano l'approvazione del montaggio.
+
+Su tablet/mobile l'interfaccia esistente resta attiva, con timeline dopo
+il player e prima dell'inspector. La versione desktop non replica ancora
+tutte le funzioni raffigurate nei mockup: consulta
+[il piano UX desktop](DESKTOP_EDITOR_UX.md) per limiti e milestone.
+
+
 - **Top:** recognizable Pausio brand and local processing indicator; no fake cloud-login state.
 - **Left:** four-step flow, selected video metadata and real action buttons.
 - **Center:** large vertical preview and direct playback controls. Desktop / mobile responsive layout.

@@ -21,6 +21,12 @@
         <span class="brand-divider" aria-hidden="true"></span>
         <span class="location">Studio <span class="location-sub">/ Workspace</span></span>
       </div>
+      <div class="desktop-commands" role="group" aria-label="Azioni rapide editor">
+        <button type="button" id="desktop-undo-action" class="desktop-icon-button" aria-label="Annulla" title="Annulla (⌘Z)" disabled>↶</button>
+        <button type="button" id="desktop-redo-action" class="desktop-icon-button" aria-label="Ripeti" title="Ripeti (⌘⇧Z)" disabled>↷</button>
+        <button type="button" id="desktop-approve-action" class="button button-outline" disabled>✓ Conferma montaggio</button>
+        <button type="button" id="desktop-export-action" class="button button-primary" disabled>Esporta MP4</button>
+      </div>
       <div class="topbar-right">
         <span class="private-indicator"><span class="private-dot" aria-hidden="true"></span> Locale sul tuo Mac</span>
         <span class="topbar-divider" aria-hidden="true"></span>
@@ -29,7 +35,38 @@
     </header>
 
     <div class="workbench">
+      <nav class="studio-navigation" aria-label="Modalità dell'editor">
+        <button type="button" class="studio-nav-item active" data-workspace-nav="media" aria-current="page"><span aria-hidden="true">▣</span>Media</button>
+        <button type="button" class="studio-nav-item" data-workspace-nav="cuts"><span aria-hidden="true">✂</span>Tagli AI</button>
+        <button type="button" class="studio-nav-item" data-workspace-nav="transcript"><span aria-hidden="true">≡</span>Trascrizione</button>
+        <button type="button" class="studio-nav-item" data-workspace-nav="captions"><span aria-hidden="true">▤</span>Sottotitoli</button>
+        <button type="button" class="studio-nav-item" data-workspace-nav="audio"><span aria-hidden="true">♫</span>Audio</button>
+        <button type="button" class="studio-nav-item studio-nav-settings" data-workspace-nav="settings"><span aria-hidden="true">⚙</span>Impostazioni</button>
+      </nav>
       <aside class="rail" aria-labelledby="workflow-title">
+        <section class="workspace-context" aria-live="polite">
+          <p class="eyebrow">STRUMENTI</p>
+          <h2 id="workspace-context-title">Media del progetto</h2>
+          <p id="workspace-context-description">Importa un video, poi seleziona una modalità dalla barra laterale.</p>
+        </section>
+        <section class="workspace-library workspace-audio-library" id="workspace-audio-library" aria-labelledby="workspace-audio-heading" hidden>
+          <div class="workspace-library-head">
+            <h3 id="workspace-audio-heading">Effetti importati</h3>
+            <button type="button" class="button button-outline workspace-add" id="workspace-audio-import" disabled>+ Importa</button>
+          </div>
+          <p class="workspace-library-hint">Seleziona un riser per modificarlo nell'inspector.</p>
+          <div class="workspace-library-items" id="workspace-audio-items"></div>
+        </section>
+        <section class="workspace-library workspace-caption-library" id="workspace-caption-library" aria-labelledby="workspace-caption-heading" hidden>
+          <div class="workspace-library-head">
+            <h3 id="workspace-caption-heading">Frasi del video</h3>
+          </div>
+          <label class="workspace-library-search-label" for="workspace-caption-search">Cerca nei sottotitoli</label>
+          <input type="search" id="workspace-caption-search" placeholder="Cerca una frase..." autocomplete="off">
+          <p class="workspace-library-hint" id="workspace-caption-count"></p>
+          <div class="workspace-library-items" id="workspace-caption-items"></div>
+          <button type="button" class="text-button" id="workspace-caption-transcribe">Apri trascrizione</button>
+        </section>
         <section class="rail-intro">
           <p class="eyebrow">WORKFLOW</p>
           <h1 id="workflow-title">Il tuo video,<br><em>il tuo ritmo.</em></h1>
@@ -210,6 +247,7 @@
             <div class="aspect-canvas">
               <video id="preview-video" preload="metadata" playsinline aria-label="Anteprima del video"></video>
               <div id="caption-overlay" class="caption-overlay" aria-hidden="true" hidden></div>
+              <div class="social-safe-guide" aria-hidden="true"><span>Guida indicativa · evita le aree coperte dai social</span></div>
               <div class="canvas-corner corner-tl" aria-hidden="true"></div>
               <div class="canvas-corner corner-tr" aria-hidden="true"></div>
               <div class="canvas-corner corner-bl" aria-hidden="true"></div>
@@ -242,6 +280,15 @@
           <div><p class="eyebrow">REVISIONE / 02</p><h2>Ogni scelta, tua.</h2></div>
           <span class="inspector-counter" id="segment-count">—</span>
         </div>
+        <section class="selection-inspector" id="selection-inspector" aria-label="Elemento selezionato" hidden>
+          <div class="selection-inspector-top">
+            <span class="selection-eyebrow">SELEZIONE TIMELINE</span>
+            <button type="button" class="selection-clear" id="selection-clear" aria-label="Deseleziona elemento">✕</button>
+          </div>
+          <strong id="selection-title"></strong>
+          <p id="selection-description"></p>
+          <button class="selection-goto button button-outline" type="button" id="selection-goto">Mostra proprietà</button>
+        </section>
         <div class="inspector-tabs" role="tablist" aria-label="Pannelli di revisione">
           <button type="button" class="inspector-tab active" id="cuts-tab" role="tab" aria-selected="true" aria-controls="cuts-panel">Tagli</button>
           <button type="button" class="inspector-tab" id="transcript-tab" role="tab" aria-selected="false" aria-controls="transcript-panel">Trascrizione</button>
@@ -329,6 +376,23 @@
             <div class="transcript-list" id="transcript-list"></div>
           </div>
         </div>
+    <section class="fx-panel" id="fx-panel" aria-labelledby="fx-title" hidden>
+      <div class="fx-header">
+        <div>
+          <h2 id="fx-title">Effetti audio <span class="fx-pill">OPZIONALE</span></h2>
+          <p>Importa un riser, un whoosh o un altro suono. Il file rimane sul tuo Mac.</p>
+        </div>
+        <div class="fx-header-actions">
+          <button class="button button-outline fx-monitor-toggle" id="fx-monitor-toggle" type="button"
+                  aria-pressed="true" title="Attiva o disattiva l'ascolto live degli effetti durante Play" hidden>♫ FX attivi</button>
+          <button class="button button-outline" id="fx-import" type="button">+ Importa audio</button>
+        </div>
+      </div>
+      <p class="fx-hint" id="fx-monitor-status" role="status" aria-live="polite" hidden></p>
+      <p class="fx-hint" id="fx-hint">Nessun effetto. Seleziona un punto nel video e importa un file MP3, WAV, M4A, AAC, FLAC o OGG.</p>
+      <div class="fx-list" id="fx-list"></div>
+    </section>
+
         <div class="inspector-bottom">
           <button class="button button-primary button-full" id="approve-action" type="button" disabled>✓ Conferma montaggio</button>
           <p class="inspector-footnote"><span class="footnote-icon">i</span> I tagli rilevano pause nell'audio, non errori nel parlato. Controlla sempre prima di esportare.</p>
@@ -336,6 +400,11 @@
       </aside>
     </div>
 
+    <div class="editor-dock" id="editor-dock">
+      <div class="dock-resizer" id="dock-resizer" role="separator" tabindex="0"
+           aria-orientation="horizontal" aria-label="Ridimensiona la timeline"
+           aria-valuemin="210" aria-valuemax="440" aria-valuenow="285"
+           title="Trascina per cambiare l'altezza della timeline; frecce su e giù da tastiera"></div>
     <section class="timeline-panel" aria-labelledby="timeline-title">
       <div class="timeline-top">
         <div class="timeline-heading"><span class="timeline-glyph" aria-hidden="true">≋</span><h2 id="timeline-title">Timeline</h2><span class="timeline-subtitle" id="timeline-subtitle">Nessun video importato</span>
@@ -384,6 +453,10 @@
             <div class="fx-lane" id="fx-lane"></div>
             <span class="fx-track-empty" id="fx-track-empty" aria-hidden="true">FX · Importa un riser per aggiungerlo qui</span>
           </div>
+          <div class="timeline-caption-track" id="timeline-caption-track" role="group"
+               aria-label="Sottotitoli sincronizzati con la timeline originale" hidden>
+            <div class="caption-cue-lane" id="caption-cue-lane"></div>
+          </div>
           <div class="playhead" id="playhead"><span></span></div>
         </div>
       </div>
@@ -428,23 +501,8 @@
       </div>
       <p class="mixer-note">100% = volume originale · oltre il 100% amplifica il suono. Silenzia esclude la traccia anche dall’export; l’ascolto FX live è un controllo separato.</p>
     </section>
+    </div>
 
-    <section class="fx-panel" id="fx-panel" aria-labelledby="fx-title" hidden>
-      <div class="fx-header">
-        <div>
-          <h2 id="fx-title">Effetti audio <span class="fx-pill">OPZIONALE</span></h2>
-          <p>Importa un riser, un whoosh o un altro suono. Il file rimane sul tuo Mac.</p>
-        </div>
-        <div class="fx-header-actions">
-          <button class="button button-outline fx-monitor-toggle" id="fx-monitor-toggle" type="button"
-                  aria-pressed="true" title="Attiva o disattiva l'ascolto live degli effetti durante Play" hidden>♫ FX attivi</button>
-          <button class="button button-outline" id="fx-import" type="button">+ Importa audio</button>
-        </div>
-      </div>
-      <p class="fx-hint" id="fx-monitor-status" role="status" aria-live="polite" hidden></p>
-      <p class="fx-hint" id="fx-hint">Nessun effetto. Seleziona un punto nel video e importa un file MP3, WAV, M4A, AAC, FLAC o OGG.</p>
-      <div class="fx-list" id="fx-list"></div>
-    </section>
 
     <input type="file" id="file-input" accept="video/mp4,video/quicktime,video/webm,video/x-matroska,.m4v,.mov,.mkv" hidden>
     <input type="file" id="fx-input" accept=".mp3,.wav,.m4a,.aac,.flac,.ogg,audio/*" hidden>
