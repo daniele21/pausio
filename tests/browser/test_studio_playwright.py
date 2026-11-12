@@ -641,7 +641,11 @@ class StudioPlaywrightAudit(unittest.TestCase):
         revision=state["project_revision"]
         self.page.locator("#transcript-search").fill("ciao")
         self.assertEqual(self.page.locator(".transcript-item").count(),1)
+        self.page.locator('[data-mode="edited"]').click()
         self.page.locator("#transcript-next").click()
+        self.assertEqual(self.page.locator('[data-mode="original"]').get_attribute("aria-pressed"),"true")
+        self.assertAlmostEqual(self.page.evaluate("document.getElementById('preview-video').currentTime"),
+                               .1,delta=.12)
         self.assertEqual(self.page.locator(".transcript-item.is-selected").count(),1)
         self.assertTrue(self.page.locator(".transcript-item.is-selected .transcript-seek").evaluate(
             "(node)=>document.activeElement===node"))
