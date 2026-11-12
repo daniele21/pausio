@@ -521,7 +521,7 @@ function update(next){
     editorSelection=null;
   }
   drawSegments();drawTimeline();drawFx();drawTranscript();drawCaptionEditor();
-  drawCaptionTimeline();syncEditorSelection();
+  drawCaptionTimeline();renderWorkspaceLibraries();syncEditorSelection();
   updateFxMonitorUI();drawAudioMixer();syncVoicePlayback();syncLiveFx();transport();
   syncDesktopCommands();
   if(has&&next.waveform_status==="ready"&&waveformRequestedFor!==next.media_id){
@@ -577,6 +577,65 @@ function update(next){
    It never owns source edits, so changing selection does not increment revision. */
 let editorSelection = null;
 let editorSelectionMedia = null;
+
+function renderWorkspaceLibraries(){
+  const name=el("app").dataset.workspace;
+  const audioPane=el("workspace-audio-library");
+  const captionPane=el("workspace-caption-library");
+  const desktop=!window.matchMedia("(max-width: 1000px)").matches;
+  audioPane.hidden=!desktop||name!=="audio";
+  captionPane.hidden=!desktop||name!=="captions";
+  el("workspace-audio-import").disabled=!project?.media||working();
+  const audioList=el("workspace-audio-items");
+  audioList.replaceChildren();
+  const clips=project?.audio_clips||[];
+  if(!clips.length){
+    const info=document.createElement("p");
+    info.className="workspace-library-empty";
+    info.textContent="Nessun effetto importato. Aggiungi un riser o un whoosh per iniziare.";
+    audioList.append(info);
+  }
+  for(const clip of clips){
+    const button=document.createElement("button");
+    button.type="button";button.className="workspace-library-item workspace-audio-item";
+    button.dataset.clipId=clip.id;
+    button.setAttribute("aria-pressed","false");
+    const nameLine=document.createElement("strong");nameLine.textContent=clip.filename;
+    const meta=document.createElement("span");
+    meta.textContent=msFormat(clip.start_ms,true)+" · "+
+      shortDuration(clip.duration_ms)+(clip.available?"":" · File mancante");
+    button.append(nameLine,meta);
+    button.addEventListener("click",()=>selectEditorItem("fx",clip.id,{seek:true}));
+    audioList.append(button);
+  }
+  const captionList=el("workspace-caption-items");
+  captionList.replaceChildren();
+  const cues=project?.captions||[];
+  const query=el("workspace-caption-search").value.trim().toLocaleLowerCase("it");
+  const filtered=cues.filter(c=>!query||c.text.toLocaleLowerCase("it").includes(query));
+  el("workspace-caption-count").textContent=
+    cues.length?(filtered.length+" di "+cues.length+" frasi"):"Nessun sottotitolo generato";
+  if(!filtered.length){
+    const info=document.createElement("p");info.className="workspace-library-empty";
+    info.textContent=cues.length?"Nessuna frase corrisponde alla ricerca.":
+      "Genera i sottotitoli dalla trascrizione per visualizzarli qui.";
+    captionList.append(info);
+  }
+  for(const cue of filtered){
+    const index=cues.findIndex(c=>c.id===cue.id);
+    const button=document.createElement("button");
+    button.type="button";button.className="workspace-library-item workspace-caption-item";
+    button.dataset.captionId=cue.id;
+    button.setAttribute("aria-pressed","false");
+    const time=document.createElement("span");
+    time.textContent=(index+1)+". "+msFormat(cue.start_ms,true)+" – "+msFormat(cue.end_ms,true);
+    const label=document.createElement("strong");label.textContent=cue.text;
+    button.append(time,label);
+    button.addEventListener("click",()=>selectEditorItem("caption",cue.id,{seek:true}));
+    captionList.append(button);
+  }
+}
+
 function selectedEditorItem(){
   if(!editorSelection||!project?.media)return null;
   if(editorSelection.type==="segment"){
@@ -638,6 +697,14 @@ function syncEditorSelection(){
     item.classList.toggle("is-selected",!!isSelected);
     if(item.classList.contains("fx-clip-mark"))
       item.setAttribute("aria-pressed",String(!!isSelected));
+  }
+  for(const item of document.querySelectorAll(".workspace-audio-item, .workspace-caption-item")){
+    const isSelected=selected&&(
+      selected.type==="fx"&&item.dataset.clipId===selected.value.id||
+      selected.type==="caption"&&item.dataset.captionId===selected.value.id
+    );
+    item.classList.toggle("is-selected",!!isSelected);
+    item.setAttribute("aria-pressed",String(!!isSelected));
   }
   for(const item of document.querySelectorAll(".caption-cue-mark, .caption-edit-card")){
     const isSelected=selected?.type==="caption"&&item.dataset.captionId===selected.value.id;
@@ -1268,6 +1335,7 @@ function setWorkspace(name, persist=true){
   }
   if(name==="transcript"||name==="captions")tab("transcript");
   else tab("cuts");
+  renderWorkspaceLibraries();
   if(persist){try{localStorage.setItem("pausio-studio-workspace",name);}catch(_error){}}
 }
 function syncDesktopCommands(){
@@ -1291,6 +1359,11 @@ function initializeDesktopWorkspace(){
   el("desktop-undo-action").addEventListener("click",()=>el("undo-action").click());
   el("desktop-redo-action").addEventListener("click",()=>el("redo-action").click());
   el("desktop-approve-action").addEventListener("click",()=>el("approve-action").click());
+  el("workspace-audio-import").addEventListener("click",()=>el("fx-input").click());
+  el("workspace-caption-search").addEventListener("input",()=>{
+    renderWorkspaceLibraries();syncEditorSelection();
+  });
+  el("workspace-caption-transcribe").addEventListener("click",()=>setWorkspace("transcript"));
   el("selection-clear").addEventListener("click",()=>{editorSelection=null;syncEditorSelection();});
   el("selection-goto").addEventListener("click",focusEditorSelection);
   el("desktop-export-action").addEventListener("click",()=>{
