@@ -501,6 +501,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
 
     def test_preset_selection_reanalysis_and_mobile_layout(self):
         initial=self.upload_analyze()
+        self.page.locator('[data-workspace-nav="cuts"]').click()
         self.assertEqual(initial["analysis_settings"]["preset"],"natural")
         self.page.locator("#cut-preset").select_option("dynamic")
         self.assertEqual(self.page.locator("#cut-preset").input_value(),"dynamic")
@@ -653,7 +654,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertIn("Tre",self.page.locator("#caption-overlay").inner_text())
         edit=self.page.locator(".caption-edit-card").first
         edit.locator("textarea").fill("Tre consigli AI!")
-        edit.locator("button").click()
+        edit.locator("button.text-button").click()
         state=self.wait_state("revision",updated["project_revision"]+1)
         self.assertEqual(state["captions"][0]["text"],"Tre consigli AI!")
         self.page.locator("#caption-style").select_option("minimal")
