@@ -29,6 +29,9 @@
   // A rehearsal is strictly presentation state: no MediaRecorder, no take,
   // no microphone or camera permission required.
   let rehearsalState = "stopped", rehearsalElapsedMs = 0;
+  // Chromium rounds element.scrollTop to whole CSS pixels. Keep fractional
+  // movement in a separate accumulator or slow WPM never advances at all.
+  let prompterPositionPx = 0;
   let compositionActive = false, composeRaf = 0, lastPaint = 0, portraitStream = null;
   let meterRaf = 0, audioContext = null, audioAnalyser = null, meterSource = null;
   let inputWidth = 0, inputHeight = 0, recordedDimensions = null;
@@ -100,6 +103,8 @@
       els.text.textContent=nextText;
       if(rehearsalState!=="stopped"){
         els.scroll.scrollTop=0;
+        prompterPositionPx=0;
+        els.text.style.transform="translate3d(0,0,0)";
         rehearsalElapsedMs=0;
         lastFrame=0;
         els.clock.textContent="00:00";
@@ -156,7 +161,13 @@
       const charsPerLine=Math.max(10,els.scroll.clientWidth/(fontPx*.54));
       const wordsPerLine=Math.max(1.6,charsPerLine/6);
       const pxPerSecond=((+els.speed.value/60)/wordsPerLine)*fontPx*1.4;
-      els.scroll.scrollTop+=Math.min(Math.max(now-lastFrame,0)/1000,.15)*pxPerSecond;
+      const maxScroll=Math.max(0,els.scroll.scrollHeight-els.scroll.clientHeight);
+      prompterPositionPx=Math.max(0,Math.min(maxScroll,
+        prompterPositionPx+Math.min(Math.max(now-lastFrame,0)/1000,.15)*pxPerSecond));
+      els.scroll.scrollTop=prompterPositionPx;
+      // Preserve the subpixel remainder visually for calm, smooth motion.
+      const remainder=prompterPositionPx-els.scroll.scrollTop;
+      els.text.style.transform="translate3d(0,"+(-remainder).toFixed(3)+"px,0)";
     }
     lastFrame=now;
     raf=requestAnimationFrame(tick);
@@ -166,6 +177,8 @@
     rehearsalState="stopped";
     rehearsalElapsedMs=0;
     els.scroll.scrollTop=0;
+    prompterPositionPx=0;
+    els.text.style.transform="translate3d(0,0,0)";
     pausedScroll=false;
     els.clock.textContent="00:00";
     syncRehearsalControls();
@@ -181,6 +194,8 @@
     }
     if(rehearsalState==="stopped"){
       els.scroll.scrollTop=0;
+      prompterPositionPx=0;
+      els.text.style.transform="translate3d(0,0,0)";
       rehearsalElapsedMs=0;
       els.clock.textContent="00:00";
     }
@@ -194,6 +209,8 @@
     if(!["idle","preview"].includes(mode)||!els.script.value.trim())return;
     stopAnimation();
     els.scroll.scrollTop=0;
+    prompterPositionPx=0;
+    els.text.style.transform="translate3d(0,0,0)";
     rehearsalElapsedMs=0;
     els.clock.textContent="00:00";
     rehearsalState="playing";
