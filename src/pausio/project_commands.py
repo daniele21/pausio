@@ -21,7 +21,8 @@ from pausio.domain import EditPlan, Interval
 from pausio.planner import CUT_PRESETS, validate_cut_settings
 
 FORMAT = "pausio.project"
-VERSION = 2
+VERSION = 3
+PREVIOUS_VERSION = 2
 LEGACY_VERSION = 1
 MAX_COMMANDS = 2000
 MAX_REVISION = 2_147_483_647
@@ -49,6 +50,9 @@ _TYPES = frozenset({
     "audio.remove",
     "audio.mixer.configure",
     "audio.clip.mix",
+    "video.transform.add",
+    "video.transform.update",
+    "video.transform.remove",
 })
 UI_COMMANDS = frozenset(_TYPES - {"analysis.propose", "timeline.replace"})
 
@@ -208,6 +212,59 @@ def _audio_clip(raw: Any, media_duration: int) -> dict:
     return result
 
 
+MAX_VIDEO_FX = 18
+
+
+def _video_transform(raw: Any, segments: list[dict], duration_ms: int) -> dict:
+    """Validate one source-anchored motion event; no FFmpeg expressions allowed."""
+    fields = {"id", "segment_id", "start_ms", "end_ms", "kind",
+              "start_scale_pct", "end_scale_pct", "anchor_x_pct", "anchor_y_pct"}
+    fx = _object(raw, fields, "video transform")
+    result = dict(fx)
+    _id(fx["id"], "video effect.id")
+    _id(fx["segment_id"], "video effect.segment_id")
+    segment = next((row for row in segments if row["id"] == fx["segment_id"]), None)
+    if segment is None:
+        raise ProjectFormatError("Video FX refers to a removed segment")
+    start = _integer(fx["start_ms"], "video FX start_ms")
+    end = _integer(fx["end_ms"], "video FX end_ms")
+    if not (0 <= start < end <= duration_ms and
+            segment["start_ms"] <= start and end <= segment["end_ms"]):
+        raise ProjectFormatError("Video FX must be inside its source KEEP segment")
+    if end - start < 250 or end - start > 60_000:
+        raise ProjectFormatError("Video FX must last between 250ms and 60 seconds")
+    if fx["kind"] not in ("punch", "slow_push") or not isinstance(fx["kind"], str):
+        raise ProjectFormatError("Unsupported video FX kind")
+    for key in ("start_scale_pct", "end_scale_pct"):
+        value = _integer(fx[key], key)
+        if not 100 <= value <= 130:
+            raise ProjectFormatError("Video zoom limited to 1.00x-1.30x")
+    if fx["kind"] == "punch" and fx["start_scale_pct"] != fx["end_scale_pct"]:
+        raise ProjectFormatError("Punch must have a constant zoom")
+    for key in ("anchor_x_pct", "anchor_y_pct"):
+        value = _integer(fx[key], key)
+        if not 0 <= value <= 100:
+            raise ProjectFormatError("Video FX anchor must be 0..100 percent")
+    return result
+
+
+def _validate_video_fx(items: list[dict], segments: list[dict], duration_ms: int) -> None:
+    if len(items) > MAX_VIDEO_FX:
+        raise ProjectFormatError("Maximum 18 video effects per project")
+    unique = set()
+    for fx in items:
+        _video_transform(fx, segments, duration_ms)
+        if fx["id"] in unique:
+            raise ProjectFormatError("Duplicate video effect ID")
+        unique.add(fx["id"])
+    for i, left in enumerate(items):
+        for right in items[i + 1:]:
+            if (left["segment_id"] == right["segment_id"] and
+                    left["start_ms"] < right["end_ms"] and
+                    right["start_ms"] < left["end_ms"]):
+                raise ProjectFormatError("Overlapping video FX must be resolved before applying")
+
+
 @dataclass(frozen=True)
 class ProjectView:
     segments: tuple[dict, ...] = ()
@@ -220,6 +277,7 @@ class ProjectView:
     caption_config: dict | None = None
     audio_clips: tuple[dict, ...] = ()
     audio_mix: dict | None = None
+    video_fx: tuple[dict, ...] = ()
 
 
 def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
@@ -234,6 +292,7 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
     caption_config = default_caption_config()
     audio_clips: list[dict] = []
     audio_mix = default_audio_mix()
+    video_fx: list[dict] = []
     used_events: set[str] = set()
 
     for command in commands:
@@ -413,6 +472,27 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
                 if item["id"] == target else item for item in audio_clips
             ]
             approved = False
+        elif kind == "video.transform.add":
+            _object(payload, {"effect"}, kind)
+            effect = _video_transform(payload["effect"], current, duration)
+            video_fx = [*video_fx, effect]
+            _validate_video_fx(video_fx, current, duration)
+            approved = False
+        elif kind == "video.transform.update":
+            _object(payload, {"effect"}, kind)
+            effect = _video_transform(payload["effect"], current, duration)
+            if not any(row["id"] == effect["id"] for row in video_fx):
+                raise ProjectFormatError("Video FX to update does not exist")
+            video_fx = [effect if row["id"] == effect["id"] else row for row in video_fx]
+            _validate_video_fx(video_fx, current, duration)
+            approved = False
+        elif kind == "video.transform.remove":
+            _object(payload, {"effect_id"}, kind)
+            ident = _id(payload["effect_id"], "video effect_id")
+            if not any(row["id"] == ident for row in video_fx):
+                raise ProjectFormatError("Video FX to remove does not exist")
+            video_fx = [row for row in video_fx if row["id"] != ident]
+            approved = False
         elif kind == "audio.remove":
             _object(payload, {"clip_id"}, kind)
             target = _id(payload["clip_id"], "audio clip.id")
@@ -421,6 +501,7 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
             audio_clips = [item for item in audio_clips if item["id"] != target]
             approved = False
 
+    _validate_video_fx(video_fx, current, duration)
     return ProjectView(
         segments=tuple(copy.deepcopy(current)),
         suggested=tuple(copy.deepcopy(suggestion)) if suggestion is not None else None,
@@ -432,6 +513,7 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
         caption_config=copy.deepcopy(caption_config),
         audio_clips=tuple(copy.deepcopy(audio_clips)),
         audio_mix=copy.deepcopy(audio_mix),
+        video_fx=tuple(copy.deepcopy(video_fx)),
     )
 
 
@@ -552,7 +634,7 @@ class ProjectTape:
             # V1 files are intentionally read-only inputs; exporting always
             # upgrades to V2 with cursor at the end and preserved event IDs.
             return cls(obj["media"], obj["commands"])
-        if version == VERSION:
+        if version in (PREVIOUS_VERSION, VERSION):
             obj = _object(
                 document,
                 {"format", "schema_version", "media", "commands",

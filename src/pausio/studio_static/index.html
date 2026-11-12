@@ -9,6 +9,7 @@
   <title>Studio · Pausio</title>
   <link rel="stylesheet" href="/styles.css">
   <script src="/app.js" defer></script>
+  <script src="/visual_fx_ui.js" defer></script>
 </head>
 <body>
   <div class="app-shell" id="app">
@@ -311,6 +312,40 @@
               <button type="button" class="text-button" id="restore-suggested">Ripristina suggerimenti</button>
               <button type="button" class="text-button" id="restore-all">Mantieni tutto</button>
             </div>
+            <section class="visual-fx-panel" id="visual-fx-panel" aria-labelledby="visual-fx-heading">
+              <header class="visual-fx-heading">
+                <h3 id="visual-fx-heading">Video FX <span class="fx-pill">NUOVO</span></h3>
+                <p>Punch-in e zoom progressivi, con timestamp precisi. I suggerimenti non modificano nulla finché non li approvi.</p>
+              </header>
+              <div class="visual-fx-controls">
+                <label for="visual-fx-preset">Stile dei suggerimenti
+                  <select id="visual-fx-preset">
+                    <option value="naturale">Naturale · pochi movimenti</option>
+                    <option value="educativo">Educativo · enfasi selettiva</option>
+                    <option value="dinamico">Dinamico · più ritmo</option>
+                    <option value="personalizzato">Personalizzato · base Educativo</option>
+                  </select>
+                </label>
+                <button type="button" class="button button-outline button-full" id="visual-fx-suggest">✦ Suggerisci effetti</button>
+                <p id="visual-fx-suggest-status" class="visual-fx-status" role="status" aria-live="polite"></p>
+                <div id="visual-fx-proposals" class="visual-fx-proposals" aria-label="Proposte FX da approvare"></div>
+                <div class="visual-fx-manual">
+                  <strong>Aggiungi al playhead</strong>
+                  <label for="visual-fx-kind">Effetto
+                    <select id="visual-fx-kind">
+                      <option value="punch">Punch-in</option>
+                      <option value="slow_push">Zoom progressivo</option>
+                    </select>
+                  </label>
+                  <label for="visual-fx-scale">Zoom finale <output id="visual-fx-scale-output">1,16×</output>
+                    <input type="range" id="visual-fx-scale" min="105" max="130" value="116" step="1">
+                  </label>
+                  <button type="button" class="button button-outline button-full" id="visual-fx-add">+ Aggiungi effetto</button>
+                </div>
+                <div id="visual-fx-list" class="visual-fx-list" aria-label="Effetti visivi applicati"></div>
+                <button type="button" class="button button-ghost button-full" id="visual-fx-preview">Genera preview con effetti</button>
+              </div>
+            </section>
           </div>
         </div>
         <div class="inspector-body" id="transcript-panel" role="tabpanel" aria-labelledby="transcript-tab" hidden>
@@ -477,6 +512,11 @@
           <div class="timeline-caption-track" id="timeline-caption-track" role="group"
                aria-label="Sottotitoli sincronizzati con la timeline originale" hidden>
             <div class="caption-cue-lane" id="caption-cue-lane"></div>
+          </div>
+          <div class="timeline-visual-fx-track" id="timeline-visual-fx-track" role="group"
+               aria-label="Zoom visivi ancorati alla sorgente" hidden>
+            <div id="visual-fx-lane" class="visual-fx-lane"></div>
+            <span id="visual-fx-lane-empty" class="visual-fx-lane-empty">VIDEO FX · Usa “Aggiungi effetto” o “Suggerisci effetti”</span>
           </div>
           <div class="playhead" id="playhead"><span></span></div>
         </div>

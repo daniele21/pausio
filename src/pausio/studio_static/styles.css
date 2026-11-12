@@ -1556,3 +1556,57 @@ a { color: inherit; text-decoration: none; }
     gap:7px;
   }
 }
+
+
+/* VIDEO FX v1 — separate source-timed motion lane, no auto-applied effects. */
+.visual-fx-panel { margin: 20px 0 5px; padding: 15px 0 8px; border-top: 1px solid #354653; }
+.visual-fx-heading h3 { margin: 0 0 6px; font-size: 14px; color: #e8f6f0; }
+.visual-fx-heading p, .visual-fx-status { margin: 0 0 10px; color: #a9bbca; font-size: 11px; line-height: 1.55; }
+.visual-fx-controls { display: grid; gap: 11px; min-width: 0; }
+.visual-fx-controls label { display: grid; gap: 5px; font-size: 11px; color: #bcd1d8; }
+.visual-fx-controls select, .visual-fx-controls input[type="number"] {
+  width: 100%; min-width: 0; background: #172536; border: 1px solid #536579;
+  border-radius: 6px; color: #ebf7fc; padding: 8px 9px; font-size: 12px;
+}
+.visual-fx-controls input[type="range"] { width: 100%; accent-color: #93d6c0; }
+.visual-fx-manual { display: grid; gap: 9px; border: 1px solid #344b5c; background: #1b2b3b; padding: 12px; border-radius: 8px; }
+.visual-fx-manual strong { font-size: 11px; color: #cbe8de; }
+.visual-fx-list, .visual-fx-proposals { display: grid; gap: 8px; }
+.visual-fx-entry { display: grid; gap: 9px; border: 1px solid #415768; background: #182631; padding: 10px; border-radius: 8px; font-size: 11px; }
+.visual-fx-entry.is-suggested { border-style: dashed; border-color: #7b866a; }
+.visual-fx-entry strong { color: #e0f3ed; font-size: 12px; }
+.visual-fx-entry p { margin: 0; color: #a7bac8; line-height: 1.5; }
+.visual-fx-entry-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.visual-fx-entry-actions button { flex: 1 1 auto; min-height: 34px; font-size: 11px; }
+.visual-fx-edit-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+.visual-fx-entry.is-selected { border-color: #9de2c4; box-shadow: 0 0 0 1px #9de2c4; }
+.timeline-surface.has-visual-fx { height: 175px; min-height: 175px; }
+.timeline-surface.has-visual-fx.has-captions { height: 215px; min-height: 215px; }
+.timeline-visual-fx-track {
+  position: absolute; inset-inline: 0; top: calc(100% + 64px);
+  height: 29px; border: 1px solid #357563; border-radius: 5px;
+  background: #132d2b; overflow: hidden; cursor: default;
+}
+.timeline-surface.has-captions .timeline-visual-fx-track { top: calc(100% + 103px); }
+.visual-fx-lane { position: absolute; inset: 0; }
+.visual-fx-lane-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; font-size: 10px; color: #92bcaa; }
+.visual-fx-mark {
+  position: absolute; top: 3px; bottom: 3px; min-width: 4px; border-radius: 4px;
+  padding: 0 5px; color: #eafff0; background: #286b60;
+  border: 1px solid #80d9b6; font-size: 10px; font-weight: 700;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  cursor: pointer; z-index: 2;
+}
+.visual-fx-mark:focus-visible { outline: 2px solid #e7fff6; outline-offset: 1px; }
+.visual-fx-mark.is-selected { background: #3e927d; border-color: #e7fff6; }
+.timeline-surface.has-visual-fx .timeline-track > .playhead { height: calc(100% + 106px); }
+.timeline-surface.has-visual-fx.has-captions .timeline-track > .playhead { height: calc(100% + 144px); }
+@media (max-width: 650px) {
+  .timeline-surface.has-visual-fx { height: 168px; min-height: 168px; }
+  .timeline-surface.has-visual-fx.has-captions { height: 204px; min-height: 204px; }
+  .timeline-visual-fx-track { top: calc(100% + 60px); height: 28px; }
+  .timeline-surface.has-captions .timeline-visual-fx-track { top: calc(100% + 95px); }
+  .visual-fx-edit-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .timeline-surface.has-visual-fx .timeline-track > .playhead { height: calc(100% + 98px); }
+  .timeline-surface.has-visual-fx.has-captions .timeline-track > .playhead { height: calc(100% + 135px); }
+}
