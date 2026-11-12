@@ -23,6 +23,30 @@ pausio studio
 
 Segui le [note ufficiali della release](.github/release/v0.1.0.md) per i limiti e le istruzioni complete; il flusso via `git clone` qui sotto resta utile a chi vuole sviluppare il progetto.
 
+## Pausio Capture su PC e telefono (verticale 9:16)
+
+Usa **lo stesso recorder** su desktop e smartphone con anteprima 9:16, gobbo
+sovrapposto soltanto nell'interfaccia, scelta di webcam/microfono, monitoraggio
+audio e salvataggio del take. Su PC una webcam 16:9 viene **realmente ritagliata**
+in 9:16 prima di MediaRecorder tramite canvas; un semplice `object-fit:cover`
+non basterebbe. Il crop è regolabile (orizzontale, verticale e zoom) e puoi
+scegliere 540×960, 720×1280 o 1080×1920 come dimensione di composizione.
+La qualità ottica effettiva dipende comunque dai pixel della webcam.
+
+Sul Mac, dal **repository e virtualenv già esistenti**:
+```bash
+source .venv/bin/activate
+pausio studio
+# Apri http://127.0.0.1:8765/capture (o la porta stampata)
+```
+
+Dopo la registrazione premi **Scarica video** oppure, soltanto sulla pagina
+servita da Pausio Studio su 127.0.0.1, **Usa questo take in Pausio Studio**.
+Quest'ultima azione chiede conferma se stai sostituendo un progetto e utilizza
+l'API locale esistente. Sul sito statico HTTPS GitHub Pages si scarica il file,
+senza comunicazione con un server Mac. Il file può essere MP4 oppure WebM
+secondo il supporto browser; controlla audio, dimensioni e codec sul take reale.
+
 ## Registra dal telefono con il gobbo (Mobile Capture, in sviluppo)
 
 È disponibile una **pagina web mobile indipendente** per registrare video parlati con teleprompter. Il copione rimane visibile sul display ma **non compare nel video**. Dopo ogni take puoi guardare l'anteprima, **scaricare il file sul telefono** o usare la condivisione di sistema quando disponibile; poi lo trasferisci sul PC e lo importi in Studio.
