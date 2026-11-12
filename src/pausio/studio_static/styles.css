@@ -1298,3 +1298,38 @@ a { color: inherit; text-decoration: none; }
 @media(max-width:1000px) {
   .workspace-library { display: none !important; }
 }
+
+/* SOCIAL PREVIEW GUIDE P2 — approximate reference only, never in FFmpeg export. */
+.social-safe-guide {
+  display: none;
+  position: absolute;
+  z-index: 2;
+  inset: 7% 7% 18%;
+  border: 1px dashed rgba(134,212,197,.7);
+  border-radius: 2px;
+  pointer-events: none;
+}
+.social-safe-guide:after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 16%;
+  height: 1px;
+  border-bottom: 1px dashed rgba(134,212,197,.55);
+}
+.social-safe-guide span {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 1%;
+  text-align: center;
+  font-size: clamp(7px,.65vw,10px);
+  line-height: 1.25;
+  color: #c5f3e8;
+  background: rgba(4,10,15,.7);
+}
+.app-shell[data-workspace="captions"] .video-workspace:not([hidden]) .social-safe-guide {
+  display: block;
+}
+@media(max-width:1000px) { .social-safe-guide { display: none !important; } }
