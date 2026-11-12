@@ -8,6 +8,7 @@
   let ignored = new Set();
   let ignoredContext = "";
   let selectedFxId = null;
+  let proposalForMediaId = null;
   const e = id => document.getElementById(id);
   const current = () => project || {};
   const fxList = () => current().video_fx || [];
@@ -156,7 +157,7 @@
       controls.append(empty);
     }else for(const fx of effects)controls.append(editorEffect(fx));
     if(proposal && (proposal.base_revision!==current().project_revision ||
-                    proposal.media_sha256!==current().media_id)){
+                    proposalForMediaId!==current().media_id)){
       proposal=null;proposalStatus="Il progetto è cambiato. Ricalcola i suggerimenti.";
     }
     e("visual-fx-suggest-status").textContent=proposalStatus;
@@ -208,10 +209,11 @@
   async function suggest(){
     if(!current().plan)throw Error("Crea prima il montaggio.");
     const preset=e("visual-fx-preset").value;
+    const requestedMediaId=current().media_id;
     const response=await post("/api/visual-fx/suggest",{
       revision:current().project_revision,preset
     });
-    if(response.media_sha256!==current().media_id){
+    if(requestedMediaId!==current().media_id){
       // Studio returns media_id as SHA-256; changing media while a promise
       // is pending must never show suggestions from the previous file.
       throw Error("Il video è cambiato durante l'analisi.");
@@ -219,6 +221,7 @@
     if(response.base_revision!==current().project_revision)
       throw Error("Il montaggio è cambiato. Ricalcola gli effetti.");
     proposal=response;
+    proposalForMediaId=requestedMediaId;
     const missing=response.missing_signals?.includes("asr_phrases")?
       " Senza frasi ASR sono disponibili solo i cambi su tagli reali.":"";
     status(response.candidates.length+" effetti proposti · nessuno è stato applicato."+missing);
