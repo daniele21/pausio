@@ -1,29 +1,43 @@
-/* Pausio Mobile Capture. No backend, analytics or external services. */
+/* Pausio Capture: mobile/desktop vertical recording, no analytics or cloud services. */
 (() => {
   "use strict";
   const $ = id => document.getElementById(id);
   const els = {
-    live: $("camera-video"), canvas: $("portrait-canvas"), playback: $("result-video"),
-    placeholder: $("camera-placeholder"),
+    live: $("camera-video"), playback: $("result-video"), placeholder: $("camera-placeholder"),
     frame: $("camera-frame"), prompter: $("prompter"), scroll: $("prompter-scroll"),
     text: $("prompter-text"), status: $("status"), state: $("capture-state"),
     timer: $("timer"), clock: $("timer-text"), format: $("format-pill"),
     camera: $("activate-camera"), start: $("record-start"), stop: $("record-stop"),
     next: $("new-take"), flip: $("switch-camera"), pause: $("toggle-scroll"),
     countdown: $("countdown"), panel: $("download-panel"), download: $("download-video"),
-    share: $("share-video"), fileDetails: $("file-details"), script: $("script-input"),
-    speed: $("speed"), font: $("font-size"), lines: $("gobbo-lines"),
-    position: $("prompter-position"), framing: $("framing-mode"),
-    details: $("gobbo-settings"), edit: $("edit-gobbo"),
-    autoplay: $("auto-scroll")
+    share: $("share-video"), details: $("file-details"), script: $("script-input"),
+    speed: $("speed"), font: $("font-size"), position: $("prompter-position"),
+    autoplay: $("auto-scroll"),
+    portrait: $("portrait-canvas"), videoDevice: $("video-device"), audioDevice: $("audio-device"),
+    quality: $("capture-quality"), panX: $("crop-x"), panY: $("crop-y"), zoom: $("crop-zoom"),
+    resetCrop: $("crop-reset"), meter: $("audio-level"), meterFill: $("audio-level-fill"),
+    meterValue: $("audio-level-value"), sourceInfo: $("capture-tech-info"),
+    openStudio: $("open-in-studio"),
+    framing: $("framing-mode"), lines: $("gobbo-lines"),
+    gobboSettings: $("gobbo-settings"), editGobbo: $("edit-gobbo"),
+    rehearse: $("rehearsal-toggle"), rehearsalRestart: $("rehearsal-restart"),
+    rehearsalHint: $("rehearsal-hint"), rehearsalHintText: $("rehearsal-hint-text")
   };
   const STORE_KEY = "pausio-mobile-capture-v1";
   let stream = null, recorder = null, chunks = [], output = null, blobUrl = null;
   let outputName = "", mode = "idle", facing = "user", raf = 0, lastFrame = 0;
   let startedAt = 0, pausedScroll = false, countdownId = 0;
   let savedAfterRecording = false, recordedMime = "";
-  let compositorFrame = 0, recordingStream = null, sourceSize = "";
-  const PORTRAIT_WIDTH = 720, PORTRAIT_HEIGHT = 1280, COMPOSITE_FPS = 24;
+  // A rehearsal is strictly presentation state: no MediaRecorder, no take,
+  // no microphone or camera permission required.
+  let rehearsalState = "stopped", rehearsalElapsedMs = 0;
+  // Chromium rounds element.scrollTop to whole CSS pixels. Keep fractional
+  // movement in a separate accumulator or slow WPM never advances at all.
+  let prompterPositionPx = 0;
+  let compositionActive = false, composeRaf = 0, lastPaint = 0, portraitStream = null;
+  let meterRaf = 0, audioContext = null, audioAnalyser = null, meterSource = null;
+  let inputWidth = 0, inputHeight = 0, recordedDimensions = null;
+  const isLocalStudio = location.hostname === "127.0.0.1";
 
   function notice(message, error = false) {
     els.status.textContent = message;
@@ -31,28 +45,34 @@
   }
   function setMode(next) {
     mode = next;
-    els.camera.hidden = !["idle", "error", "starting"].includes(next);
-    els.camera.textContent = next === "starting" ? "Apertura fotocamera…" : "Attiva fotocamera";
+    els.camera.hidden = next !== "idle" && next !== "error";
     els.start.hidden = next !== "preview";
     els.stop.hidden = next !== "recording";
     els.next.hidden = next !== "finished";
     els.flip.hidden = next !== "preview";
-    els.pause.hidden = next !== "preview" && next !== "recording";
-    els.edit.hidden = ["countdown", "recording", "stopping", "finished"].includes(next);
+    els.pause.hidden = next !== "recording";
     els.panel.hidden = next !== "finished";
-    els.placeholder.hidden = !["idle", "error", "starting"].includes(next);
-    els.live.hidden = ["finished", "idle", "error", "starting"].includes(next);
+    els.placeholder.hidden = next !== "idle" && next !== "error" ||
+      rehearsalState !== "stopped";
+    els.live.hidden = next === "finished" || next === "idle" || next === "error";
+    els.portrait.hidden = !compositionActive ||
+      next === "finished" || next === "idle" || next === "error";
     els.playback.hidden = next !== "finished";
-    els.canvas.hidden = !["preview", "countdown", "recording", "stopping"].includes(next)
-      || !els.frame.classList.contains("composited");
-    els.prompter.hidden = next === "finished" || next === "idle" || next === "error";
+    els.prompter.hidden = next === "finished" || next === "error" ||
+      (next === "idle" && rehearsalState === "stopped");
     els.timer.classList.toggle("live", next === "recording");
-    els.state.textContent = {idle:"PRONTO", error:"ERRORE", starting:"APERTURA…", preview:"CAMERA ATTIVA",
+    els.state.textContent = {idle:"PRONTO", error:"ERRORE", preview:"CAMERA ATTIVA",
       countdown:"PREPARATI", recording:"REC", stopping:"SALVATAGGIO", finished:"TAKE PRONTO"}[next] || "PRONTO";
     const locked = ["countdown","recording","stopping"].includes(next);
-    for (const el of [els.script,els.speed,els.font,els.lines,els.position,els.framing,els.autoplay]) el.disabled = locked;
+    for (const el of [els.script,els.speed,els.font,els.position,els.autoplay,
+      els.lines,els.framing,els.videoDevice,els.audioDevice,els.quality,els.panX,els.panY,els.zoom,els.resetCrop])
+      el.disabled = locked;
+    els.flip.hidden = next !== "preview";
+    els.editGobbo.hidden = ["countdown","recording","stopping","finished"].includes(next);
     els.pause.textContent = pausedScroll ? "▶" : "Ⅱ";
     els.pause.setAttribute("aria-label", pausedScroll ? "Riprendi scorrimento" : "Pausa scorrimento");
+    els.openStudio.hidden = next !== "finished" || !isLocalStudio;
+    syncRehearsalControls();
   }
   function prefs() {
     try {
@@ -65,6 +85,10 @@
       if (["wide","social"].includes(data.framing)) els.framing.value = data.framing;
       if (["top","middle"].includes(data.position)) els.position.value = data.position;
       if (typeof data.autoplay === "boolean") els.autoplay.checked = data.autoplay;
+      if ([540,720,1080].includes(data.quality)) els.quality.value = String(data.quality);
+      for (const [el,key,min,max] of [
+        [els.panX,"panX",0,100],[els.panY,"panY",0,100],[els.zoom,"zoom",100,180]
+      ]) if (Number.isFinite(data[key])) el.value = Math.max(min,Math.min(max,data[key]));
     } catch (_) { /* Storage unavailable in private browsing. */ }
   }
   function remember() {
@@ -72,38 +96,135 @@
       localStorage.setItem(STORE_KEY, JSON.stringify({version:1,
         script:els.script.value.slice(0,15000), speed:+els.speed.value, font:+els.font.value,
         lines:+els.lines.value, framing:els.framing.value,
-        position:els.position.value, autoplay:els.autoplay.checked}));
+        position:els.position.value, autoplay:els.autoplay.checked,
+        quality:+els.quality.value,panX:+els.panX.value,panY:+els.panY.value,
+        zoom:+els.zoom.value}));
     } catch (_) { /* Capture and downloads do not require localStorage. */ }
   }
   function refreshPrompter() {
-    els.text.textContent = els.script.value.trim() || "Scrivi uno script nelle impostazioni.";
+    const nextText=els.script.value.trim()||"Scrivi uno script nelle impostazioni.";
+    // Updating the speed slider must NOT replace the text node and send the
+    // active rehearsal back to the start on some browsers.
+    if(els.text.textContent!==nextText){
+      els.text.textContent=nextText;
+      if(rehearsalState!=="stopped"){
+        els.scroll.scrollTop=0;
+        prompterPositionPx=0;
+        els.text.style.transform="translate3d(0,0,0)";
+        rehearsalElapsedMs=0;
+        lastFrame=0;
+        els.clock.textContent="00:00";
+      }
+    }
     els.prompter.style.setProperty("--font-size", els.font.value + "px");
     els.prompter.style.setProperty("--prompter-lines", els.lines.value);
+    $("lines-value").textContent=els.lines.value+" righe";
     els.prompter.classList.toggle("middle", els.position.value === "middle");
     $("speed-value").textContent = els.speed.value + " parole/min";
     $("font-value").textContent = els.font.value + " px";
-    $("lines-value").textContent = els.lines.value + " righe";
+    syncRehearsalControls();
   }
-  function stopAnimation() { cancelAnimationFrame(raf); raf = 0; lastFrame = 0; }
+  function syncRehearsalControls() {
+    const available=mode==="idle"||mode==="preview";
+    const practicing=available&&rehearsalState!=="stopped";
+    const playing=practicing&&rehearsalState==="playing";
+    els.rehearse.hidden=!available;
+    els.rehearse.disabled=!els.script.value.trim();
+    els.rehearse.setAttribute("aria-pressed",String(playing));
+    els.rehearse.textContent=playing?"Ⅱ Pausa prova":
+      rehearsalState==="paused"?"▶ Riprendi prova":"▶ Prova gobbo";
+    els.rehearse.title=playing?"Metti in pausa la prova, senza registrare":
+      "Prova lo scorrimento del gobbo senza avviare la registrazione";
+    els.rehearsalRestart.hidden=!practicing;
+    els.rehearsalHint.hidden=!practicing;
+    els.rehearsalHintText.textContent=(playing?"PROVA GOBBO":"PROVA IN PAUSA")+
+      " · "+els.speed.value+" parole/min · Nessun video registrato";
+    els.timer.classList.toggle("rehearsal-live",playing);
+    els.frame.classList.toggle("rehearsing",practicing);
+    // The original webcam remains available if already activated.
+    els.placeholder.hidden=practicing||(mode!=="idle"&&mode!=="error");
+    els.prompter.hidden=mode==="finished"||mode==="error"||
+      (mode==="idle"&&!practicing);
+    if(practicing)els.state.textContent=playing?"PROVA GOBBO":"PROVA IN PAUSA";
+    else if(available)els.state.textContent=mode==="preview"?"CAMERA ATTIVA":"PRONTO";
+  }
+  function stopAnimation(){cancelAnimationFrame(raf);raf=0;lastFrame=0;}
   function tick(now) {
-    if (mode !== "recording" && mode !== "preview") { stopAnimation(); return; }
-    if (mode === "recording") {
-      const elapsed = Math.max(0, Math.floor((now - startedAt) / 1000));
-      els.clock.textContent = String(Math.floor(elapsed / 60)).padStart(2, "0")
-        + ":" + String(elapsed % 60).padStart(2, "0");
+    const rehearsing=rehearsalState==="playing"&&
+      (mode==="idle"||mode==="preview");
+    if(mode!=="recording"&&!rehearsing){stopAnimation();return;}
+    if(mode==="recording"){
+      const elapsed=Math.max(0,Math.floor((now-startedAt)/1000));
+      els.clock.textContent=String(Math.floor(elapsed/60)).padStart(2,"0")+
+        ":"+String(elapsed%60).padStart(2,"0");
+    }else if(rehearsing){
+      if(lastFrame)rehearsalElapsedMs+=Math.min(Math.max(now-lastFrame,0),150);
+      const seconds=Math.floor(rehearsalElapsedMs/1000);
+      els.clock.textContent=String(Math.floor(seconds/60)).padStart(2,"0")+
+        ":"+String(seconds%60).padStart(2,"0");
     }
-    if (lastFrame && !pausedScroll && els.autoplay.checked && mode === "recording") {
-      const fontPx = +els.font.value;
-      const charsPerLine = Math.max(10, els.scroll.clientWidth / (fontPx * .54));
-      const wordsPerLine = Math.max(1.6, charsPerLine / 6);
-      const pxPerSecond = ((+els.speed.value / 60) / wordsPerLine) * fontPx * 1.4;
-      els.scroll.scrollTop += Math.min((now - lastFrame) / 1000, .15) * pxPerSecond;
+    if(lastFrame&&
+      (rehearsing||(mode==="recording"&&!pausedScroll&&els.autoplay.checked))){
+      const fontPx=+els.font.value;
+      const charsPerLine=Math.max(10,els.scroll.clientWidth/(fontPx*.54));
+      const wordsPerLine=Math.max(1.6,charsPerLine/6);
+      const pxPerSecond=((+els.speed.value/60)/wordsPerLine)*fontPx*1.4;
+      const maxScroll=Math.max(0,els.scroll.scrollHeight-els.scroll.clientHeight);
+      prompterPositionPx=Math.max(0,Math.min(maxScroll,
+        prompterPositionPx+Math.min(Math.max(now-lastFrame,0)/1000,.15)*pxPerSecond));
+      els.scroll.scrollTop=prompterPositionPx;
+      // Preserve the subpixel remainder visually for calm, smooth motion.
+      const remainder=prompterPositionPx-els.scroll.scrollTop;
+      els.text.style.transform="translate3d(0,"+(-remainder).toFixed(3)+"px,0)";
     }
-    lastFrame = now;
-    raf = requestAnimationFrame(tick);
+    lastFrame=now;
+    raf=requestAnimationFrame(tick);
   }
-  function resetScroll() {
-    stopAnimation(); els.scroll.scrollTop = 0; pausedScroll = false; els.clock.textContent = "00:00";
+  function resetScroll(){
+    stopAnimation();
+    rehearsalState="stopped";
+    rehearsalElapsedMs=0;
+    els.scroll.scrollTop=0;
+    prompterPositionPx=0;
+    els.text.style.transform="translate3d(0,0,0)";
+    pausedScroll=false;
+    els.clock.textContent="00:00";
+    syncRehearsalControls();
+  }
+  function toggleRehearsal(){
+    if(!["idle","preview"].includes(mode)||!els.script.value.trim())return;
+    if(rehearsalState==="playing"){
+      rehearsalState="paused";
+      stopAnimation();
+      syncRehearsalControls();
+      notice("Prova in pausa. Regola la velocità e premi Riprendi prova.");
+      return;
+    }
+    if(rehearsalState==="stopped"){
+      els.scroll.scrollTop=0;
+      prompterPositionPx=0;
+      els.text.style.transform="translate3d(0,0,0)";
+      rehearsalElapsedMs=0;
+      els.clock.textContent="00:00";
+    }
+    stopAnimation(); // Resume without counting hidden-tab or paused time.
+    rehearsalState="playing";
+    syncRehearsalControls();
+    notice("Prova del gobbo: nessun video viene registrato. Regola la velocità in diretta.");
+    raf=requestAnimationFrame(tick);
+  }
+  function restartRehearsal(){
+    if(!["idle","preview"].includes(mode)||!els.script.value.trim())return;
+    stopAnimation();
+    els.scroll.scrollTop=0;
+    prompterPositionPx=0;
+    els.text.style.transform="translate3d(0,0,0)";
+    rehearsalElapsedMs=0;
+    els.clock.textContent="00:00";
+    rehearsalState="playing";
+    syncRehearsalControls();
+    notice("Gobbo ripartito dall'inizio, senza registrare.");
+    raf=requestAnimationFrame(tick);
   }
   function supportedMime() {
     if (!window.MediaRecorder) return "";
@@ -113,144 +234,211 @@
     ];
     return candidates.find(type => MediaRecorder.isTypeSupported(type)) || "";
   }
-  // Camera constraints are preferences, not an output-format contract. The
-  // phone can send 1920×1080 even with a portrait 9:16 request. Draw the same
-  // 720×1280 composition in the preview and the file we record.
-  function drawFitted(ctx, sourceWidth, sourceHeight, fit) {
-    const scale = (fit === "cover" ? Math.max : Math.min)(
-      PORTRAIT_WIDTH / sourceWidth, PORTRAIT_HEIGHT / sourceHeight
-    );
-    const width = sourceWidth * scale, height = sourceHeight * scale;
-    ctx.drawImage(els.live,
-      (PORTRAIT_WIDTH - width) / 2, (PORTRAIT_HEIGHT - height) / 2, width, height);
-  }
-  function drawPortraitFrame() {
-    const ctx = els.canvas.getContext("2d", {alpha:false});
-    if (!ctx) return;
-    ctx.fillStyle = "#08101a";
-    ctx.fillRect(0, 0, PORTRAIT_WIDTH, PORTRAIT_HEIGHT);
-    const width = els.live.videoWidth, height = els.live.videoHeight;
-    if (!width || !height || els.live.readyState < 2) return;
-    ctx.imageSmoothingEnabled = true;
-    if (els.framing.value === "wide") {
-      // Fill the vertical background, then preserve the complete camera field
-      // of view in the foreground. No digital zoom or fake camera rotation.
-      ctx.save();
-      ctx.filter = "blur(22px) brightness(0.48)";
-      drawFitted(ctx, width, height, "cover");
-      ctx.restore();
-      drawFitted(ctx, width, height, "contain");
-    } else {
-      // A physically narrower 9:16 crop is unavoidable when a 16:9 source
-      // must fully cover a portrait canvas.
-      drawFitted(ctx, width, height, "cover");
-    }
-  }
-  function compositorTick() {
-    if (!["preview", "countdown", "recording", "stopping"].includes(mode) || !stream) {
-      compositorFrame = 0;
-      return;
-    }
-    drawPortraitFrame();
-    compositorFrame = requestAnimationFrame(compositorTick);
+  const captureQuality = () => Number(els.quality.value) || 720;
+  const cameraDimensions = () => {
+    const settings = stream?.getVideoTracks()[0]?.getSettings?.() || {};
+    return {width:els.live.videoWidth || settings.width || 0,
+      height:els.live.videoHeight || settings.height || 0};
+  };
+  function updateFramingLabels() {
+    $("crop-x-value").textContent=els.panX.value+"%";
+    $("crop-y-value").textContent=els.panY.value+"%";
+    $("crop-zoom-value").textContent=els.zoom.value+"%";
   }
   function stopCompositor() {
-    if (compositorFrame) cancelAnimationFrame(compositorFrame);
-    compositorFrame = 0;
-    els.frame.classList.remove("composited");
-    els.canvas.hidden = true;
+    cancelAnimationFrame(composeRaf);composeRaf=0;lastPaint=0;
+    if(portraitStream) for(const track of portraitStream.getTracks())track.stop();
+    portraitStream=null;compositionActive=false;
+    els.portrait.hidden=true;
+    els.frame.classList.remove("is-composing","composited");
   }
-  function startCompositor() {
-    if (typeof els.canvas.captureStream !== "function"
-        || !els.canvas.getContext("2d", {alpha:false})) return false;
-    els.frame.classList.add("composited");
-    els.canvas.classList.toggle("mirrored", facing === "user");
-    els.canvas.hidden = false;
-    compositorFrame = requestAnimationFrame(compositorTick);
-    return true;
-  }
-  function stopRecordingStream() {
-    // The original audio track belongs to "stream": never stop it while
-    // MediaRecorder is still finalising its last dataavailable event.
-    if (recordingStream) {
-      for (const track of recordingStream.getVideoTracks()) track.stop();
-      recordingStream = null;
+  function drawPortraitFrame() {
+    if(!compositionActive||els.live.readyState<2)return;
+    const {width,height}=cameraDimensions();
+    if(!width||!height)return;
+    const ctx=els.portrait.getContext("2d",{alpha:false});
+    if(!ctx)return;
+    const outputWidth=els.portrait.width,outputHeight=els.portrait.height;
+    ctx.fillStyle="#050a10";
+    ctx.fillRect(0,0,outputWidth,outputHeight);
+    if(els.framing.value==="wide"){
+      // Preserve the full source frame inside a guaranteed portrait recording.
+      // Blur/darken the background, never pretend CSS object-fit changes the file.
+      const fillScale=Math.max(outputWidth/width,outputHeight/height);
+      const fillWidth=width*fillScale,fillHeight=height*fillScale;
+      ctx.save();
+      ctx.filter="blur(22px) brightness(0.48)";
+      ctx.drawImage(els.live,(outputWidth-fillWidth)/2,(outputHeight-fillHeight)/2,
+        fillWidth,fillHeight);
+      ctx.restore();
+      const fit=Math.min(outputWidth/width,outputHeight/height);
+      const drawWidth=width*fit,drawHeight=height*fit;
+      ctx.drawImage(els.live,(outputWidth-drawWidth)/2,
+        (outputHeight-drawHeight)/2,drawWidth,drawHeight);
+    }else{
+      // Social mode: explicit pan/zoom crop from source pixels, same in preview
+      // and MediaRecorder; the microphone still uses its original source track.
+      const ratio=9/16,zoom=Number(els.zoom.value)/100;
+      const boxWidth=Math.min(width,height*ratio)/zoom;
+      const boxHeight=boxWidth/ratio;
+      const left=(width-boxWidth)*(Number(els.panX.value)/100);
+      const top=(height-boxHeight)*(Number(els.panY.value)/100);
+      ctx.drawImage(els.live,left,top,boxWidth,boxHeight,
+        0,0,outputWidth,outputHeight);
     }
   }
-  async function releaseCamera() {
+  function renderPortraitLoop(now) {
+    if(!compositionActive||!stream)return;
+    if(!lastPaint||now-lastPaint>=32){
+      drawPortraitFrame();lastPaint=now;
+    }
+    composeRaf=requestAnimationFrame(renderPortraitLoop);
+  }
+  function configureComposition() {
     stopCompositor();
-    if (stream) for (const track of stream.getTracks()) track.stop();
-    stream = null;
+    if(!stream)return;
+    updateFramingLabels();
+    const {width,height}=cameraDimensions();
+    inputWidth=width;inputHeight=height;
+    if(typeof els.portrait.captureStream!=="function")
+      throw Error("Il browser non supporta il video verticale da canvas. Usa Chrome o Safari aggiornato.");
+    const quality=captureQuality();
+    // Always render into a fixed 9:16 canvas. Mobile wide framing is not a
+    // native-video bypass: this preserves the no-crop default of PR #22.
+    els.portrait.width=quality;els.portrait.height=Math.round(quality*16/9);
+    compositionActive=true;
+    els.portrait.hidden=false;
+    els.frame.classList.add("is-composing","composited");
+    els.portrait.classList.toggle("mirrored",facing==="user");
+    drawPortraitFrame();
+    composeRaf=requestAnimationFrame(renderPortraitLoop);
+    recordedDimensions={width:els.portrait.width,height:els.portrait.height};
+    els.format.textContent=recordedDimensions.width+"×"+recordedDimensions.height+" · 9:16";
+    els.sourceInfo.textContent=width+"×"+height+" → "+els.format.textContent+
+      (els.framing.value==="wide"
+        ?" · campo completo, sfondo sfocato; nessun ritaglio dell'inquadratura."
+        :" · ritaglio 9:16 con pan/zoom; stesso contenuto in anteprima e nel file.");
+  }
+  async function refreshDeviceChoices() {
+    if(!navigator.mediaDevices?.enumerateDevices)return;
+    let devices;
+    try{devices=await navigator.mediaDevices.enumerateDevices();}catch(_error){return;}
+    const maps=[
+      [els.videoDevice,"videoinput","Fotocamera automatica","Webcam"],
+      [els.audioDevice,"audioinput","Microfono predefinito","Microfono"]
+    ];
+    for(const [select,kind,auto,label] of maps){
+      const chosen=select.value;
+      select.replaceChildren(new Option(auto,""));
+      const options=devices.filter(d=>d.kind===kind);
+      for(const [index,device] of options.entries()){
+        if(!device.deviceId)continue;
+        select.add(new Option(device.label||label+" "+(index+1),device.deviceId));
+      }
+      if([...select.options].some(option=>option.value===chosen))select.value=chosen;
+    }
+  }
+  function stopMeter() {
+    cancelAnimationFrame(meterRaf);meterRaf=0;
+    try{meterSource?.disconnect();}catch(_error){}
+    meterSource=null;audioAnalyser=null;
+    const previous=audioContext;audioContext=null;
+    if(previous)previous.close().catch(()=>{});
+    els.meterFill.style.width="0%";
+    els.meter.setAttribute("aria-valuenow","0");
+    els.meterValue.textContent="—";
+  }
+  function startMeter() {
+    stopMeter();
+    const track=stream?.getAudioTracks()[0];
+    const Context=window.AudioContext||window.webkitAudioContext;
+    if(!track||!Context)return;
+    try{
+      audioContext=new Context();
+      meterSource=audioContext.createMediaStreamSource(new MediaStream([track]));
+      audioAnalyser=audioContext.createAnalyser();
+      audioAnalyser.fftSize=256;
+      meterSource.connect(audioAnalyser); // no output: avoid microphone feedback
+      const samples=new Uint8Array(audioAnalyser.fftSize);
+      const tickMeter=()=>{
+        if(!audioAnalyser||!stream)return;
+        audioAnalyser.getByteTimeDomainData(samples);
+        let power=0;
+        for(const sample of samples)power+=Math.pow((sample-128)/128,2);
+        const rms=Math.sqrt(power/samples.length);
+        const level=Math.min(100,Math.round(rms*350));
+        els.meterFill.style.width=level+"%";
+        els.meter.setAttribute("aria-valuenow",String(level));
+        els.meterValue.textContent=level+"%";
+        meterRaf=requestAnimationFrame(tickMeter);
+      };
+      meterRaf=requestAnimationFrame(tickMeter);
+    }catch(_error){stopMeter();}
+  }
+  function recordingInputStream() {
+    if(!stream)throw Error("Attiva prima la fotocamera.");
+    if(!compositionActive)return stream;
+    drawPortraitFrame();
+    portraitStream=els.portrait.captureStream(30);
+    const track=portraitStream.getVideoTracks()[0];
+    if(!track)throw Error("Il browser non ha creato una traccia video verticale.");
+    return new MediaStream([track,...stream.getAudioTracks()]);
+  }
+
+  async function releaseCamera() {
+    stopCompositor();stopMeter();
+    if(stream)for(const track of stream.getTracks())track.stop();
+    stream=null;
     els.live.pause();
-    els.live.srcObject = null;
+    els.live.srcObject=null;
+    inputWidth=0;inputHeight=0;
   }
   async function activateCamera() {
-    if (["starting", "countdown", "recording", "stopping"].includes(mode)) return;
-    if (!window.isSecureContext && !["localhost", "127.0.0.1"].includes(location.hostname)) {
+    if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder){
       setMode("error");
-      notice("La fotocamera richiede HTTPS. Apri il link direttamente in Chrome o Safari.", true);
+      notice("Questo browser non supporta Capture. Usa Safari o Chrome aggiornato, su localhost oppure HTTPS.",true);
       return;
     }
-    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
-      setMode("error");
-      notice("Questo browser non supporta la registrazione diretta. Usa Safari aggiornato su iPhone o Chrome aggiornato su Android, tramite HTTPS.", true);
-      return;
-    }
-    try {
-      setMode("starting");
-      notice("Apertura fotocamera e microfono… Se compare una richiesta del browser, scegli Consenti.");
-      els.camera.disabled = true;
-      els.flip.disabled = true;
+    try{
+      els.camera.disabled=true;els.flip.disabled=true;
       await releaseCamera();
-      // Default to a fuller 3:4 sensor frame rather than forcing a 9:16
-      // acquisition crop (which can look digitally zoomed on Android).
-      // "Social" is an explicit user opt-in to tighter 9:16 capture.
-      const social = els.framing.value === "social";
-      const video = social
-        ? {facingMode:{ideal:facing}, width:{ideal:1080}, height:{ideal:1920},
-           aspectRatio:{ideal:9/16}, frameRate:{ideal:30}}
-        : {facingMode:{ideal:facing}, width:{ideal:960}, height:{ideal:1280},
-           aspectRatio:{ideal:3/4}, frameRate:{ideal:30}};
-      const candidate = await navigator.mediaDevices.getUserMedia({video, audio:true});
-      stream = candidate;
-      els.live.srcObject = stream;
-      els.live.classList.toggle("mirrored", facing === "user");
-      resetScroll();
-      refreshPrompter();
-      // Reveal the video BEFORE asking the browser to play it. Safari can leave
-      // play() pending indefinitely when its target is display:none.
+      const desktop=window.matchMedia("(pointer: fine) and (min-width: 860px)").matches;
+      const video=els.videoDevice.value?
+        {deviceId:{exact:els.videoDevice.value},width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30}}:
+        {facingMode:{ideal:facing},width:{ideal:desktop?1920:(els.framing.value==="wide"?960:1080)},
+          height:{ideal:desktop?1080:(els.framing.value==="wide"?1280:1920)},
+          aspectRatio:{ideal:desktop?16/9:(els.framing.value==="wide"?3/4:9/16)},frameRate:{ideal:30}};
+      const audio=els.audioDevice.value?{deviceId:{exact:els.audioDevice.value}}:true;
+      stream=await navigator.mediaDevices.getUserMedia({video,audio});
+      if(!stream.getVideoTracks().length||!stream.getAudioTracks().length)
+        throw Error("Fotocamera o microfono assenti.");
+      els.live.srcObject=stream;
+      els.live.classList.toggle("mirrored",facing==="user");
+      // Reveal before playing: on mobile Safari play() can remain pending.
+      // Do not await the promise before exposing the REC controls.
       setMode("preview");
-      if (!startCompositor()) {
-        throw new Error("Il browser non supporta la registrazione verticale su canvas");
-      }
-      try {
-        const playback = els.live.play();
-        if (playback && typeof playback.catch === "function") {
-          playback.catch(() => {
-            if (mode === "preview") {
-              notice("Fotocamera attiva, ma l'anteprima non parte: tocca il video per riprovare. Se non funziona, apri la pagina in Chrome o Safari.", true);
-            }
-          });
-        }
-      } catch (_) {
-        notice("Fotocamera attiva: tocca il video per attivare l'anteprima.", true);
-      }
-      const dimensions = candidate.getVideoTracks()[0]?.getSettings?.() || {};
-      const width = dimensions.width, height = dimensions.height;
-      sourceSize = width && height ? width + "×" + height : "dimensioni automatiche";
-      els.format.textContent = PORTRAIT_WIDTH + "×" + PORTRAIT_HEIGHT + " · verticale";
-      const method = social ? "ritaglio a schermo pieno" : "campo completo con sfondo sfocato";
-      notice("Fotocamera " + sourceSize + " → video verticale " +
-        PORTRAIT_WIDTH + "×" + PORTRAIT_HEIGHT + " (" + method + "). Il gobbo non viene registrato.");
-    } catch (error) {
-      await releaseCamera();
-      setMode("error");
-      const denied = ["NotAllowedError","PermissionDeniedError","SecurityError"].includes(error?.name);
-      notice(denied ? "Accesso negato: consenti fotocamera e microfono nelle impostazioni del sito, poi premi di nuovo Attiva fotocamera. Se sei in un browser integrato, apri il link in Chrome o Safari." :
-        "Non riesco ad aprire fotocamera e microfono (" + (error?.name || "errore") + "). Chiudi altre app che li usano e riprova.", true);
-    } finally {
-      els.camera.disabled = false;
-      els.flip.disabled = false;
+      configureComposition();
+      const playback=els.live.play();
+      if(playback&&typeof playback.catch==="function")playback.catch(()=>{
+        if(mode==="preview")notice("Fotocamera attiva: tocca il video per avviare l\u0027anteprima.",true);
+      });
+      els.live.addEventListener("loadedmetadata",()=>{
+        if(mode==="preview"&&stream)try{configureComposition();}catch(_error){}
+      },{once:true});
+      await refreshDeviceChoices();
+      startMeter();
+      resetScroll();refreshPrompter();
+      setMode("preview");
+      notice("Inquadratura "+els.format.textContent+
+        ". Controlla il microfono e avvia Registra. Il gobbo non sarà nel file.");
+    }catch(error){
+      await releaseCamera();setMode("error");
+      const denied=["NotAllowedError","PermissionDeniedError","SecurityError"].includes(error?.name);
+      notice(denied?"Fotocamera o microfono non autorizzati. Abilita entrambi nei permessi del browser.":
+        "Non riesco ad attivare fotocamera e microfono ("+
+        (error?.message||error?.name||"errore")+"). Chiudi eventuali altre app e riprova.",true);
+    }finally{
+      els.camera.disabled=false;els.flip.disabled=false;
     }
   }
   function cancelCountdown() {
@@ -274,19 +462,11 @@
     if (seq !== countdownId || !stream || mode !== "countdown") return;
     els.countdown.hidden = true;
     try {
-      if (typeof els.canvas.captureStream !== "function") {
-        throw new Error("Questo browser non supporta l'export video verticale");
-      }
-      drawPortraitFrame();
-      const composedVideo = els.canvas.captureStream(COMPOSITE_FPS);
-      recordingStream = new MediaStream([
-        ...composedVideo.getVideoTracks(), ...stream.getAudioTracks()
-      ]);
-      if (!recordingStream.getVideoTracks().length) {
-        throw new Error("Non è possibile acquisire il video verticale dal canvas");
-      }
       const mimeType = supportedMime();
-      recorder = new MediaRecorder(recordingStream, mimeType ? {mimeType} : undefined);
+      const input=recordingInputStream();
+      recorder=new MediaRecorder(input,mimeType?{mimeType,
+        videoBitsPerSecond:captureQuality()===1080?6000000:3500000
+      }:{videoBitsPerSecond:captureQuality()===1080?6000000:3500000});
       recordedMime = recorder.mimeType || mimeType || "video/webm";
       chunks = [];
       recorder.ondataavailable = event => { if (event.data && event.data.size) chunks.push(event.data); };
@@ -295,14 +475,13 @@
       recorder.start(1000);
       startedAt = performance.now();
       setMode("recording");
-      notice("Registrazione in corso. Non bloccare lo schermo e non uscire dal browser.");
+      notice("REC verticale "+recordedDimensions.width+"×"+recordedDimensions.height+
+        ". Il gobbo è visibile soltanto sullo schermo. Non chiudere il browser.");
       raf = requestAnimationFrame(tick);
     } catch (error) {
       recorder = null;
-      stopRecordingStream();
       setMode("preview");
-      notice("Impossibile avviare la registrazione verticale: " +
-        (error?.message || error?.name || "formato non supportato") + ".", true);
+      notice("Impossibile avviare la registrazione su questo browser (" + (error?.name || "formato non supportato") + ").", true);
     }
   }
   function stopRecording() {
@@ -320,7 +499,6 @@
   async function finishRecording() {
     if (mode !== "stopping" && mode !== "recording") return;
     stopAnimation();
-    stopRecordingStream();
     await releaseCamera();
     const type = recordedMime.includes("mp4") ? "video/mp4" : "video/webm";
     output = new Blob(chunks, {type});
@@ -340,14 +518,15 @@
     els.download.href = blobUrl;
     els.download.download = outputName;
     const seconds = Math.round((performance.now() - startedAt) / 1000);
-    els.fileDetails.textContent = outputName.split(".").pop().toUpperCase() + " · " +
-      (output.size / (1024 * 1024)).toFixed(1) + " MB · " + seconds +
-      " s · " + PORTRAIT_WIDTH + "×" + PORTRAIT_HEIGHT + " verticale · senza gobbo";
+    els.details.textContent=outputName.split(".").pop().toUpperCase()+" · "+
+      (recordedDimensions?.width||"?")+"×"+(recordedDimensions?.height||"?")+" · "+
+      (output.size/(1024*1024)).toFixed(1)+" MB · "+seconds+" s · senza gobbo";
     savedAfterRecording = false;
     const file = new File([output], outputName, {type});
     els.share.hidden = !(navigator.canShare && navigator.canShare({files:[file]}));
     setMode("finished");
-    notice("Take pronto. Tocca Scarica video oppure Condividi / Salva su File. Verifica il file prima di abbandonare la pagina.");
+    notice("Take pronto. Scarica il file e verifica video e audio."+
+      (isLocalStudio?" Puoi anche importarlo direttamente in Pausio Studio.":""));
   }
   async function shareRecording() {
     if (!output || !navigator.share) return;
@@ -361,9 +540,38 @@
       if (error?.name !== "AbortError") notice("Condivisione non disponibile: usa Scarica video oppure apri il file nel browser.", true);
     }
   }
+  async function importIntoStudio() {
+    if(!isLocalStudio||!output||mode!=="finished")return;
+    const button=els.openStudio;
+    try{
+      button.disabled=true;
+      const stateResponse=await fetch("/api/state");
+      if(!stateResponse.ok)throw Error("Studio locale non disponibile.");
+      const state=await stateResponse.json();
+      if(state.file&&!window.confirm("Studio contiene già un video: importare questo take sostituirà il progetto attuale. Procedere?"))
+        return;
+      if(!savedAfterRecording&&!window.confirm(
+        "Importare il take in Studio lo salva nella sessione locale. Vuoi procedere anche senza una copia nella cartella Download?"))
+        return;
+      notice("Importazione locale in Pausio Studio in corso...");
+      const response=await fetch("/api/import",{
+        method:"POST",
+        headers:{"Content-Type":"application/octet-stream",
+          "X-Pausio-Client":"studio","X-Filename":encodeURIComponent(outputName)},
+        body:output
+      });
+      const result=await response.json();
+      if(!response.ok)throw Error(result?.error||"Importazione non riuscita.");
+      savedAfterRecording=true;
+      window.location.assign("/");
+    }catch(error){
+      notice("Importazione fallita: "+(error?.message||"errore")+
+        ". Scarica il take prima di uscire.",true);
+    }finally{button.disabled=false;}
+  }
   async function newTake() {
     if (mode !== "finished") return;
-    if (!savedAfterRecording && !window.confirm("Hai salvato il video sul telefono? Iniziando un nuovo take perderai l'anteprima attuale.")) return;
+    if (!savedAfterRecording && !window.confirm("Hai salvato il take sul dispositivo? Iniziando un nuovo take perderai l'anteprima attuale.")) return;
     els.playback.pause();
     els.playback.removeAttribute("src");
     els.playback.load();
@@ -373,28 +581,48 @@
     notice("Pronto per un altro take. Il copione e le impostazioni restano disponibili.");
     await activateCamera();
   }
-  els.camera.addEventListener("click", activateCamera);
-  els.edit.addEventListener("click", () => {
-    els.details.open = true;
-    els.details.scrollIntoView({behavior:"smooth", block:"start"});
+  els.camera.addEventListener("click",activateCamera);
+  els.editGobbo.addEventListener("click",()=>{
+    els.gobboSettings.open=true;
+    els.gobboSettings.scrollIntoView({behavior:"smooth",block:"start"});
   });
-  els.framing.addEventListener("change", async () => {
+  els.framing.addEventListener("change",()=>{
     remember();
-    if (mode === "preview") {
-      drawPortraitFrame();
-      const composition = els.framing.value === "social" ?
-        "video verticale con ritaglio" : "video verticale con campo completo";
-      notice("Anteprima aggiornata: " + composition + ". Il file registrato userà la stessa inquadratura.");
+    if(mode==="preview"){
+      try{configureComposition();
+        notice(els.framing.value==="social"
+          ?"Anteprima aggiornata: video verticale con ritaglio."
+          :"Anteprima aggiornata: video verticale con campo completo.");
+      }catch(error){notice(error.message,true);}
     }
   });
-  els.live.addEventListener("click", () => {
-    if (mode !== "preview") return;
-    const pending = els.live.play();
-    if (pending && typeof pending.catch === "function") {
-      pending.catch(() => notice("Il browser ha bloccato l'anteprima: controlla i permessi della fotocamera.", true));
-    }
+  els.openStudio.addEventListener("click",importIntoStudio);
+  for(const select of [els.videoDevice,els.audioDevice]){
+    select.addEventListener("change",()=>{if(mode==="preview")activateCamera();});
+  }
+  for(const control of [els.quality,els.panX,els.panY,els.zoom]){
+    control.addEventListener("input",()=>{
+      if(mode!=="preview"&&mode!=="idle")return;
+      updateFramingLabels();remember();
+      if(mode==="preview"){
+        try{configureComposition();}
+        catch(error){notice("Ritaglio verticale non disponibile: "+error.message,true);}
+      }
+    });
+  }
+  els.resetCrop.addEventListener("click",()=>{
+    els.panX.value="50";els.panY.value="50";els.zoom.value="100";
+    updateFramingLabels();remember();
+    if(mode==="preview")configureComposition();
   });
-  els.flip.addEventListener("click", async () => { if (mode !== "preview") return; facing = facing === "user" ? "environment" : "user"; await activateCamera(); });
+  els.flip.addEventListener("click",async()=>{
+    if(mode!=="preview")return;
+    facing=facing==="user"?"environment":"user";
+    els.videoDevice.value="";
+    await activateCamera();
+  });
+  els.rehearse.addEventListener("click",toggleRehearsal);
+  els.rehearsalRestart.addEventListener("click",restartRehearsal);
   els.start.addEventListener("click", startRecording);
   els.stop.addEventListener("click", stopRecording);
   els.next.addEventListener("click", newTake);
@@ -403,9 +631,13 @@
   els.share.addEventListener("click", shareRecording);
   for (const el of [els.script,els.speed,els.font,els.lines,els.position,els.autoplay]) {
     el.addEventListener(el === els.script ? "input" : "change", () => { refreshPrompter(); remember(); });
-    if ([els.speed, els.font, els.lines].includes(el)) el.addEventListener("input", () => { refreshPrompter(); remember(); });
+    if (el === els.speed || el === els.font || el === els.lines) el.addEventListener("input", () => { refreshPrompter(); remember(); });
   }
   document.addEventListener("visibilitychange", () => {
+    if(document.hidden&&rehearsalState==="playing"){
+      toggleRehearsal();
+      notice("Prova gobbo in pausa: torna alla pagina per riprendere.");
+    }
     if (document.hidden && (mode === "recording" || mode === "countdown")) {
       notice("Non bloccare lo schermo: il browser può interrompere fotocamera e registrazione.", true);
     }
@@ -416,11 +648,12 @@
       event.preventDefault(); event.returnValue = "";
     }
   });
-  prefs();
-  if (window.matchMedia("(max-width:850px)").matches) els.details.open = false;
-  refreshPrompter();
-  setMode("idle");
-  notice("Pagina pronta. Tocca Attiva fotocamera e consenti l'accesso a fotocamera e microfono.");
+  prefs();refreshPrompter();updateFramingLabels();setMode("idle");
+  if(window.matchMedia("(max-width:850px)").matches)els.gobboSettings.open=false;
+  refreshDeviceChoices().catch(()=>{});
+  navigator.mediaDevices?.addEventListener?.("devicechange",()=>{
+    if(mode==="idle"||mode==="preview")refreshDeviceChoices().catch(()=>{});
+  });
   if (!window.isSecureContext && !["localhost","127.0.0.1"].includes(location.hostname)) {
     els.camera.disabled = true;
     notice("La fotocamera da browser richiede HTTPS. Apri questa pagina da un sito HTTPS.", true);
