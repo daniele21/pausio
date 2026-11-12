@@ -48,6 +48,7 @@ class MobileCapturePlaywrightTests(unittest.TestCase):
 
     def test_record_preview_and_download(self):
         page = self.page
+        page.locator("#edit-gobbo").click()
         page.locator("#script-input").fill("Questo è un take di prova. Il gobbo è solo un overlay.")
         self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"),
                              390)
@@ -84,6 +85,7 @@ class MobileCapturePlaywrightTests(unittest.TestCase):
     def test_rehearsal_without_camera_on_small_screen(self):
         page=self.page
         page.set_viewport_size({"width":320,"height":700})
+        page.locator("#edit-gobbo").click()
         page.locator("#script-input").fill("Test del gobbo senza fotocamera. " * 75)
         self.assertTrue(page.locator("#rehearsal-toggle").is_visible())
         self.assertTrue(page.locator("#rehearsal-restart").is_hidden())
