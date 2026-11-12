@@ -171,6 +171,32 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertIn("video.transform.update",[row["type"] for row in document["commands"]])
         self.assertFalse(self.errors,self.errors)
 
+    def test_face_anchor_optional_ui_requires_reviewed_typed_edit(self):
+        from unittest.mock import patch
+        state=self.upload_analyze()
+        self.page.locator('[data-workspace-nav="cuts"]').click()
+        self.page.evaluate("() => document.getElementById('preview-video').currentTime=2.65")
+        before=self.state()["project_revision"]
+        self.page.locator("#visual-fx-add").click()
+        added=self.wait_state("revision",before+1)
+        self.assertEqual(len(added["video_fx"]),1)
+        effect=added["video_fx"][0]
+        self.assertTrue(self.page.locator("#face-analyze").is_visible())
+        with patch("pausio.studio.propose_face_anchor",return_value={
+            "status":"ready","anchor_x_pct":77,"anchor_y_pct":49,
+            "samples":5,"method":"local-haar-stable-crop-v1"
+        }):
+            self.page.locator("#face-analyze").click()
+            self.wait_condition(lambda:self.page.locator("#face-accept").is_visible())
+        # Suggestions never alter the stored event until explicit acceptance.
+        self.assertEqual(self.state()["project_revision"],added["project_revision"])
+        self.assertEqual(self.state()["video_fx"][0],effect)
+        self.page.locator("#face-accept").click()
+        changed=self.wait_state("revision",added["project_revision"]+1)
+        self.assertEqual(changed["video_fx"][0]["anchor_x_pct"],77)
+        self.assertEqual(changed["video_fx"][0]["anchor_y_pct"],49)
+        self.assertFalse(self.errors,self.errors)
+
     def test_custom_audio_fx_import_in_real_browser(self):
         self.upload_analyze()
         self.page.locator('[data-workspace-nav="audio"]').click()
