@@ -634,6 +634,8 @@ class StudioPlaywrightAudit(unittest.TestCase):
         selection_revision=updated["project_revision"]
         self.page.locator(".caption-cue-mark").first.click()
         self.assertEqual(self.page.locator("#app").get_attribute("data-workspace"),"captions")
+        self.assertTrue(self.page.locator(".social-safe-guide").is_visible())
+        self.assertFalse(self.page.locator("#audio-mixer").is_visible())
         self.assertTrue(self.page.locator("#workspace-caption-library").is_visible())
         self.assertEqual(self.page.locator(".workspace-caption-item").count(),len(updated["captions"]))
         self.assertEqual(self.page.locator(".workspace-caption-item.is-selected").count(),1)
