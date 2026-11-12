@@ -78,6 +78,51 @@ class AutomaticVideoFxTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             propose([{**segs[0],"start_ms":True}])
 
+    def test_custom_profile_is_bounded_and_changes_density(self):
+        items=[keep(i*3500,i*3500+2700) for i in range(12)]
+        options={"max_per_min":10,"gap_ms":2800,"punch_pct":120,
+                 "push_pct":115,"push_ms":1800,"use_audio_energy":False}
+        result=propose_visual_fx(segments=items,transcript=None,existing=[],
+            preset="personalizzato",media_sha256="a"*64,base_revision=2,
+            overrides=options)
+        self.assertEqual(result["effective_profile"]["punch_pct"],120)
+        self.assertTrue(result["candidates"])
+        self.assertTrue(all(x["effect"]["end_scale_pct"]==120
+                            for x in result["candidates"]))
+        self.assertEqual(result,propose_visual_fx(segments=items,transcript=None,
+            existing=[],preset="personalizzato",media_sha256="a"*64,
+            base_revision=2,overrides=options))
+        for mutation in (
+            {"max_per_min":True},{"punch_pct":180},
+            {"push_ms":4001},{"gap_ms":100},{"shell":"rm -rf"},
+        ):
+            with self.subTest(mutation=mutation),self.assertRaises(ValueError):
+                propose_visual_fx(segments=items,transcript=None,existing=[],
+                    preset="personalizzato",media_sha256="a"*64,base_revision=2,
+                    overrides={**options,**mutation})
+        with self.assertRaises(ValueError):
+            propose_visual_fx(segments=items,transcript=None,existing=[],
+                preset="naturale",media_sha256="a"*64,base_revision=2,
+                overrides=options)
+
+    def test_optional_measured_audio_onset_is_not_semantic_emphasis(self):
+        seg=[keep(0,9000)]
+        waveform=[180]*900
+        waveform[260]=900
+        options={"max_per_min":8,"gap_ms":3800,"punch_pct":117,
+                 "push_pct":112,"push_ms":2000,"use_audio_energy":True}
+        result=propose_visual_fx(segments=seg,transcript=None,existing=[],
+            preset="personalizzato",media_sha256="b"*64,base_revision=0,
+            overrides=options,waveform=waveform,source_duration_ms=9000)
+        self.assertTrue(result["audio_energy_used"])
+        self.assertEqual(result["candidates"][0]["evidence"]["kind"],
+                         "measured_waveform_rise")
+        self.assertNotIn("semantic_importance",repr(result))
+        with self.assertRaises(ValueError):
+            propose_visual_fx(segments=seg,transcript=None,existing=[],
+                preset="personalizzato",media_sha256="b"*64,base_revision=0,
+                overrides=options,waveform=[True]*900,source_duration_ms=9000)
+
     def test_budget_and_spacing_are_maxima_not_quota(self):
         items=[keep(0,1200)]
         for i in range(1,12):
