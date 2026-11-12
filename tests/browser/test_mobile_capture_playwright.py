@@ -81,6 +81,30 @@ class MobileCapturePlaywrightTests(unittest.TestCase):
         self.assertFalse(page.locator("#prompter").is_visible())
         self.assertEqual(self.errors, [])
 
+    def test_rehearsal_without_camera_on_small_screen(self):
+        page=self.page
+        page.set_viewport_size({"width":320,"height":700})
+        page.locator("#script-input").fill("Test del gobbo senza fotocamera. " * 75)
+        self.assertTrue(page.locator("#rehearsal-toggle").is_visible())
+        self.assertTrue(page.locator("#rehearsal-restart").is_hidden())
+        self.assertTrue(page.locator("#record-stop").is_hidden())
+        self.assertFalse(page.evaluate(
+            "() => !!document.querySelector('#camera-video').srcObject"))
+        page.locator("#rehearsal-toggle").click()
+        self.assertTrue(page.locator("#prompter").is_visible())
+        self.assertTrue(page.locator("#camera-placeholder").is_hidden())
+        self.assertTrue(page.locator("#rehearsal-hint").is_visible())
+        self.assertIn("Nessun video registrato",page.locator("#rehearsal-hint").inner_text())
+        page.wait_for_timeout(900)
+        self.assertGreater(page.locator("#prompter-scroll").evaluate("(el)=>el.scrollTop"),0)
+        self.assertTrue(page.locator("#download-panel").is_hidden())
+        self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"),320)
+        page.locator("#rehearsal-toggle").click()
+        self.assertEqual(page.locator("#rehearsal-toggle").get_attribute("aria-pressed"),"false")
+        page.locator("#rehearsal-restart").click()
+        self.assertEqual(page.locator("#rehearsal-toggle").get_attribute("aria-pressed"),"true")
+        self.assertFalse(self.errors,self.errors)
+
     def test_camera_preview_is_responsive_at_320px(self):
         page = self.page
         page.set_viewport_size({"width":320,"height":700})
@@ -117,6 +141,81 @@ class DesktopCapturePlaywrightTests(unittest.TestCase):
         self.server.shutdown();self.server.server_close()
         self.thread.join(timeout=3)
         self.workspace.close();self.temp.cleanup()
+
+    def test_rehearsal_live_speed_pause_resume_and_take_reset(self):
+        page=self.page
+        # Wrap MediaRecorder to prove that the practice mode cannot create a
+        # recording, even when it is running and the speed is adjusted.
+        page.evaluate("""() => {
+          window.__recorderCalls=0;
+          window.MediaRecorder=new Proxy(window.MediaRecorder,{
+            construct(target,args){
+              window.__recorderCalls++;
+              return Reflect.construct(target,args);
+            }
+          });
+        }""")
+        page.locator("#script-input").fill(
+            "Questa è una prova della velocità del gobbo. " * 95
+        )
+        page.locator("#speed").evaluate("""(el)=>{
+          el.value="50";el.dispatchEvent(new Event("input",{bubbles:true}));
+        }""")
+        self.assertEqual(page.locator("#speed-value").inner_text(),"50 parole/min")
+        page.locator("#rehearsal-toggle").click()
+        self.assertTrue(page.locator("#prompter").is_visible())
+        self.assertTrue(page.locator("#rehearsal-restart").is_visible())
+        self.assertTrue(page.locator("#rehearsal-hint").is_visible())
+        self.assertEqual(page.locator("#capture-state").inner_text(),"PROVA GOBBO")
+        self.assertTrue(page.locator("#rehearsal-toggle").get_attribute("aria-pressed")=="true")
+        self.assertEqual(page.evaluate("window.__recorderCalls"),0)
+        page.wait_for_timeout(1100)
+        scroll=page.locator("#prompter-scroll")
+        before=scroll.evaluate("(el)=>el.scrollTop")
+        self.assertGreater(before,3)
+        page.locator("#speed").evaluate("""(el)=>{
+          el.value="220";el.dispatchEvent(new Event("input",{bubbles:true}));
+        }""")
+        self.assertEqual(page.locator("#speed-value").inner_text(),"220 parole/min")
+        self.assertGreater(scroll.evaluate("(el)=>el.scrollTop"),before-1,
+                           "Changing WPM must preserve the current script position")
+        page.wait_for_timeout(600)
+        self.assertGreater(scroll.evaluate("(el)=>el.scrollTop"),before+12)
+        page.locator("#rehearsal-toggle").click()
+        self.assertEqual(page.locator("#capture-state").inner_text(),"PROVA IN PAUSA")
+        paused=scroll.evaluate("(el)=>el.scrollTop")
+        page.wait_for_timeout(450)
+        self.assertAlmostEqual(scroll.evaluate("(el)=>el.scrollTop"),paused,delta=1)
+        page.locator("#rehearsal-toggle").click()
+        page.wait_for_timeout(400)
+        self.assertGreater(scroll.evaluate("(el)=>el.scrollTop"),paused+3)
+        page.locator("#rehearsal-restart").click()
+        self.assertLess(scroll.evaluate("(el)=>el.scrollTop"),6,
+                        "Restart must return to the first line")
+        self.assertEqual(page.evaluate("window.__recorderCalls"),0)
+        self.assertTrue(page.locator("#record-stop").is_hidden())
+        ARTIFACTS.mkdir(parents=True,exist_ok=True)
+        page.screenshot(path=str(ARTIFACTS/"capture-rehearsal-desktop-1440.png"),full_page=True)
+        # Activate a fake camera while rehearsing: the rehearsal is reset
+        # without any recording, then the real REC flow still works.
+        page.locator("#activate-camera").click()
+        page.locator("#record-start").wait_for(state="visible",timeout=20000)
+        self.assertEqual(page.locator("#rehearsal-toggle").get_attribute("aria-pressed"),"false")
+        self.assertEqual(page.evaluate("window.__recorderCalls"),0)
+        page.locator("#rehearsal-toggle").click()
+        page.wait_for_timeout(400)
+        self.assertGreater(scroll.evaluate("(el)=>el.scrollTop"),0)
+        page.locator("#record-start").click()
+        self.assertTrue(page.locator("#rehearsal-toggle").is_hidden())
+        self.assertEqual(scroll.evaluate("(el)=>el.scrollTop"),0)
+        page.locator("#record-stop").wait_for(state="visible",timeout=15000)
+        self.assertEqual(page.evaluate("window.__recorderCalls"),1,
+                         "Only an explicit Registra click may create a recorder")
+        page.wait_for_timeout(900)
+        page.locator("#record-stop").click()
+        page.locator("#download-panel").wait_for(state="visible",timeout=20000)
+        self.assertTrue(page.locator("#rehearsal-toggle").is_hidden())
+        self.assertFalse(self.errors,self.errors)
 
     def test_desktop_portrait_crop_microphone_and_direct_studio_import(self):
         page=self.page
