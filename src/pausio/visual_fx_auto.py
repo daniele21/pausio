@@ -206,8 +206,9 @@ def propose_visual_fx(
                item["end_ms"] > fx.get("start_ms",0) for fx in existing
                if isinstance(fx,dict)):
             continue
-        effect_id=_identity((ENGINE,media_sha256,preset,item["segment_id"],
-                             item["start_ms"],item["kind"]))
+        signature=tuple((key,rule[key]) for key in sorted(CUSTOM_LIMITS))
+        effect_id=_identity((ENGINE,media_sha256,preset,signature,audio_enabled,
+                             item["segment_id"],item["start_ms"],item["kind"]))
         effect={key:item[key] for key in (
             "segment_id","start_ms","end_ms","kind","start_scale_pct",
             "end_scale_pct"
