@@ -98,7 +98,17 @@ class MobileCapturePlaywrightTests(unittest.TestCase):
         ARTIFACTS.mkdir(parents=True,exist_ok=True)
         page.screenshot(path=str(ARTIFACTS/"capture-rehearsal-mobile-320.png"),full_page=True)
         page.wait_for_timeout(900)
-        self.assertGreater(page.locator("#prompter-scroll").evaluate("(el)=>el.scrollTop"),0)
+        diagnostic=page.evaluate("""() => {
+            const el=document.querySelector('#prompter-scroll');
+            return {top:el.scrollTop,scrollHeight:el.scrollHeight,
+              clientHeight:el.clientHeight,clientWidth:el.clientWidth,
+              state:document.querySelector('#capture-state').textContent,
+              timer:document.querySelector('#timer-text').textContent,
+              visible:getComputedStyle(el).visibility,
+              raf:document.visibilityState};
+        }""")
+        self.assertGreater(diagnostic["top"],0,
+                           f"Rehearsal must scroll: {diagnostic}; errors={self.errors}")
         self.assertTrue(page.locator("#download-panel").is_hidden())
         self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"),320)
         page.locator("#rehearsal-toggle").click()
@@ -174,7 +184,16 @@ class DesktopCapturePlaywrightTests(unittest.TestCase):
         page.wait_for_timeout(1100)
         scroll=page.locator("#prompter-scroll")
         before=scroll.evaluate("(el)=>el.scrollTop")
-        self.assertGreater(before,3)
+        diagnostic=page.evaluate("""() => {
+            const el=document.querySelector('#prompter-scroll');
+            return {top:el.scrollTop,scrollHeight:el.scrollHeight,
+              clientHeight:el.clientHeight,clientWidth:el.clientWidth,
+              state:document.querySelector('#capture-state').textContent,
+              timer:document.querySelector('#timer-text').textContent,
+              raf:document.visibilityState};
+        }""")
+        self.assertGreater(before,3,
+                           f"Rehearsal must advance: {diagnostic}; errors={self.errors}")
         page.locator("#speed").evaluate("""(el)=>{
           el.value="220";el.dispatchEvent(new Event("input",{bubbles:true}));
         }""")
