@@ -82,12 +82,22 @@
         </div>
         <div class="transport">
           <button id="activate-camera" type="button" class="button primary">Attiva fotocamera</button>
+          <button id="rehearsal-toggle" type="button" class="button secondary rehearsal-action"
+            aria-pressed="false" title="Prova la velocità del gobbo senza registrare">
+            <span aria-hidden="true">▶</span> Prova gobbo
+          </button>
+          <button id="rehearsal-restart" type="button" class="button secondary rehearsal-restart"
+            title="Ricomincia lo scorrimento dall'inizio" hidden>↺ Dall'inizio</button>
           <button id="record-start" type="button" class="button recording" hidden>● Registra</button>
           <button id="record-stop" type="button" class="button danger" hidden>■ Termina registrazione</button>
           <button id="new-take" type="button" class="button secondary" hidden>Nuovo take</button>
           <button id="switch-camera" type="button" class="button secondary compact" aria-label="Cambia fotocamera" title="Cambia fotocamera" hidden>↻</button>
           <button id="toggle-scroll" type="button" class="button secondary compact" aria-label="Pausa scorrimento" title="Pausa o riprendi gobbo" hidden>Ⅱ</button>
         </div>
+        <p id="rehearsal-hint" class="rehearsal-hint" role="status" aria-live="polite" hidden>
+          <span class="rehearsal-dot" aria-hidden="true"></span>
+          <span id="rehearsal-hint-text">Prova in corso · Nessun video viene registrato.</span>
+        </p>
         <section id="download-panel" class="download-panel" hidden aria-labelledby="download-title">
           <p class="eyebrow">TAKE PRONTO</p>
           <h2 id="download-title">Video registrato, pronto da salvare.</h2>
@@ -112,6 +122,8 @@ La lezione pratica? Controlla sempre i file di configurazione prima di pubblicar
         </label>
         <div class="slider-line"><label for="speed">Velocità gobbo</label><strong id="speed-value">120 parole/min</strong></div>
         <input id="speed" type="range" min="50" max="220" step="5" value="120">
+        <p class="speed-rehearsal-tip">Usa <strong>Prova gobbo</strong> prima di registrare: puoi cambiare
+          la velocità in diretta, fermarti e ricominciare. Non serve attivare la fotocamera.</p>
         <div class="slider-line"><label for="font-size">Dimensione testo</label><strong id="font-value">26 px</strong></div>
         <input id="font-size" type="range" min="20" max="44" step="2" value="26">
         <label class="field" for="prompter-position"><span>Posizione del gobbo</span>
