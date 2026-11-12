@@ -33,6 +33,40 @@ MAX_INPUT_SEGMENTS = 200
 MAX_WORD_PHRASES = 1000
 MAX_CANDIDATES = 18
 
+CUSTOM_LIMITS = {"max_per_min":(1,10), "gap_ms":(2500,12000),
+                 "punch_pct":(105,125), "push_pct":(105,120),
+                 "push_ms":(1200,4000)}
+
+
+def _config(preset: str, overrides: dict | None) -> tuple[dict, bool]:
+    if overrides is None:
+        return dict(PROFILE_RULES[preset]), False
+    if preset != "personalizzato" or not isinstance(overrides,dict):
+        raise ValueError("Only personalizzato accepts custom settings")
+    if set(overrides)!=(set(CUSTOM_LIMITS)|{"use_audio_energy"}):
+        raise ValueError("Incomplete or unknown custom FX settings")
+    cfg=dict(PROFILE_RULES[preset])
+    for name,(low,high) in CUSTOM_LIMITS.items():
+        value=overrides[name]
+        if type(value) is not int or not low<=value<=high:
+            raise ValueError(f"Invalid custom FX setting {name}")
+        cfg[name]=value
+    if type(overrides["use_audio_energy"]) is not bool:
+        raise ValueError("Invalid use_audio_energy toggle")
+    if cfg["gap_ms"]<cfg["push_ms"]:
+        raise ValueError("FX gap cannot be shorter than the push duration")
+    return cfg,overrides["use_audio_energy"]
+
+
+def _audio_peaks(waveform: list[int] | None) -> list[int]:
+    if waveform is None:
+        return []
+    if (not isinstance(waveform,list) or len(waveform)!=900 or
+            any(type(v) is not int or not 0<=v<=1000 for v in waveform)):
+        raise ValueError("Invalid measured waveform")
+    return waveform
+
+
 
 def _as_ms(value: Any) -> int | None:
     if type(value) is int and 0 <= value <= 172_800_000:
@@ -64,6 +98,8 @@ def propose_visual_fx(
     *,
     segments: list[dict], transcript: dict | None, existing: list[dict],
     preset: str, media_sha256: str, base_revision: int,
+    overrides: dict | None = None, waveform: list[int] | None = None,
+    source_duration_ms: int | None = None,
 ) -> dict:
     if preset not in PROFILE_RULES or type(preset) is not str:
         raise ValueError("Unsupported visual FX preset")
@@ -75,7 +111,10 @@ def propose_visual_fx(
         raise ValueError("Invalid KEEP segment list")
     if not isinstance(existing, list) or len(existing) > MAX_CANDIDATES:
         raise ValueError("Invalid existing visual FX")
-    rule = PROFILE_RULES[preset]
+    rule, audio_enabled = _config(preset,overrides)
+    peaks = _audio_peaks(waveform) if audio_enabled else []
+    if peaks and (type(source_duration_ms) is not int or not 0<source_duration_ms<=172_800_000):
+        raise ValueError("Waveform requires precise media duration")
     proposals = []
     output_offset = 0
     last_end = 0
@@ -122,6 +161,32 @@ def propose_visual_fx(
                         "evidence_ms":moment,"evidence_value":1,
                     })
                     break
+        # Optional waveform energy is a technical onset, never an emotional
+        # importance score. The original PCM envelope already exists locally.
+        if peaks and duration >= rule["push_ms"]+900:
+            lo=max(4,math.ceil((a+650)*len(peaks)/source_duration_ms))
+            hi=min(len(peaks)-1,math.floor((b-rule["push_ms"]-150)*len(peaks)/source_duration_ms))
+            if lo<=hi:
+                rises=[]
+                for j in range(lo,hi+1):
+                    baseline=sum(peaks[j-4:j])/4
+                    delta=peaks[j]-baseline
+                    if peaks[j]>=620 and delta>=330:
+                        rises.append((delta,j))
+                if rises:
+                    delta,j=max(rises)
+                    moment=round(j*source_duration_ms/len(peaks))
+                    if moment>=a+650 and moment+rule["push_ms"]+150<=b:
+                        proposals.append({
+                            "priority": 65,
+                            "source_output_ms":output_offset+(moment-a),
+                            "kind":"slow_push","segment_id":seg_id,
+                            "start_ms":moment,"end_ms":moment+rule["push_ms"],
+                            "start_scale_pct":100,
+                            "end_scale_pct":rule["push_pct"],
+                            "reason":"measured_waveform_rise",
+                            "evidence_ms":moment,"evidence_value":round(delta),
+                        })
         output_offset += duration
         last_end=b
     # The budget is a maximum, not a quota. Empty is success.
@@ -161,7 +226,10 @@ def propose_visual_fx(
     return {
         "engine": ENGINE, "preset":preset,"base_revision":base_revision,
         "media_sha256":media_sha256,
-        "missing_signals":["prosody","face_tracking","scene_detection"] +
+        "effective_profile": {key:rule[key] for key in CUSTOM_LIMITS},
+        "audio_energy_used": bool(peaks),
+        "missing_signals":(["waveform_energy"] if audio_enabled and not peaks else []) +
+                          ["semantic_prosody","face_tracking","scene_detection"] +
                           ([] if phrases else ["asr_phrases"]),
         "total_output_ms":output_offset,
         "candidates":chosen,
