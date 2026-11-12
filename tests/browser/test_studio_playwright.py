@@ -144,10 +144,13 @@ class StudioPlaywrightAudit(unittest.TestCase):
         preview=self.wait_state("preview","completed",timeout=120000)
         self.assertTrue(preview["preview_ready"])
         self.shot("video-fx-rendered-preview")
-        self.page.locator("#undo-action").click()
+        # The cut-review workspace deliberately collapses the project rail;
+        # keyboard history shortcuts must remain usable across workspaces.
+        self.wait_condition(lambda: self.page.locator("#visual-fx-preview").is_enabled())
+        self.page.keyboard.press("Control+z")
         undone=self.wait_state("revision",added["project_revision"]+1)
         self.assertEqual(undone["video_fx"],[])
-        self.page.locator("#redo-action").click()
+        self.page.keyboard.press("Control+Shift+z")
         redone=self.wait_state("revision",undone["project_revision"]+1)
         self.assertEqual(len(redone["video_fx"]),1)
         self.assertEqual(redone["video_fx"][0],fx)
