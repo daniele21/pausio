@@ -713,6 +713,8 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.wait_condition(lambda:self.page.locator('[data-mode="rendered"]').get_attribute(
             "aria-pressed")=="true")
         self.assertTrue(self.page.locator("#caption-overlay").is_hidden())
+        self.page.locator('[data-workspace-nav="media"]').click()
+        self.assertTrue(self.page.locator("#project-export").is_visible())
         with self.page.expect_download() as download:
             self.page.locator("#project-export").click()
         saved=self.root/"caption-project.pausio.json"
