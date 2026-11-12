@@ -152,6 +152,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertTrue(self.page.locator("#selection-inspector").is_visible())
         self.assertEqual(self.page.locator(".workspace-audio-item.is-selected").count(),1)
         self.assertEqual(self.page.locator("#app").get_attribute("data-workspace"),"audio")
+        self.shot("audio-fx-selected-1440")
         self.assertEqual(self.page.locator(".fx-clip-mark.is-selected").count(),
                          self.page.locator(".fx-clip-mark").count())
         self.assertEqual(self.state()["project_revision"],selected_revision)
@@ -342,6 +343,10 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertEqual(self.page.locator("#app").get_attribute("data-workspace"),"cuts")
         self.assertEqual(self.page.locator(".segment-card.is-selected").count(),1)
         self.assertEqual(self.page.locator(".timeline-region.is-selected").count(),1)
+        input_rect=self.page.locator(".segment-card.is-selected .start-input").bounding_box()
+        approve_rect=self.page.locator("#approve-action").bounding_box()
+        self.assertLess(input_rect["y"]+input_rect["height"],approve_rect["y"]+2,
+                        "Selected cut properties should be visible above approval")
         self.shot("selected-cut-workspace-1440")
         self.assertEqual(self.state()["project_revision"],revision)
         self.page.locator("#selection-goto").click()
@@ -641,6 +646,10 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertTrue(self.page.locator("#workspace-caption-library").is_visible())
         self.assertEqual(self.page.locator(".workspace-caption-item").count(),len(updated["captions"]))
         self.assertEqual(self.page.locator(".workspace-caption-item.is-selected").count(),1)
+        text_rect=self.page.locator(".caption-edit-card.is-selected textarea").bounding_box()
+        approve_rect=self.page.locator("#approve-action").bounding_box()
+        self.assertLess(text_rect["y"]+text_rect["height"],approve_rect["y"]+2,
+                        "Selected caption text should be accessible above approval")
         self.shot("caption-workspace-1440")
         self.page.locator("#workspace-caption-search").fill("Nessuna frase corrispondente")
         self.assertEqual(self.page.locator(".workspace-caption-item").count(),0)
