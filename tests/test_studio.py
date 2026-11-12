@@ -452,6 +452,45 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         self.assertFalse(new_state["approved"])
         self.assertEqual(len(self.workspace.tape.commands),2)
 
+    def test_face_reframing_is_readonly_until_typed_approval(self):
+        from unittest.mock import patch
+        self.import_clip()
+        status,_,raw=self.post("/api/plan",{"segments":[
+            {"start_ms":0,"end_ms":3900}
+        ]})
+        self.assertEqual(status,200,raw)
+        state=json.loads(raw)
+        seg=state["editor_segments"][0]
+        effect={"id":"a"*32,"segment_id":seg["id"],
+                "start_ms":400,"end_ms":2400,"kind":"slow_push",
+                "start_scale_pct":100,"end_scale_pct":116,
+                "anchor_x_pct":50,"anchor_y_pct":50}
+        status,_,raw=self.post("/api/command",{
+            "revision":state["project_revision"],"type":"video.transform.add",
+            "payload":{"effect":effect}})
+        self.assertEqual(status,200,raw)
+        edited=json.loads(raw)
+        with patch("pausio.studio.propose_face_anchor",return_value={
+            "status":"ready","anchor_x_pct":78,"anchor_y_pct":44,
+            "samples":5,"method":"local-haar-stable-crop-v1"
+        }):
+            status,_,raw=self.post("/api/visual-fx/face-anchor",{
+                "revision":edited["project_revision"],"effect_id":effect["id"]})
+        self.assertEqual(status,200,raw)
+        suggestion=json.loads(raw)
+        self.assertEqual(suggestion["status"],"ready")
+        self.assertEqual(suggestion["media_sha256"],self.workspace.media_sha256)
+        self.assertEqual(self.get_state()["video_fx"],[effect])
+        self.assertEqual(self.get_state()["project_revision"],edited["project_revision"])
+        self.assertEqual(self.post("/api/visual-fx/face-anchor",{
+            "revision":-1,"effect_id":effect["id"]})[0],409)
+        approved={**effect,"anchor_x_pct":78,"anchor_y_pct":44}
+        status,_,raw=self.post("/api/command",{
+            "revision":edited["project_revision"],"type":"video.transform.update",
+            "payload":{"effect":approved}})
+        self.assertEqual(status,200,raw)
+        self.assertEqual(json.loads(raw)["video_fx"],[approved])
+
     def test_visual_fx_readonly_suggestions_then_typed_preview_and_export(self):
         self.import_clip()
         initial=self.get_state()
