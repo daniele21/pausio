@@ -926,7 +926,7 @@ function drawFx(){
       mark.className="fx-clip-mark"+(clip.available?"":" missing")+
         ((clip.muted||currentAudioMix().fx_muted)?" is-muted":"");
       mark.dataset.clipId=clip.id;
-      mark.addEventListener("click",()=>{if(!dragHandleActive)selectEditorItem("fx",clip.id);});
+      mark.addEventListener("click",()=>{if(!dragHandleActive)selectEditorItem("fx",clip.id,{seek:true});});
       mark.title=clip.filename+" · inizio nel montaggio "+msFormat(clip.start_ms,true)+" · trascina o usa le frecce";
       mark.setAttribute("aria-label","Sposta effetto "+clip.filename+", inizio "+
         msFormat(clip.start_ms,true)+" nel montaggio. Frecce ±0,1 s; Shift ±0,5 s.");
@@ -1112,7 +1112,10 @@ function drawTimeline(){
     choose.setAttribute("aria-label","Seleziona intervallo "+(index+1)+", "+
       msFormat(s.start_ms,true)+" – "+msFormat(s.end_ms,true));
     choose.addEventListener("click",event=>{
-      event.stopPropagation();selectEditorItem("segment",s.id,{seek:true});
+      // Mouse: keep the original ruler scrub position. Keyboard: seek to start.
+      const keyboard=event.detail===0;
+      if(keyboard)event.stopPropagation();
+      selectEditorItem("segment",s.id,{seek:keyboard});
     });
     div.append(choose);
     div.style.left=(s.start_ms/duration*100).toFixed(4)+"%";
