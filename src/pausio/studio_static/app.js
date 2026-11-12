@@ -619,7 +619,7 @@ function syncEditorSelection(){
   for(const region of document.querySelectorAll(".timeline-region")){
     const isSelected=selected?.type==="segment"&&region.dataset.segmentId===selected.value.id;
     region.classList.toggle("is-selected",!!isSelected);
-    region.setAttribute("aria-pressed",String(!!isSelected));
+    region.querySelector(".region-select")?.setAttribute("aria-pressed",String(!!isSelected));
   }
   for(const item of document.querySelectorAll(".fx-item, .fx-clip-mark")){
     const isSelected=selected?.type==="fx"&&item.dataset.clipId===selected.value.id;
@@ -1043,16 +1043,16 @@ function drawTimeline(){
   for(const s of keep){
     const index=keep.indexOf(s),prev=index?keep[index-1]:null,next=keep[index+1]||null;
     const div=document.createElement("div");div.className="timeline-region";
-    div.dataset.segmentId=s.id;div.tabIndex=0;
-    div.setAttribute("role","button");div.setAttribute("aria-pressed","false");
-    div.setAttribute("aria-label","Seleziona intervallo "+(index+1)+", "+
+    div.dataset.segmentId=s.id;
+    const choose=document.createElement("button");
+    choose.type="button";choose.className="region-select";
+    choose.setAttribute("aria-pressed","false");
+    choose.setAttribute("aria-label","Seleziona intervallo "+(index+1)+", "+
       msFormat(s.start_ms,true)+" – "+msFormat(s.end_ms,true));
-    div.addEventListener("click",()=>selectEditorItem("segment",s.id));
-    div.addEventListener("keydown",event=>{
-      if(!["Enter","Space"].includes(event.code))return;
-      event.preventDefault();event.stopPropagation();
-      selectEditorItem("segment",s.id,{seek:true});
+    choose.addEventListener("click",event=>{
+      event.stopPropagation();selectEditorItem("segment",s.id,{seek:true});
     });
+    div.append(choose);
     div.style.left=(s.start_ms/duration*100).toFixed(4)+"%";
     div.style.width=((s.end_ms-s.start_ms)/duration*100).toFixed(4)+"%";
     div.title="Mantieni "+msFormat(s.start_ms,true)+" – "+msFormat(s.end_ms,true);
