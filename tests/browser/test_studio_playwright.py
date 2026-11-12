@@ -144,6 +144,16 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertTrue(self.page.locator("#fx-panel").is_visible())
         self.assertEqual(self.page.locator(".fx-item").count(), 1)
         self.assertEqual(self.page.locator(".fx-item audio").count(), 1)
+        selected_revision=self.state()["project_revision"]
+        self.page.locator(".fx-select").first.click()
+        self.assertTrue(self.page.locator("#selection-inspector").is_visible())
+        self.assertEqual(self.page.locator("#app").get_attribute("data-workspace"),"audio")
+        self.assertEqual(self.page.locator(".fx-clip-mark.is-selected").count(),
+                         self.page.locator(".fx-clip-mark").count())
+        self.assertEqual(self.state()["project_revision"],selected_revision)
+        self.page.locator("#selection-goto").click()
+        self.assertTrue(self.page.locator(".fx-item.is-selected input").first.evaluate(
+            "(node)=>document.activeElement===node"))
         # Regression: FX used to be displayed as a waveform but silent during
         # ordinary video playback. The live monitor must follow the video clock.
         self.assertTrue(self.page.locator("#fx-monitor-toggle").is_visible())
@@ -317,6 +327,32 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.wait_condition(lambda: len(self.state()["audio_clips"])==1)
         self.assertFalse(self.errors,self.errors)
 
+
+
+    def test_timeline_selection_updates_existing_inspector_without_edit(self):
+        self.upload_analyze()
+        revision=self.state()["project_revision"]
+        self.assertGreaterEqual(self.page.locator(".region-select").count(),2)
+        self.page.locator(".segment-select").first.click()
+        self.assertTrue(self.page.locator("#selection-inspector").is_visible())
+        self.assertEqual(self.page.locator("#app").get_attribute("data-workspace"),"cuts")
+        self.assertEqual(self.page.locator(".segment-card.is-selected").count(),1)
+        self.assertEqual(self.page.locator(".timeline-region.is-selected").count(),1)
+        self.assertEqual(self.state()["project_revision"],revision)
+        self.page.locator("#selection-goto").click()
+        self.assertTrue(self.page.locator(".segment-card.is-selected .start-input").evaluate(
+            "(node)=>document.activeElement===node"))
+        self.page.locator(".region-select").last.focus()
+        self.page.locator(".region-select").last.press("Enter")
+        self.assertEqual(self.page.locator(".region-select[aria-pressed='true']").count(),1)
+        self.assertTrue(self.page.locator("#selection-title").inner_text().startswith(
+            "Intervallo "))
+        self.assertEqual(self.state()["project_revision"],revision)
+        self.page.locator("#selection-clear").click()
+        self.assertFalse(self.page.locator("#selection-inspector").is_visible())
+        self.assertEqual(self.page.locator(".timeline-region.is-selected").count(),0)
+        self.assertEqual(self.state()["project_revision"],revision)
+        self.assertFalse(self.errors,self.errors)
 
     def test_desktop_navigation_and_resizable_timeline(self):
         self.assertTrue(self.page.locator(".studio-navigation").is_visible())
