@@ -49,6 +49,7 @@ ASSETS = {
     "/styles.css": ("styles.css", "text/css; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
     "/visual_fx_ui.js": ("visual_fx_ui.js", "text/javascript; charset=utf-8"),
+    "/visual_transition_ui.js": ("visual_transition_ui.js", "text/javascript; charset=utf-8"),
     "/capture": ("capture.html", "text/html; charset=utf-8"),
     "/capture.html": ("capture.html", "text/html; charset=utf-8"),
     "/capture.css": ("capture.css", "text/css; charset=utf-8"),
@@ -157,6 +158,7 @@ class StudioWorkspace:
                 "audio_clips": [{**dict(c), "available": (self._audio_path(c["asset_sha256"]).is_file() and not self._audio_path(c["asset_sha256"]).is_symlink())} for c in self.tape.view.audio_clips] if self.tape else [],
                 "audio_mix": dict(self.tape.view.audio_mix) if self.tape else default_audio_mix(),
                 "video_fx": [dict(fx) for fx in self.tape.view.video_fx] if self.tape else [],
+                "video_transitions": [dict(t) for t in self.tape.view.video_transitions] if self.tape else [],
                 "caption_style": self.tape.view.caption_style if self.tape else "social",
                 "caption_config": self.tape.view.caption_config if self.tape else CAPTION_PRESETS["social"],
                 "caption_presets": CAPTION_PRESETS,
@@ -650,6 +652,11 @@ class StudioWorkspace:
                                 if key not in {"id","segment_id"}}}
                             for fx in self.tape.view.video_fx
                         ]
+                        current_transitions = [
+                            {"boundary_index":indexed[t["left_segment_id"]],
+                             "kind":t["kind"],"duration_ms":t["duration_ms"]}
+                            for t in self.tape.view.video_transitions
+                        ]
                     mapped = remap_captions(current_captions, plan.segments)
                     render(
                         source, self.directory / ("preview.mp4" if kind == "preview" else "export.mp4"),
@@ -659,6 +666,7 @@ class StudioWorkspace:
                         caption_config=current_config,
                         audio_fx=active_fx, audio_mix=current_audio_mix,
                         video_fx=current_visual_fx,
+                        video_transitions=current_transitions,
                     )
                     with self.lock:
                         if kind == "preview":

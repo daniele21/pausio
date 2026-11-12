@@ -83,7 +83,8 @@ class LocalMCPProtocolTests(unittest.TestCase):
             with self.assertRaises(MCPToolError):
                 call_tool("pausio_suggest_visual_fx",candidate,self.studio)
         for kind in ("video.transform.add","video.transform.update",
-                     "video.transform.remove"):
+                     "video.transform.remove", "video.transition.add",
+                     "video.transition.update", "video.transition.remove"):
             request={"revision":4,"type":kind,"payload":{}}
             changed=call_tool("pausio_apply_command",request,self.studio)
             self.assertEqual(changed["project_revision"],5)
