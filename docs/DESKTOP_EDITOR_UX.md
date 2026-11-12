@@ -47,14 +47,34 @@ individually movable subtitle cues **are not claimed to exist** in v0.1.0.
   timeline must remain after the preview and before inspector. Navigation rail
   and drag-resize affordance are desktop-only.
 
+## Additional implemented increments (P1 / first P2 slice)
+
+- **P1 selection:** A single ephemeral `editorSelection` state links actual
+  KEEP segment IDs and imported FX clip IDs between timeline and existing
+  inspector controls. Selection uses real buttons and keyboard activation,
+  highlights the chosen item, seeks to the right source/output timestamp, and
+  switches to the relevant workspace.
+- **No hidden edit:** Selecting, focusing, changing tabs, or clearing selection
+  never invokes a project command or changes project revision. Real edits
+  still use validated `segment.update`, `audio.update`, `audio.clip.mix`,
+  and `caption.correct` commands as before.
+- **P2 caption cue preview:** A new subtitle lane visualizes real caption cue
+  timestamps on the **source-time** timeline. Clicking a cue selects the
+  corresponding existing caption correction field; the cue layout has no
+  independent editable state. Excluded source spans remain visible as source
+  references but are omitted by the deterministic final render.
+- **QA added:** Playwright regression assertions now cover read-only segment,
+  FX and caption selection; time ruler alignment; workspace switching; focus
+  targeting and preservation of project revision. Browser QA and screenshots
+  must still be executed before merge.
+
 ## Next milestones
 
-### P1 — clip-centric timeline and contextual inspector
+### P1 — clip-centric timeline and contextual inspector (partly implemented)
 
-- Add a single ephemeral `EditorSelection` model (clip ID/type, source/output
-  time, no shadow authoritative media timeline).
-- Click on a KEEP segment or FX clip selects it; inspector shows its real,
-  supported properties, with keyboard selection and clear focus.
+- Selection and inspector cross-navigation are implemented (see above).
+- Continue consolidating true contextual properties of the selected FX/segment
+  without duplicating controls in multiple locations.
 - Improve track headers and use a compact per-track mixer control without
   adding multiple competing volume sliders.
 - Add better ruler ticks, playhead-centered zoom and timecode inspection;
@@ -62,14 +82,17 @@ individually movable subtitle cues **are not claimed to exist** in v0.1.0.
 - If a proposed edit needs a new command type, add reducer, schema, migration,
   replay, Undo/Redo, FFmpeg export and tests before enabling the UI control.
 
-### P2 — text and subtitles workspace
+### P2 — text and subtitles workspace (caption lane preview implemented)
 
-- Build a list of transcript/caption blocks with selected-cue focus and
-  synchronized seek; keep caption word timestamps from local ASR.
+- The existing caption correction list can be selected from the cue track,
+  with source-time seek and selected field focus.
+- Continue improving fast transcript readability and search/selection across
+  recognized words, preserving exact local ASR timestamps.
 - Expose existing caption commands, font/preset/position, and live preview
   with social platform safe-area overlay.
-- Add a real subtitle cue track only after its source/edited time semantics
-  and keyboard/dragging contract are designed and tested.
+- The cue lane is currently **select-only**; before allowing temporal dragging,
+  define and implement a dedicated typed cue-time command with reducer,
+  schema validation, FFmpeg remapping and undo/replay tests.
 - Avoid fake controls for media speed, fades, per-word animation, SRT export.
 
 ### P3 — QA and polish
