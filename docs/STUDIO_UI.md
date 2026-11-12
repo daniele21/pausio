@@ -1,5 +1,17 @@
 # Pausio Studio — local UX testing guide
 
+## Registrazione verticale da webcam PC
+
+Avvia il medesimo Studio con il venv già esistente, poi apri `/capture`
+sulla stessa porta localhost. Capture usa webcam/microfono scelti,
+composizione crop 9:16 con pannello di inquadratura e gobbo non registrato.
+Una volta scaricato il take, la pagina locale offre
+**Usa questo take in Pausio Studio**: chiama l'API di import già esistente,
+senza dover usare un doppio download/upload manuale. Se uno Studio contiene
+già materiale da montare, Capture richiede conferma prima di sostituirlo.
+Per un file da GitHub Pages rimane il download locale.
+Vedi [Capture su desktop/mobile](MOBILE_CAPTURE.md).
+
 ## Start in one command
 
 With Python 3.11+, FFmpeg and FFprobe on PATH, install once (`pip install -e .`) and launch `pausio studio`. A browser opens `http://127.0.0.1:8765` if available. When occupied, Pausio binds the next free loopback port (`8766`, `8767`, ...), prints the actual URL and opens that URL. `--port 8877` changes the starting port; `--no-open` disables browser launch. Port fallback does not bypass the one-process-per-workspace lock: stop an existing Pausio instance using the same saved session or explicitly select another data directory. Stop with Ctrl+C. The session remains privately stored on disk until explicitly deleted. No Node.js, internet, account, CDN or app-server framework is required.
