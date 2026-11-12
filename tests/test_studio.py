@@ -456,13 +456,13 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         from unittest.mock import patch
         self.import_clip()
         status,_,raw=self.post("/api/plan",{"segments":[
-            {"start_ms":0,"end_ms":3900}
+            {"start_ms":0,"end_ms":1400}
         ]})
         self.assertEqual(status,200,raw)
         state=json.loads(raw)
         seg=state["editor_segments"][0]
         effect={"id":"a"*32,"segment_id":seg["id"],
-                "start_ms":400,"end_ms":2400,"kind":"slow_push",
+                "start_ms":200,"end_ms":1100,"kind":"slow_push",
                 "start_scale_pct":100,"end_scale_pct":116,
                 "anchor_x_pct":50,"anchor_y_pct":50}
         status,_,raw=self.post("/api/command",{
