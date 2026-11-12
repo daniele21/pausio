@@ -1,5 +1,8 @@
 # Pausio visual FX — open-source research and configurable automation
 
+**Feature adoption decision:** [per-repository feature matrix and implementation priorities](VISUAL_FX_FEATURE_ADOPTION_MATRIX.md). This document researches patterns; the matrix states which parts to adopt, adapt, defer or reject and how they map to each Pausio preset.
+
+
 Status: **design/contract only**. Reviewed on 12 November 2026. No zoom, tracking or automatic transition engine is shipped by this change. Start from [Visual Motion Effects Plan](VISUAL_MOTION_EFFECTS_PLAN.md), WP2b. The user's creative goal is short natural talking-head videos, not high-frequency template effects.
 
 ## Repository research — actionable implementation patterns
