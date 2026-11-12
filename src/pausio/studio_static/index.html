@@ -373,7 +373,17 @@
                 <p class="caption-hint">Correggi una frase e premi Salva. Ogni modifica viene salvata nel progetto e richiede nuova conferma del montaggio.</p>
               </div>
             </section>
-            <div class="transcript-list" id="transcript-list"></div>
+            <div class="transcript-review" id="transcript-review" hidden>
+              <label for="transcript-search">Cerca nella trascrizione</label>
+              <input id="transcript-search" type="search" autocomplete="off"
+                placeholder="Cerca una parola o una frase...">
+              <div class="transcript-review-actions">
+                <span id="transcript-match-count" role="status">Nessuna frase</span>
+                <button id="transcript-previous" type="button" aria-label="Frase precedente" disabled>↑</button>
+                <button id="transcript-next" type="button" aria-label="Frase successiva" disabled>↓</button>
+              </div>
+            </div>
+            <div class="transcript-list" id="transcript-list" aria-label="Frasi trascritte"></div>
           </div>
         </div>
     <section class="fx-panel" id="fx-panel" aria-labelledby="fx-title" hidden>
@@ -425,6 +435,9 @@
           </label>
           <button class="timeline-tool-button" id="timeline-zoom-in" type="button"
             aria-label="Aumenta zoom timeline" title="Aumenta zoom timeline">+</button>
+          <label class="timeline-snap-toggle" title="Aggancia i confini dei sottotitoli a tagli e frasi vicine">
+            <input type="checkbox" id="timeline-snap" checked> Snap
+          </label>
           <button class="timeline-locate-button" id="timeline-center-playhead" type="button" disabled
             title="Porta il cursore di riproduzione al centro della timeline">
             <span aria-hidden="true">⌖</span> Cursore
