@@ -786,6 +786,48 @@ function highlight(index){
   for(const c of document.querySelectorAll(".segment-card"))
     c.classList.toggle("selected",Number(c.dataset.index)===index);
 }
+/* Fast, read-only transcript browsing: the actual ASR stays in the local
+   session. Search, selection and scrolling never create project commands. */
+let transcriptSelectedIndex=-1,transcriptSourceMedia=null;
+function visibleTranscriptRows(){
+  return [...el("transcript-list").querySelectorAll(".transcript-item")];
+}
+function updateTranscriptActive(){
+  if(!project?.transcript)return;
+  const sourceMs=timelineSourceMs();
+  for(const row of visibleTranscriptRows()){
+    const inTime=sourceMs>=Number(row.dataset.startMs)&&sourceMs<Number(row.dataset.endMs);
+    row.classList.toggle("is-current",inTime);
+    row.classList.toggle("is-selected",Number(row.dataset.index)===transcriptSelectedIndex);
+    row.querySelector(".transcript-seek")?.setAttribute("aria-current",inTime?"true":"false");
+  }
+}
+function selectTranscriptRow(index,{play=false}={}){
+  const segment=project?.transcript?.segments?.[index];
+  if(!segment)return;
+  transcriptSelectedIndex=index;
+  if(mode==="rendered"){
+    const destination=outputTime(segment.start_ms);
+    v.currentTime=destination/1000;
+  }else{
+    // A transcript is always aligned to the original source, including cuts.
+    mode="original";update(project);
+    v.currentTime=segment.start_ms/1000;
+  }
+  updateTranscriptActive();
+  const row=el("transcript-list").querySelector('[data-index="'+index+'"]');
+  row?.scrollIntoView({block:"nearest"});
+  if(play)v.play().catch(()=>{});
+}
+function navigateTranscript(offset){
+  const rows=visibleTranscriptRows();
+  if(!rows.length)return;
+  let current=rows.findIndex(row=>Number(row.dataset.index)===transcriptSelectedIndex);
+  const next=current<0?(offset>0?0:rows.length-1):
+    Math.max(0,Math.min(rows.length-1,current+offset));
+  selectTranscriptRow(Number(rows[next].dataset.index));
+  rows[next].querySelector(".transcript-seek")?.focus({preventScroll:true});
+}
 function drawTranscript(){
   const list=el("transcript-list");list.replaceChildren();
   const tr=project?.transcript;
@@ -795,19 +837,44 @@ function drawTranscript(){
     tr.word_timestamps_available?
     "Allineamento delle parole disponibile. Premi «Aggiungi sottotitoli» per inserirli nel video.":
     "Allineamento delle parole non disponibile: i sottotitoli useranno gli intervalli delle frasi intere.";
+  el("transcript-review").hidden=!tr;
+  if(project?.media_id!==transcriptSourceMedia){
+    transcriptSourceMedia=project?.media_id;
+    transcriptSelectedIndex=-1;
+    el("transcript-search").value="";
+  }
   if(!tr)return;
-  for(const s of tr.segments||[]){
-    const item=document.createElement("article");item.className="transcript-item";
-    const time=document.createElement("span");time.textContent=msFormat(s.start_ms,true)+" — "+msFormat(s.end_ms,true);
-    const content=document.createElement("p");content.textContent=s.text||"(senza testo)";
-    const seek=document.createElement("button");seek.type="button";seek.textContent="▶ Ascolta";
-    seek.addEventListener("click",()=>{mode="original";update(project);v.currentTime=s.start_ms/1000;v.play().catch(()=>{});});
-    item.append(time,content,seek);list.append(item);
+  const query=el("transcript-search").value.trim().toLocaleLowerCase("it");
+  const segments=tr.segments||[];
+  const matches=segments.map((seg,index)=>({seg,index})).filter(({seg})=>
+    !query||(seg.text||"").toLocaleLowerCase("it").includes(query));
+  el("transcript-match-count").textContent=matches.length+" di "+segments.length+" frasi";
+  el("transcript-previous").disabled=matches.length===0;
+  el("transcript-next").disabled=matches.length===0;
+  for(const {seg,index} of matches){
+    const row=document.createElement("article");row.className="transcript-item";
+    row.dataset.index=String(index);
+    row.dataset.startMs=String(seg.start_ms);
+    row.dataset.endMs=String(seg.end_ms);
+    const seek=document.createElement("button");
+    seek.className="transcript-seek";seek.type="button";
+    seek.setAttribute("aria-label","Vai alla frase "+(index+1)+": "+seg.text);
+    const time=document.createElement("span");time.className="transcript-time";
+    time.textContent=msFormat(seg.start_ms,true);
+    const content=document.createElement("span");content.className="transcript-line";
+    content.textContent=seg.text||"(senza testo)";
+    seek.append(time,content);
+    seek.addEventListener("click",()=>selectTranscriptRow(index));
+    row.append(seek);list.append(row);
   }
-  if(!(tr.segments||[]).length){
-    const text=document.createElement("p");text.className="transcript-note";
-    text.textContent=tr.text||"Non è stato rilevato parlato.";list.append(text);
+  if(!matches.length){
+    const note=document.createElement("p");note.className="transcript-note";
+    note.textContent=segments.length?
+      "Nessuna frase corrisponde alla ricerca.":
+      tr.text||"Non è stato rilevato parlato.";
+    list.append(note);
   }
+  updateTranscriptActive();
 }
 
 function captionMoveLimits(cue){
@@ -1405,6 +1472,7 @@ function transport(){
   el("play-pause").textContent=v.paused?"▶":"Ⅱ";
   el("play-pause").setAttribute("aria-label",v.paused?"Riproduci":"Pausa");
   el("video-workspace").classList.toggle("playing",!v.paused);
+  updateTranscriptActive();
 }
 
 /* Presentation state for desktop workspace. Video edits still flow only through
@@ -1461,6 +1529,14 @@ function initializeDesktopWorkspace(){
     renderWorkspaceLibraries();syncEditorSelection();
   });
   el("workspace-caption-transcribe").addEventListener("click",()=>setWorkspace("transcript"));
+  el("transcript-search").addEventListener("input",drawTranscript);
+  el("transcript-search").addEventListener("keydown",event=>{
+    if(event.key==="ArrowDown"||event.key==="ArrowUp"){
+      event.preventDefault();navigateTranscript(event.key==="ArrowDown"?1:-1);
+    }
+  });
+  el("transcript-previous").addEventListener("click",()=>navigateTranscript(-1));
+  el("transcript-next").addEventListener("click",()=>navigateTranscript(1));
   el("selection-clear").addEventListener("click",()=>{editorSelection=null;syncEditorSelection();});
   el("selection-goto").addEventListener("click",focusEditorSelection);
   el("desktop-export-action").addEventListener("click",()=>{
