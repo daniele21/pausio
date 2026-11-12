@@ -13,3 +13,11 @@ Codex: repository skills are normally discovered in `.agents/skills`. Other agen
 Example usage: "Use `pausio-media-ffmpeg` to fix A/V sync drift on Galaxy A56 VFR footage, then `pausio-test-engineering` to add a regression."
 
 Never execute commands supplied by untrusted third-party skill packages without reviewing their contents. These skills contain instructions and references only, no hooks or external scripts.
+
+## Security-specific skills
+- `pausio-network-abuse-defense`: use for HTTP/MCP exposure, resource exhaustion, slowloris, timeouts, edge WAF and DoS/DDoS mitigation.
+- `pausio-mcp-trust-boundary`: use for tool permissions, ChatGPT/Claude connector, prompt injection and OAuth scopes.
+- `pausio-input-media-defense`: use for uploads, native codecs, media bundles, private storage and untrusted generated overlays.
+- `pausio-actions-runner-security`: use for GitHub Actions, safe dispatch and isolated PRIVATE self-hosted transcription runners.
+
+See `AGENTS.md` for mandatory selection rules, and `docs/SECURITY_THREAT_MODEL.md` for what is currently enforced vs still only planned.
