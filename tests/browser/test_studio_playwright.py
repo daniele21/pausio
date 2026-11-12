@@ -729,7 +729,10 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertGreater(dragged["captions"][0]["start_ms"],keyed["captions"][0]["start_ms"])
         self.assertEqual(dragged["project_revision"],keyed["project_revision"]+1)
         updated=dragged
-        self.page.evaluate("() => document.querySelector('#preview-video').currentTime=.45")
+        # Seek inside the retimed cue, not at its former timestamp.
+        self.page.evaluate("""(sec) => {
+          document.querySelector('#preview-video').currentTime=sec;
+        }""",(dragged["captions"][0]["start_ms"]+100)/1000)
         self.wait_condition(lambda:self.page.locator("#caption-overlay").is_visible())
         self.assertIn("Tre",self.page.locator("#caption-overlay").inner_text())
         edit=self.page.locator(".caption-edit-card").first
