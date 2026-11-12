@@ -240,6 +240,8 @@ def _video_transform(raw: Any, segments: list[dict], duration_ms: int) -> dict:
         value = _integer(fx[key], key)
         if not 100 <= value <= 130:
             raise ProjectFormatError("Video zoom limited to 1.00x-1.30x")
+    if fx["kind"] == "ratchet" and end-start < 1200:
+        raise ProjectFormatError("Ratchet needs at least 1.2s for three stable steps")
     if fx["kind"] == "punch" and fx["start_scale_pct"] != fx["end_scale_pct"]:
         raise ProjectFormatError("Punch must have a constant zoom")
     for key in ("anchor_x_pct", "anchor_y_pct"):
