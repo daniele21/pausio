@@ -17,13 +17,18 @@
     quality: $("capture-quality"), panX: $("crop-x"), panY: $("crop-y"), zoom: $("crop-zoom"),
     resetCrop: $("crop-reset"), meter: $("audio-level"), meterFill: $("audio-level-fill"),
     meterValue: $("audio-level-value"), sourceInfo: $("capture-tech-info"),
-    openStudio: $("open-in-studio")
+    openStudio: $("open-in-studio"),
+    rehearse: $("rehearsal-toggle"), rehearsalRestart: $("rehearsal-restart"),
+    rehearsalHint: $("rehearsal-hint"), rehearsalHintText: $("rehearsal-hint-text")
   };
   const STORE_KEY = "pausio-mobile-capture-v1";
   let stream = null, recorder = null, chunks = [], output = null, blobUrl = null;
   let outputName = "", mode = "idle", facing = "user", raf = 0, lastFrame = 0;
   let startedAt = 0, pausedScroll = false, countdownId = 0;
   let savedAfterRecording = false, recordedMime = "";
+  // A rehearsal is strictly presentation state: no MediaRecorder, no take,
+  // no microphone or camera permission required.
+  let rehearsalState = "stopped", rehearsalElapsedMs = 0;
   let compositionActive = false, composeRaf = 0, lastPaint = 0, portraitStream = null;
   let meterRaf = 0, audioContext = null, audioAnalyser = null, meterSource = null;
   let inputWidth = 0, inputHeight = 0, recordedDimensions = null;
@@ -40,14 +45,16 @@
     els.stop.hidden = next !== "recording";
     els.next.hidden = next !== "finished";
     els.flip.hidden = next !== "preview";
-    els.pause.hidden = next !== "preview" && next !== "recording";
+    els.pause.hidden = next !== "recording";
     els.panel.hidden = next !== "finished";
-    els.placeholder.hidden = next !== "idle" && next !== "error";
+    els.placeholder.hidden = next !== "idle" && next !== "error" ||
+      rehearsalState !== "stopped";
     els.live.hidden = next === "finished" || next === "idle" || next === "error";
     els.portrait.hidden = !compositionActive ||
       next === "finished" || next === "idle" || next === "error";
     els.playback.hidden = next !== "finished";
-    els.prompter.hidden = next === "finished" || next === "idle" || next === "error";
+    els.prompter.hidden = next === "finished" || next === "error" ||
+      (next === "idle" && rehearsalState === "stopped");
     els.timer.classList.toggle("live", next === "recording");
     els.state.textContent = {idle:"PRONTO", error:"ERRORE", preview:"CAMERA ATTIVA",
       countdown:"PREPARATI", recording:"REC", stopping:"SALVATAGGIO", finished:"TAKE PRONTO"}[next] || "PRONTO";
@@ -59,6 +66,7 @@
     els.pause.textContent = pausedScroll ? "▶" : "Ⅱ";
     els.pause.setAttribute("aria-label", pausedScroll ? "Riprendi scorrimento" : "Pausa scorrimento");
     els.openStudio.hidden = next !== "finished" || !isLocalStudio;
+    syncRehearsalControls();
   }
   function prefs() {
     try {
@@ -90,27 +98,97 @@
     els.prompter.classList.toggle("middle", els.position.value === "middle");
     $("speed-value").textContent = els.speed.value + " parole/min";
     $("font-value").textContent = els.font.value + " px";
+    syncRehearsalControls();
   }
-  function stopAnimation() { cancelAnimationFrame(raf); raf = 0; lastFrame = 0; }
+  function syncRehearsalControls() {
+    const available=mode==="idle"||mode==="preview";
+    const practicing=available&&rehearsalState!=="stopped";
+    const playing=practicing&&rehearsalState==="playing";
+    els.rehearse.hidden=!available;
+    els.rehearse.disabled=!els.script.value.trim();
+    els.rehearse.setAttribute("aria-pressed",String(playing));
+    els.rehearse.textContent=playing?"Ⅱ Pausa prova":
+      rehearsalState==="paused"?"▶ Riprendi prova":"▶ Prova gobbo";
+    els.rehearse.title=playing?"Metti in pausa la prova, senza registrare":
+      "Prova lo scorrimento del gobbo senza avviare la registrazione";
+    els.rehearsalRestart.hidden=!practicing;
+    els.rehearsalHint.hidden=!practicing;
+    els.rehearsalHintText.textContent=(playing?"PROVA GOBBO":"PROVA IN PAUSA")+
+      " · "+els.speed.value+" parole/min · Nessun video registrato";
+    els.timer.classList.toggle("rehearsal-live",playing);
+    els.frame.classList.toggle("rehearsing",practicing);
+    // The original webcam remains available if already activated.
+    els.placeholder.hidden=practicing||(mode!=="idle"&&mode!=="error");
+    els.prompter.hidden=mode==="finished"||mode==="error"||
+      (mode==="idle"&&!practicing);
+    if(practicing)els.state.textContent=playing?"PROVA GOBBO":"PROVA IN PAUSA";
+    else if(available)els.state.textContent=mode==="preview"?"CAMERA ATTIVA":"PRONTO";
+  }
+  function stopAnimation(){cancelAnimationFrame(raf);raf=0;lastFrame=0;}
   function tick(now) {
-    if (mode !== "recording" && mode !== "preview") { stopAnimation(); return; }
-    if (mode === "recording") {
-      const elapsed = Math.max(0, Math.floor((now - startedAt) / 1000));
-      els.clock.textContent = String(Math.floor(elapsed / 60)).padStart(2, "0")
-        + ":" + String(elapsed % 60).padStart(2, "0");
+    const rehearsing=rehearsalState==="playing"&&
+      (mode==="idle"||mode==="preview");
+    if(mode!=="recording"&&!rehearsing){stopAnimation();return;}
+    if(mode==="recording"){
+      const elapsed=Math.max(0,Math.floor((now-startedAt)/1000));
+      els.clock.textContent=String(Math.floor(elapsed/60)).padStart(2,"0")+
+        ":"+String(elapsed%60).padStart(2,"0");
+    }else if(rehearsing){
+      if(lastFrame)rehearsalElapsedMs+=Math.min(Math.max(now-lastFrame,0),150);
+      const seconds=Math.floor(rehearsalElapsedMs/1000);
+      els.clock.textContent=String(Math.floor(seconds/60)).padStart(2,"0")+
+        ":"+String(seconds%60).padStart(2,"0");
     }
-    if (lastFrame && !pausedScroll && els.autoplay.checked && mode === "recording") {
-      const fontPx = +els.font.value;
-      const charsPerLine = Math.max(10, els.scroll.clientWidth / (fontPx * .54));
-      const wordsPerLine = Math.max(1.6, charsPerLine / 6);
-      const pxPerSecond = ((+els.speed.value / 60) / wordsPerLine) * fontPx * 1.4;
-      els.scroll.scrollTop += Math.min((now - lastFrame) / 1000, .15) * pxPerSecond;
+    if(lastFrame&&
+      (rehearsing||(mode==="recording"&&!pausedScroll&&els.autoplay.checked))){
+      const fontPx=+els.font.value;
+      const charsPerLine=Math.max(10,els.scroll.clientWidth/(fontPx*.54));
+      const wordsPerLine=Math.max(1.6,charsPerLine/6);
+      const pxPerSecond=((+els.speed.value/60)/wordsPerLine)*fontPx*1.4;
+      els.scroll.scrollTop+=Math.min(Math.max(now-lastFrame,0)/1000,.15)*pxPerSecond;
     }
-    lastFrame = now;
-    raf = requestAnimationFrame(tick);
+    lastFrame=now;
+    raf=requestAnimationFrame(tick);
   }
-  function resetScroll() {
-    stopAnimation(); els.scroll.scrollTop = 0; pausedScroll = false; els.clock.textContent = "00:00";
+  function resetScroll(){
+    stopAnimation();
+    rehearsalState="stopped";
+    rehearsalElapsedMs=0;
+    els.scroll.scrollTop=0;
+    pausedScroll=false;
+    els.clock.textContent="00:00";
+    syncRehearsalControls();
+  }
+  function toggleRehearsal(){
+    if(!["idle","preview"].includes(mode)||!els.script.value.trim())return;
+    if(rehearsalState==="playing"){
+      rehearsalState="paused";
+      stopAnimation();
+      syncRehearsalControls();
+      notice("Prova in pausa. Regola la velocità e premi Riprendi prova.");
+      return;
+    }
+    if(rehearsalState==="stopped"){
+      els.scroll.scrollTop=0;
+      rehearsalElapsedMs=0;
+      els.clock.textContent="00:00";
+    }
+    stopAnimation(); // Resume without counting hidden-tab or paused time.
+    rehearsalState="playing";
+    syncRehearsalControls();
+    notice("Prova del gobbo: nessun video viene registrato. Regola la velocità in diretta.");
+    raf=requestAnimationFrame(tick);
+  }
+  function restartRehearsal(){
+    if(!["idle","preview"].includes(mode)||!els.script.value.trim())return;
+    stopAnimation();
+    els.scroll.scrollTop=0;
+    rehearsalElapsedMs=0;
+    els.clock.textContent="00:00";
+    rehearsalState="playing";
+    syncRehearsalControls();
+    notice("Gobbo ripartito dall'inizio, senza registrare.");
+    raf=requestAnimationFrame(tick);
   }
   function supportedMime() {
     if (!window.MediaRecorder) return "";
@@ -472,6 +550,8 @@
     els.videoDevice.value="";
     await activateCamera();
   });
+  els.rehearse.addEventListener("click",toggleRehearsal);
+  els.rehearsalRestart.addEventListener("click",restartRehearsal);
   els.start.addEventListener("click", startRecording);
   els.stop.addEventListener("click", stopRecording);
   els.next.addEventListener("click", newTake);
@@ -483,6 +563,10 @@
     if (el === els.speed || el === els.font) el.addEventListener("input", () => { refreshPrompter(); remember(); });
   }
   document.addEventListener("visibilitychange", () => {
+    if(document.hidden&&rehearsalState==="playing"){
+      toggleRehearsal();
+      notice("Prova gobbo in pausa: torna alla pagina per riprendere.");
+    }
     if (document.hidden && (mode === "recording" || mode === "countdown")) {
       notice("Non bloccare lo schermo: il browser può interrompere fotocamera e registrazione.", true);
     }
