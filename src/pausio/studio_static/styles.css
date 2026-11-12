@@ -1120,18 +1120,27 @@ a { color: inherit; text-decoration: none; }
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
-.timeline-region {
-  pointer-events: auto;
+.region-select {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  z-index: 3;
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  padding: 0;
   cursor: pointer;
+  pointer-events: auto;
+}
+.region-select:focus-visible {
+  outline: 3px solid var(--accent-bright);
+  outline-offset: 4px;
 }
 .timeline-region.is-selected {
   background: rgba(244,173,123,.3);
   box-shadow: inset 0 0 0 2px var(--accent);
-}
-.timeline-region:focus-visible {
-  outline: 2px solid var(--accent-bright);
-  outline-offset: 4px;
-  z-index: 6;
 }
 .fx-clip-mark.is-selected {
   border-color: var(--accent-bright);
