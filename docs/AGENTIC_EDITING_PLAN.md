@@ -75,7 +75,7 @@ Acceptance: add '1.379 segreti' at 15–20.5 s, terminal command later, import s
 
 ### WP2b — Camera motion, punch-ins and video transitions [P0/P1; medium/large]
 
-Detailed spec: [VISUAL_MOTION_EFFECTS_PLAN.md](VISUAL_MOTION_EFFECTS_PLAN.md). This is distinct from overlay editing: it changes the underlying footage framing or relationship between adjacent KEEP segments.
+Detailed spec: [VISUAL_MOTION_EFFECTS_PLAN.md](VISUAL_MOTION_EFFECTS_PLAN.md). Research and configurable automatic preset contract: [VISUAL_FX_AUTOMATION_RESEARCH.md](VISUAL_FX_AUTOMATION_RESEARCH.md), [versioned JSON profiles](../configs/visual_fx_presets_v1.json). Presets are not yet connected to Studio or rendering; use conservative local evidence-based proposals, then manual or chat-agent review. This is distinct from overlay editing: it changes the underlying footage framing or relationship between adjacent KEEP segments.
 
 - MVP manual: source-segment-anchored punch-in/out and animated zoom/pan with ordered keyframes, explicit crop/face anchor, bounded scale, easing and start/end source ms.
 - Optional transition event at a specific pair of adjacent KEEP segment IDs: start with hard cut and 120–250ms approved dissolve or dip. Enforce trim handles and A/V synchronization; no transition spam after every speech pause.

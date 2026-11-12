@@ -34,7 +34,7 @@ Review `docs/SECURITY_THREAT_MODEL.md` before implementing a public MCP endpoint
 
 ## Motion-effects skill
 
-For zoom/punch-in/out, keyframes, pan/reframing, cross-dissolve and other transitions, kinetic captions or conservative automatic visual suggestions, use [pausio-visual-motion-effects](../.agents/skills/pausio-visual-motion-effects/SKILL.md) with [the visual motion effects plan](VISUAL_MOTION_EFFECTS_PLAN.md). Pair it with the deterministic command schema, FFmpeg and input media security skills. No visual effect is considered implemented simply because it is documented.
+For zoom/punch-in/out, keyframes, pan/reframing, cross-dissolve and other transitions, kinetic captions or conservative automatic visual suggestions, and for any visual-FX preset/config changes, use [pausio-visual-motion-effects](../.agents/skills/pausio-visual-motion-effects/SKILL.md) with [the visual motion effects plan](VISUAL_MOTION_EFFECTS_PLAN.md). Pair it with the deterministic command schema, FFmpeg and input media security skills. No visual effect is considered implemented simply because it is documented.
 
 ## Structured editing commands and portable projects
 

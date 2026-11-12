@@ -86,6 +86,9 @@ See [detailed agentic editing execution plan](AGENTIC_EDITING_PLAN.md) for depen
 - [ ] WP1: command schema v3, validated atomic instruction batches, revision checks, asset manifest and import/export migration.
 - [ ] WP2: text/statistic/code/image/video overlays on source-time timeline and the same deterministic FFmpeg preview/final path.
 - [ ] WP2b Visual Motion FX: manual punch-in/out and keyframed zoom/pan (P0), conservative auto suggestions from cuts/ASR evidence (P1), optional offline face reframe and bounded dissolve/dip transitions (P1), kinetic caption animation (P2); all as replayable typed events. See [visual motion effects plan](VISUAL_MOTION_EFFECTS_PLAN.md).
+- [x] WP2b/AF0 design only: comparative implementation research, four bounded preset contracts (Naturale/Educativo/Dinamico/Personalizzato), strict JSON Schema, stdlib validator + adversarial tests in CI. See [automation research](VISUAL_FX_AUTOMATION_RESEARCH.md). This does **not** implement zooms or effects.
+- [ ] WP2b/AF1: actual proposal engine, FFmpeg zoom/pan and Video FX lane (source-timestamped, replayable commands).
+- [ ] WP2b/AF2–AF4: prosody/scene signals, safe local face tracking, contextual transitions and ChatGPT/Claude MCP controls after security gates.
 - [ ] WP3: real integrated LUFS/LRA/true-peak measurement, configurable two-pass normalization and final AAC verification.
 - [ ] WP4: private music/riser/media library with asset hashes, licensing metadata, audition, gain/ducking/fades and agent-readable search.
 - [ ] WP5: optional transcription dispatch to a private self-hosted GitHub Actions runner using Pausio's existing ASR engine, never agent shell commands.

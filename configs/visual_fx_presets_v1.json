@@ -1,0 +1,200 @@
+{
+  "format": "pausio.visual_fx_presets",
+  "schema_version": 1,
+  "status": "design_only_not_connected_to_renderer",
+  "default_profile": "naturale",
+  "selector_version": "weighted-gates-v1",
+  "profiles": {
+    "naturale": {
+      "id": "naturale",
+      "label": "Naturale",
+      "description": "Calm talking-head social, natural pacing.",
+      "execution_mode": "suggest",
+      "allowed_moves": [
+        "punch",
+        "slow_push"
+      ],
+      "cadence": {
+        "max_effects_per_minute": 3,
+        "min_gap_ms": 8000,
+        "min_segment_ms": 1400
+      },
+      "zoom": {
+        "punch_min_scale": 1.08,
+        "punch_max_scale": 1.16,
+        "punch_ramp_ms": 0,
+        "punch_hold_ms": 650,
+        "slow_push_max_scale": 1.1,
+        "slow_push_duration_ms": 2600
+      },
+      "transition": {
+        "allowed_kinds": [
+          "hard_cut"
+        ],
+        "max_per_minute": 0,
+        "duration_ms": 0,
+        "context_change_only": true
+      },
+      "signals": {
+        "cut_boundary": 45,
+        "phrase_boundary": 25,
+        "speech_energy": 20,
+        "face_stability": 10,
+        "scene_change": 0,
+        "semantic_marker": 0
+      },
+      "guards": {
+        "protect_manual_edits": true,
+        "protect_speech": true,
+        "face_margin_pct": 0.08,
+        "cut_guard_ms": 250,
+        "minimum_source_width_px": 720
+      }
+    },
+    "educativo": {
+      "id": "educativo",
+      "label": "Educativo",
+      "description": "Explanatory videos with useful restrained emphasis.",
+      "execution_mode": "suggest",
+      "allowed_moves": [
+        "punch",
+        "slow_push",
+        "ratchet"
+      ],
+      "cadence": {
+        "max_effects_per_minute": 6,
+        "min_gap_ms": 4500,
+        "min_segment_ms": 1100
+      },
+      "zoom": {
+        "punch_min_scale": 1.1,
+        "punch_max_scale": 1.22,
+        "punch_ramp_ms": 120,
+        "punch_hold_ms": 750,
+        "slow_push_max_scale": 1.13,
+        "slow_push_duration_ms": 2200
+      },
+      "transition": {
+        "allowed_kinds": [
+          "hard_cut",
+          "dissolve"
+        ],
+        "max_per_minute": 1,
+        "duration_ms": 180,
+        "context_change_only": true
+      },
+      "signals": {
+        "cut_boundary": 30,
+        "phrase_boundary": 25,
+        "speech_energy": 20,
+        "face_stability": 10,
+        "scene_change": 5,
+        "semantic_marker": 10
+      },
+      "guards": {
+        "protect_manual_edits": true,
+        "protect_speech": true,
+        "face_margin_pct": 0.08,
+        "cut_guard_ms": 250,
+        "minimum_source_width_px": 720
+      }
+    },
+    "dinamico": {
+      "id": "dinamico",
+      "label": "Dinamico",
+      "description": "High-energy opt-in edits with explicit creator review.",
+      "execution_mode": "suggest",
+      "allowed_moves": [
+        "punch",
+        "slow_push",
+        "ratchet"
+      ],
+      "cadence": {
+        "max_effects_per_minute": 10,
+        "min_gap_ms": 2800,
+        "min_segment_ms": 850
+      },
+      "zoom": {
+        "punch_min_scale": 1.12,
+        "punch_max_scale": 1.28,
+        "punch_ramp_ms": 0,
+        "punch_hold_ms": 500,
+        "slow_push_max_scale": 1.16,
+        "slow_push_duration_ms": 1800
+      },
+      "transition": {
+        "allowed_kinds": [
+          "hard_cut",
+          "dissolve",
+          "dip_black"
+        ],
+        "max_per_minute": 2,
+        "duration_ms": 200,
+        "context_change_only": true
+      },
+      "signals": {
+        "cut_boundary": 35,
+        "phrase_boundary": 15,
+        "speech_energy": 20,
+        "face_stability": 10,
+        "scene_change": 10,
+        "semantic_marker": 10
+      },
+      "guards": {
+        "protect_manual_edits": true,
+        "protect_speech": true,
+        "face_margin_pct": 0.08,
+        "cut_guard_ms": 250,
+        "minimum_source_width_px": 720
+      }
+    },
+    "personalizzato": {
+      "id": "personalizzato",
+      "label": "Personalizzato",
+      "description": "Editable validated copy of the Educativo profile; stored as user settings, not modified in package.",
+      "execution_mode": "suggest",
+      "allowed_moves": [
+        "punch",
+        "slow_push",
+        "ratchet"
+      ],
+      "cadence": {
+        "max_effects_per_minute": 6,
+        "min_gap_ms": 4500,
+        "min_segment_ms": 1100
+      },
+      "zoom": {
+        "punch_min_scale": 1.1,
+        "punch_max_scale": 1.22,
+        "punch_ramp_ms": 120,
+        "punch_hold_ms": 750,
+        "slow_push_max_scale": 1.13,
+        "slow_push_duration_ms": 2200
+      },
+      "transition": {
+        "allowed_kinds": [
+          "hard_cut",
+          "dissolve"
+        ],
+        "max_per_minute": 1,
+        "duration_ms": 180,
+        "context_change_only": true
+      },
+      "signals": {
+        "cut_boundary": 30,
+        "phrase_boundary": 25,
+        "speech_energy": 20,
+        "face_stability": 10,
+        "scene_change": 5,
+        "semantic_marker": 10
+      },
+      "guards": {
+        "protect_manual_edits": true,
+        "protect_speech": true,
+        "face_margin_pct": 0.08,
+        "cut_guard_ms": 250,
+        "minimum_source_width_px": 720
+      }
+    }
+  }
+}
