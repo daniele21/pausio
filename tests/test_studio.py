@@ -491,6 +491,24 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         self.assertEqual(status,200,raw)
         self.assertEqual(json.loads(raw)["video_fx"],[approved])
 
+    def test_custom_fx_profile_api_remains_read_only_and_rejects_unsafe_values(self):
+        self.import_clip()
+        state=self.get_state()
+        options={"max_per_min":5,"gap_ms":5500,"punch_pct":118,
+                 "push_pct":110,"push_ms":2000,"use_audio_energy":True}
+        req={"revision":state["project_revision"],"preset":"personalizzato",
+             "options":options}
+        status,_,raw=self.post("/api/visual-fx/suggest",req)
+        self.assertEqual(status,200,raw)
+        result=json.loads(raw)
+        self.assertEqual(result["effective_profile"]["max_per_min"],5)
+        self.assertEqual(self.get_state()["project_revision"],state["project_revision"])
+        for bad in ({**req,"options":{**options,"punch_pct":500}},
+                    {**req,"options":{**options,"use_audio_energy":1}},
+                    {**req,"executable":"ffmpeg raw"},
+                    {**req,"preset":"naturale"}):
+            self.assertEqual(self.post("/api/visual-fx/suggest",bad)[0],400)
+
     def test_visual_fx_readonly_suggestions_then_typed_preview_and_export(self):
         self.import_clip()
         initial=self.get_state()
