@@ -17,6 +17,34 @@ class TestCLI(unittest.TestCase):
         self.assertEqual(result, 2)
         self.assertFalse(json.loads(out.getvalue())["ready"])
 
+    def test_doctor_warns_if_ffmpeg_lacks_ass_filter(self):
+        def binaries(name):
+            return "/opt/homebrew/bin/" + name
+        with (
+            patch("pausio.cli.shutil.which", side_effect=binaries),
+            patch("pausio.cli.ffmpeg_has_filter", return_value=False),
+            redirect_stdout(io.StringIO()) as out,
+        ):
+            result=main(["doctor"])
+        self.assertEqual(result,2)
+        doc=json.loads(out.getvalue())
+        self.assertFalse(doc["captions_ass"])
+        self.assertFalse(doc["ready"])
+        self.assertIn("ffmpeg-full",doc["warnings"][0])
+
+    def test_doctor_requires_ffmpeg_and_ass_to_be_ready(self):
+        with (
+            patch("pausio.cli.shutil.which", side_effect=lambda name:"/usr/bin/"+name),
+            patch("pausio.cli.ffmpeg_has_filter", return_value=True),
+            redirect_stdout(io.StringIO()) as out,
+        ):
+            result=main(["doctor"])
+        self.assertEqual(result,0)
+        doc=json.loads(out.getvalue())
+        self.assertTrue(doc["captions_ass"])
+        self.assertTrue(doc["ready"])
+        self.assertEqual(doc["warnings"],[])
+
     def test_plan_is_reviewable_and_source_is_not_changed(self):
         with TemporaryDirectory() as d:
             video = Path(d) / "source.mp4"
