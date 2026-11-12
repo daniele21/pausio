@@ -33,6 +33,30 @@ riparte invece dalla prima riga dopo il countdown. Vale sia per PC sia
 per smartphone. Maggiori dettagli in
 [Capture: guida e test](docs/MOBILE_CAPTURE.md).
 
+## Risolvere l'errore FFmpeg `No such filter: ass` (macOS)
+
+Pausio usa il filtro `ass` di FFmpeg (compilato con `libass`) per
+imprimere i sottotitoli, in preview e nell'export. La build Homebrew
+`ffmpeg` 9.0.x può essere priva di questo filtro anche quando
+`ffmpeg -version` funziona. Installa **ffmpeg-full** (keg-only) senza
+sostituire globalmente la versione standard:
+
+```bash
+brew install ffmpeg-full
+export PATH="$(brew --prefix ffmpeg-full)/bin:$PATH"
+which ffmpeg
+ffmpeg -hide_banner -filters | grep ' ass '
+pausio doctor
+pausio studio
+```
+
+Chiudi prima il processo `pausio studio` avviato con il vecchio
+`PATH`. Usa lo stesso terminale, con il `.venv` esistente: nessun
+nuovo virtualenv è necessario. `pausio doctor` ora restituisce
+`captions_ass: false` e istruzioni utili se manca il filtro;
+il render con sottotitoli fallisce *prima* di eseguire FFmpeg
+con un errore comprensibile. Senza sottotitoli questo filtro non serve.
+
 ## Pausio Capture su PC e telefono (verticale 9:16)
 
 Usa **lo stesso recorder** su desktop e smartphone con anteprima 9:16, gobbo
