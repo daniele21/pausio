@@ -643,6 +643,8 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertEqual(self.page.locator(".transcript-item").count(),1)
         self.page.locator("#transcript-next").click()
         self.assertEqual(self.page.locator(".transcript-item.is-selected").count(),1)
+        self.assertTrue(self.page.locator(".transcript-item.is-selected .transcript-seek").evaluate(
+            "(node)=>document.activeElement===node"))
         self.assertEqual(self.page.evaluate("transcriptSelectedIndex"),0)
         self.assertEqual(self.state()["project_revision"],revision)
         self.page.locator("#transcript-search").fill("inesistente")
