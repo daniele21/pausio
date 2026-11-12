@@ -12,7 +12,7 @@ from tempfile import TemporaryDirectory
 from pausio import __version__
 from pausio.local_asr import LocalASRError, DEFAULT_ASR_MODEL, transcribe_video_local
 from pausio.domain import EditPlan, Interval
-from pausio.media import MediaError, detect_silences, probe, render
+from pausio.media import MediaError, detect_silences, ffmpeg_has_filter, probe, render
 from pausio.planner import AI_NATURAL, propose_segments
 from pausio.studio import run_studio
 
@@ -28,7 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"pausio {__version__}")
     commands = parser.add_subparsers(dest="command", required=True)
 
-    commands.add_parser("doctor", help="Check FFmpeg/FFprobe availability")
+    commands.add_parser("doctor", help="Check FFmpeg/FFprobe and libass subtitle support")
     studio_cmd = commands.add_parser("studio", help="Open the local Pausio Studio UI")
     studio_cmd.add_argument(
         "--port", type=int, default=8765,
@@ -75,8 +75,26 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "doctor":
             found = {name: shutil.which(name) for name in ("ffmpeg", "ffprobe")}
-            print(_json({"version": __version__, "binaries": found, "ready": all(found.values())}), end="")
-            return 0 if all(found.values()) else 2
+            subtitles_ready = False
+            details = []
+            if found["ffmpeg"]:
+                try:
+                    subtitles_ready = ffmpeg_has_filter("ass")
+                except MediaError as exc:
+                    details.append(str(exc))
+            if not subtitles_ready:
+                details.append(
+                    "Il filtro ass manca: su macOS usa 'brew install ffmpeg-full', "
+                    "poi 'export PATH=\"$(brew --prefix ffmpeg-full)/bin:$PATH\"' "
+                    "e riavvia Pausio. libass da sola non basta."
+                )
+            ready = all(found.values()) and subtitles_ready
+            print(_json({
+                "version": __version__, "binaries": found,
+                "captions_ass": subtitles_ready, "ready": ready,
+                "warnings": details,
+            }), end="")
+            return 0 if ready else 2
         if args.command == "inspect":
             print(_json(probe(args.input.resolve()).as_dict()), end="")
             return 0
