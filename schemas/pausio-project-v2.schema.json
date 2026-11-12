@@ -692,8 +692,231 @@
               }
             }
           }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "payload"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "type": {
+              "const": "audio.add"
+            },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "clip"
+              ],
+              "properties": {
+                "clip": {
+                  "$ref": "#/$defs/audio_clip"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "payload"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "type": {
+              "const": "audio.update"
+            },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "clip_id",
+                "start_ms",
+                "gain_db"
+              ],
+              "properties": {
+                "clip_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "start_ms": {
+                  "$ref": "#/$defs/ms"
+                },
+                "gain_db": {
+                  "type": "integer",
+                  "minimum": -36,
+                  "maximum": 12
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "payload"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "type": {
+              "const": "audio.remove"
+            },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "clip_id"
+              ],
+              "properties": {
+                "clip_id": {
+                  "$ref": "#/$defs/id"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "payload"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "type": {
+              "const": "audio.mixer.configure"
+            },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "voice_gain_db",
+                "voice_muted",
+                "fx_gain_db",
+                "fx_muted"
+              ],
+              "properties": {
+                "voice_gain_db": {
+                  "type": "integer",
+                  "minimum": -36,
+                  "maximum": 12
+                },
+                "voice_muted": {
+                  "type": "boolean"
+                },
+                "fx_gain_db": {
+                  "type": "integer",
+                  "minimum": -36,
+                  "maximum": 12
+                },
+                "fx_muted": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "payload"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "type": {
+              "const": "audio.clip.mix"
+            },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "clip_id",
+                "gain_db",
+                "muted"
+              ],
+              "properties": {
+                "clip_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "gain_db": {
+                  "type": "integer",
+                  "minimum": -36,
+                  "maximum": 12
+                },
+                "muted": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
         }
       ]
+    },
+    "audio_clip": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "asset_sha256",
+        "filename",
+        "start_ms",
+        "duration_ms",
+        "gain_db"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "asset_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "filename": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "start_ms": {
+          "$ref": "#/$defs/ms"
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 180000
+        },
+        "gain_db": {
+          "type": "integer",
+          "minimum": -36,
+          "maximum": 12
+        },
+        "muted": {
+          "type": "boolean"
+        }
+      }
     }
   }
 }

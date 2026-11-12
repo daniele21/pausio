@@ -117,6 +117,205 @@ class StudioPlaywrightAudit(unittest.TestCase):
                             timeout=30000)
         return result
 
+    def test_custom_audio_fx_import_in_real_browser(self):
+        self.upload_analyze()
+        wav_path = self.root / "personal-riser.wav"
+        effect = self.root / "personal-riser.mp3"
+        with wave.open(str(wav_path), "wb") as wav:
+            wav.setnchannels(1);wav.setsampwidth(2);wav.setframerate(22050)
+            data = b"".join(struct.pack("<h", int(10000 * (i/13230)
+                             * math.sin(2*math.pi*700*i/22050)))
+                            for i in range(13230))
+            wav.writeframes(data)
+        # User-facing regression: imported MP3 risers must play in the browser,
+        # not only WAVs produced for synthetic media tests.
+        subprocess.run(["ffmpeg","-hide_banner","-loglevel","error","-y",
+            "-i",str(wav_path),"-c:a","libmp3lame","-b:a","160k",str(effect)],
+            check=True,timeout=35)
+        self.page.evaluate("document.getElementById('preview-video').currentTime=2.5")
+        start = self.state()["project_revision"]
+        self.page.locator("#fx-input").set_input_files(str(effect))
+        self.wait_state("revision", start + 1)
+        current = self.state()
+        self.assertEqual(len(current["audio_clips"]), 1)
+        self.assertTrue(current["audio_clips"][0]["available"])
+        self.assertGreaterEqual(current["audio_clips"][0]["start_ms"], 1000)
+        self.assertTrue(self.page.locator("#fx-panel").is_visible())
+        self.assertEqual(self.page.locator(".fx-item").count(), 1)
+        self.assertEqual(self.page.locator(".fx-item audio").count(), 1)
+        # Regression: FX used to be displayed as a waveform but silent during
+        # ordinary video playback. The live monitor must follow the video clock.
+        self.assertTrue(self.page.locator("#fx-monitor-toggle").is_visible())
+        self.assertEqual(self.page.locator("#fx-monitor-toggle").get_attribute("aria-pressed"),"true")
+        clip = current["audio_clips"][0]
+        self.page.evaluate("""(at) => {
+          document.getElementById('preview-video').currentTime=sourceFromOutput(at);
+        }""",(clip["start_ms"]+250)/1000*1000)
+        self.wait_condition(lambda: self.page.evaluate("() => !document.getElementById('preview-video').seeking"))
+        self.page.locator("#play-pause").click()
+        self.wait_condition(lambda: self.page.evaluate("""(id) => {
+          const player=liveFxPlayers.get(id);
+          return !document.getElementById('preview-video').paused &&
+                 !!player && !player.audio.paused;
+        }""",clip["id"]),timeout=15000)
+        self.page.locator("#play-pause").click()
+        self.wait_condition(lambda: self.page.evaluate("""(id) => {
+          const player=liveFxPlayers.get(id);
+          return document.getElementById('preview-video').paused &&
+                 !!player && player.audio.paused;
+        }""",clip["id"]))
+        self.page.locator("#fx-monitor-toggle").click()
+        self.assertEqual(self.page.locator("#fx-monitor-toggle").get_attribute("aria-pressed"),"false")
+        self.page.locator("#play-pause").click()
+        self.page.wait_for_timeout(160)
+        self.assertTrue(self.page.evaluate("""(id) => {
+          const player=liveFxPlayers.get(id);
+          return !!player && player.audio.paused;
+        }""",clip["id"]))
+        self.page.locator("#play-pause").click()
+        self.page.locator("#fx-monitor-toggle").click()
+
+        # The mixer controls must audibly affect voice and FX, and persist as
+        # versioned commands rather than a browser-only setting.
+        self.assertTrue(self.page.locator("#audio-mixer").is_visible())
+        self.assertEqual(self.page.locator("#voice-gain-label").inner_text(),"100% · 0 dB")
+        revision=self.state()["project_revision"]
+        self.page.locator("#voice-gain").evaluate("""el=>{
+          el.value='-9';el.dispatchEvent(new Event('input',{bubbles:true}));
+          el.dispatchEvent(new Event('change',{bubbles:true}));
+        }""")
+        voiced=self.wait_state("revision",revision+1)
+        self.assertEqual(voiced["audio_mix"]["voice_gain_db"],-9)
+        self.assertIn("-9 dB",self.page.locator("#voice-gain-label").inner_text())
+        self.page.locator("#voice-mute").click()
+        muted_voice=self.wait_state("revision",voiced["project_revision"]+1)
+        self.assertTrue(muted_voice["audio_mix"]["voice_muted"])
+        self.assertEqual(self.page.locator("#voice-mute").get_attribute("aria-pressed"),"true")
+        self.page.locator("#voice-reset").click()
+        reset_voice=self.wait_state("revision",muted_voice["project_revision"]+1)
+        self.assertEqual(reset_voice["audio_mix"]["voice_gain_db"],0)
+        self.assertFalse(reset_voice["audio_mix"]["voice_muted"])
+
+        self.page.locator("#fx-gain").evaluate("""el=>{
+          el.value='-6';el.dispatchEvent(new Event('input',{bubbles:true}));
+          el.dispatchEvent(new Event('change',{bubbles:true}));
+        }""")
+        fx_set=self.wait_state("revision",reset_voice["project_revision"]+1)
+        self.assertEqual(fx_set["audio_mix"]["fx_gain_db"],-6)
+        self.page.locator("#fx-mute").click()
+        fx_muted=self.wait_state("revision",fx_set["project_revision"]+1)
+        self.assertTrue(fx_muted["audio_mix"]["fx_muted"])
+        self.page.locator("#fx-reset").click()
+        fx_ready=self.wait_state("revision",fx_muted["project_revision"]+1)
+        self.assertFalse(fx_ready["audio_mix"]["fx_muted"])
+        self.assertEqual(fx_ready["audio_mix"]["fx_gain_db"],0)
+        self.assertEqual(self.page.locator("#fx-gain").input_value(),"0")
+
+        self.page.locator(".clip-volume-range").evaluate("""el=>{
+          el.value='-15';el.dispatchEvent(new Event('input',{bubbles:true}));
+          el.dispatchEvent(new Event('change',{bubbles:true}));
+        }""")
+        clip_set=self.wait_state("revision",fx_ready["project_revision"]+1)
+        self.assertEqual(clip_set["audio_clips"][0]["gain_db"],-15)
+        self.page.locator(".clip-mute").click()
+        clip_muted=self.wait_state("revision",clip_set["project_revision"]+1)
+        self.assertTrue(clip_muted["audio_clips"][0]["muted"])
+        self.page.locator(".clip-reset").click()
+        clip_ready=self.wait_state("revision",clip_muted["project_revision"]+1)
+        self.assertFalse(clip_ready["audio_clips"][0]["muted"])
+        self.assertEqual(clip_ready["audio_clips"][0]["gain_db"],-12)
+        current=clip_ready
+
+        # FX is inside the SAME scroll/zoom surface as the source waveform.
+        geometry = self.page.evaluate("""() => {
+          const bounds=id=>{ const b=document.querySelector(id).getBoundingClientRect();
+            return {left:b.left,right:b.right,top:b.top,bottom:b.bottom,width:b.width}; };
+          return {source:bounds('#timeline-track'),fx:bounds('#timeline-fx-track'),
+            playhead:bounds('#playhead')};
+        }""")
+        self.assertAlmostEqual(geometry["source"]["left"], geometry["fx"]["left"], delta=2)
+        self.assertAlmostEqual(geometry["source"]["right"], geometry["fx"]["right"], delta=2)
+        self.assertGreater(geometry["fx"]["top"], geometry["source"]["bottom"])
+        self.assertGreaterEqual(geometry["playhead"]["bottom"], geometry["fx"]["bottom"]-4)
+        # An FX crossing an excluded source range is split on the *source* ruler.
+        self.assertGreaterEqual(self.page.locator("#fx-lane .fx-clip-mark").count(), 1)
+        self.assertEqual(self.page.locator("#fx-panel #fx-lane").count(), 0)
+        # The waveform must come from decoded audio rather than decorative CSS.
+        self.wait_condition(lambda: self.page.evaluate("""() => {
+          const c=document.querySelector('.fx-clip-waveform');if(!c||!c.width)return false;
+          const data=c.getContext('2d').getImageData(0,0,c.width,c.height).data;
+          for(let i=3;i<data.length;i+=4)if(data[i]>0)return true;
+          return false;
+        }"""),timeout=20000)
+        # One source-time region per KEEP span when an FX crosses the cuts.
+        projection = self.page.evaluate("""() => {
+          const fx={start_ms:0,duration_ms:editedDuration()};
+          return fxSourcePieces(fx).map(p=>[p.sourceStart,p.sourceEnd]);
+        }""")
+        self.assertEqual(projection, [
+          [s["start_ms"], s["end_ms"]] for s in current["editor_segments"]
+        ])
+        fx_mark=self.page.locator("#fx-lane .fx-clip-mark").first
+        fx_mark.focus();fx_mark.press("ArrowRight")
+        moved=self.wait_state("revision",current["project_revision"]+1)
+        self.assertEqual(moved["audio_clips"][0]["start_ms"],
+                         current["audio_clips"][0]["start_ms"]+100)
+        # One scale, one horizontal scroll offset at 4x zoom.
+        self.page.locator("#timeline-zoom").select_option("4")
+        scale=self.page.evaluate("""() => {
+          const s=document.querySelector('#timeline-track').getBoundingClientRect(),
+                f=document.querySelector('#timeline-fx-track').getBoundingClientRect();
+          return [s.left,f.left,s.width,f.width];
+        }""")
+        self.assertAlmostEqual(scale[0],scale[1],delta=2)
+        self.assertAlmostEqual(scale[2],scale[3],delta=2)
+        self.page.evaluate("document.querySelector('#timeline-surface').scrollLeft=140")
+        self.wait_condition(lambda: self.page.evaluate("""() =>
+          Math.abs(document.querySelector('#timeline-ruler').scrollLeft-
+                   document.querySelector('#timeline-surface').scrollLeft)<2"""))
+        self.page.locator("#timeline-zoom").select_option("1")
+        self.page.evaluate("document.querySelector('#timeline-surface').scrollLeft=0")
+        # Make the pointer test independent of source cut boundaries: moving an
+        # effect from the end of a KEEP segment can have a legitimately flat
+        # source-to-output time mapping through the excluded gap.
+        self.page.locator('.fx-item input[aria-label^="Inizio"]').fill("0.100")
+        self.page.locator('.fx-item input[aria-label^="Inizio"]').dispatch_event("change")
+        positioned=self.wait_state("revision",moved["project_revision"]+1,timeout=12000)
+        self.assertEqual(positioned["audio_clips"][0]["start_ms"],100)
+        fx_mark=self.page.locator("#fx-lane .fx-clip-mark").first
+        fx_mark.scroll_into_view_if_needed()
+        self.assertFalse(fx_mark.is_disabled())
+        box=fx_mark.bounding_box()
+        self.assertIsNotNone(box)
+        x,y=box["x"]+box["width"]/2,box["y"]+box["height"]/2
+        self.page.mouse.move(x,y);self.page.mouse.down()
+        self.page.mouse.move(x+65,y,steps=6);self.page.mouse.up()
+        dragged=self.wait_state("revision",positioned["project_revision"]+1,timeout=12000)
+        self.assertGreater(dragged["audio_clips"][0]["start_ms"],positioned["audio_clips"][0]["start_ms"])
+        revision = dragged["project_revision"]
+        self.page.locator('.fx-item input[aria-label^="Volume"]').fill("-18")
+        self.page.locator('.fx-item input[aria-label^="Volume"]').dispatch_event("change")
+        self.wait_state("revision", revision + 1)
+        self.assertEqual(self.state()["audio_clips"][0]["gain_db"], -18)
+        self.page.locator("#preview-action").click()
+        self.wait_state("preview", "completed")
+        self.wait_condition(lambda: self.page.evaluate("() => mode==='rendered'"))
+        self.assertTrue(self.page.evaluate("""(id) => {
+          const player=liveFxPlayers.get(id);
+          return !player||player.audio.paused;
+        }""",clip["id"]), "FX monitor must not duplicate rendered FFmpeg sound")
+        self.assertTrue(self.page.locator("#fx-monitor-toggle").is_disabled())
+        for width in (390, 320):
+            self.page.set_viewport_size({"width":width,"height":844})
+            self.page.wait_for_timeout(120)
+            self.shot(f"fx-import-{width}")
+            self.assertLessEqual(metrics(self.page)["scrollWidth"],width+3)
+        self.page.locator(".fx-remove").click()
+        self.wait_condition(lambda: len(self.state()["audio_clips"])==0)
+        self.page.locator("#undo-action").click()
+        self.wait_condition(lambda: len(self.state()["audio_clips"])==1)
+        self.assertFalse(self.errors,self.errors)
+
     def test_layout_across_five_viewports(self):
         results={}
         for width,height in [(1440,900),(1024,768),(768,900),(390,844),(320,700)]:

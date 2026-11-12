@@ -139,3 +139,14 @@ The session is locked to a single running Studio process; file/directory permiss
 ## Next evolution
 
 Extend structured effects (captions, crop, color, audio), selection tools, AI/prompt edits (as a proposal that emits the **same typed commands**), batch operations and optional interchange exporters (e.g. OpenTimelineIO / CapCut). Preserve the canonical Pausio command model as source of truth rather than making CapCut drafts the database.
+
+## Comandi audio FX (estensione dello schema v2)
+
+`audio.add` contiene `clip: {id, asset_sha256, filename, start_ms, duration_ms, gain_db}`; `audio.update` contiene `{clip_id, start_ms, gain_db}`; `audio.remove` contiene `{clip_id}`. Massimo 16 effetti, durata di ogni asset fino a 180000 ms, gain da -36 a +12 dB. `start_ms` è nella timeline **montata**, non nei timestamp del sorgente; effetti oltre l'output sono ignorati/troncati nel render. Il JSON conserva hash e istruzioni, non audio binario né path arbitrari.
+
+
+## Mixer tracce (compatibile con schema v2)
+
+`audio.mixer.configure` definisce in maniera atomica `voice_gain_db` (integer -36..12), `voice_muted` (boolean), `fx_gain_db` (integer -36..12), `fx_muted` (boolean). Il default implicito per i progetti vecchi è `{ "voice_gain_db": 0, "voice_muted": false, "fx_gain_db": 0, "fx_muted": false }`.
+
+`audio.clip.mix` contiene `{ "clip_id": <id>, "gain_db": <int -36..12>, "muted": <bool> }`. I nuovi reducer preservano i vecchi `audio.add/update` privi del campo `muted`; questo attributo è opzionale e sottintende `false` finché l'utente non modifica il mute di una clip. Tutti i livelli e i mute sono event-sourced: Undo/Redo, export/import e renderer FFmpeg usano gli stessi valori. Il mix applica `voice_gain_db` alla traccia originale, `fx_gain_db + clip.gain_db` a ciascun FX e usa volume zero per i bus/FX silenziati, con limiter in uscita.

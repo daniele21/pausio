@@ -91,6 +91,29 @@ def probe(path: Path) -> MediaInfo:
     except (KeyError, StopIteration, TypeError, ValueError) as exc:
         raise MediaError(f"no valid video stream in {path}: {exc}") from exc
 
+def probe_audio(path: Path) -> int:
+    """Validate an audio-only local FX asset; return duration in integer ms."""
+    if not path.is_file() or path.is_symlink():
+        raise MediaError("Audio file missing or invalid.")
+    p = _run([
+        require_binary("ffprobe"), "-v", "error", "-show_streams", "-show_format",
+        "-of", "json", str(path),
+    ])
+    try:
+        data = json.loads(p.stdout)
+        streams = data["streams"]
+        audio = next(s for s in streams if s.get("codec_type") == "audio")
+        if any(s.get("codec_type") == "video" and not s.get("disposition", {}).get("attached_pic")
+               for s in streams):
+            raise MediaError("Choose an audio file without video.")
+        duration = (_milliseconds(data.get("format", {}).get("duration"))
+                    or _milliseconds(audio.get("duration")))
+        if duration is None or not 0 < duration <= 180_000:
+            raise MediaError("Audio effects must be between 1 ms and 3 minutes.")
+        return duration
+    except (KeyError, StopIteration, TypeError, ValueError) as exc:
+        raise MediaError("The imported file has no valid audio stream.") from exc
+
 
 _SILENCE_START = re.compile(r"silence_start:\s*(-?\d+(?:\.\d+)?)")
 _SILENCE_END = re.compile(r"silence_end:\s*(-?\d+(?:\.\d+)?)")
@@ -141,6 +164,8 @@ def render(
     size: tuple[int, int] = (1080, 1920),
     captions: list[dict] | None = None, caption_style: str = "social",
     caption_config: dict | None = None,
+    audio_fx: list[tuple[Path, dict]] | None = None,
+    audio_mix: dict | None = None,
 ) -> list[str]:
     """Render ordered intervals in one re-encode; preserve aspect ratio with padding.
 
@@ -157,6 +182,10 @@ def render(
         raise MediaError("output filename must end in .mp4")
     if output.exists() and not overwrite:
         raise MediaError(f"output exists: {output}; pass --overwrite to replace")
+    if audio_fx and (len(audio_fx) > 16 or any(not path.is_file() for path, _ in audio_fx)):
+        raise MediaError("Audio effects missing or exceed the 16-track limit.")
+    from pausio.project_commands import default_audio_mix, validate_audio_mix
+    mix = validate_audio_mix(audio_mix) if audio_mix is not None else default_audio_mix()
     if captions is not None and not isinstance(captions, list):
         raise MediaError("captions must be a list or None")
     # Validate subtitle text/style for both preview and final output.
@@ -194,13 +223,51 @@ def render(
             path = subtitle_file or Path("/tmp/pausio-ass-preview/captions.ass")
             filters.append(f"[basev]ass=filename={path.as_posix()}[outv]")
 
-        args = [
-            require_binary("ffmpeg"), "-hide_banner", "-nostdin", "-y",
-            "-i", str(source), "-filter_complex", ";".join(filters),
-            "-map", "[outv]",
-        ]
-        if has_audio:
-            args.extend(["-map", "[joineda]", "-c:a", "aac", "-b:a", "160k"])
+        effects = audio_fx or []
+        # Even projects with no imported FX can modify the voice level.
+        mixing = bool(effects) or mix != default_audio_mix()
+        if mixing:
+            output_duration = sum(s.end_ms - s.start_ms for s in segments) / 1000
+            if has_audio:
+                voice_volume = "0" if mix["voice_muted"] else f'{mix["voice_gain_db"]}dB'
+                filters.append(
+                    "[joineda]aresample=48000,aformat=channel_layouts=stereo,"
+                    f"volume={voice_volume}[voice]"
+                )
+            else:
+                filters.append(
+                    f"anullsrc=r=48000:cl=stereo,atrim=duration={output_duration:.3f}[voice]"
+                )
+            labels = ["[voice]"]
+            for i, (_, clip) in enumerate(effects):
+                start_ms = clip["start_ms"]
+                if start_ms >= round(output_duration * 1000):
+                    continue
+                length = min(clip["duration_ms"], round(output_duration * 1000) - start_ms)
+                is_muted = mix["fx_muted"] or clip.get("muted", False)
+                volume = "0" if is_muted else f'{clip["gain_db"] + mix["fx_gain_db"]}dB'
+                filters.append(
+                    f"[{i+1}:a:0]aresample=48000,aformat=channel_layouts=stereo,"
+                    f"atrim=duration={length/1000:.3f},asetpts=PTS-STARTPTS,"
+                    f"volume={volume},adelay={start_ms}:all=1[fx{i}]"
+                )
+                labels.append(f"[fx{i}]")
+            if len(labels) > 1:
+                filters.append(
+                    f"{''.join(labels)}amix=inputs={len(labels)}:"
+                    f"duration=first:dropout_transition=0:normalize=0,"
+                    f"alimiter=limit=0.95[outa]"
+                )
+            else:
+                filters.append("[voice]alimiter=limit=0.95[outa]")
+        args = [require_binary("ffmpeg"), "-hide_banner", "-nostdin", "-y",
+                "-i", str(source)]
+        for path, _ in effects:
+            args.extend(["-i", str(path)])
+        args.extend(["-filter_complex", ";".join(filters), "-map", "[outv]"])
+        if has_audio or effects:
+            args.extend(["-map", "[outa]" if mixing else "[joineda]",
+                         "-c:a", "aac", "-b:a", "160k"])
         args.extend([
             "-c:v", "libx264", "-preset", "veryfast", "-crf", "22",
             "-movflags", "+faststart", str(destination),

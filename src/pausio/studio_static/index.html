@@ -379,6 +379,11 @@
           aria-label="Timeline originale: clicca per spostarti, usa le maniglie sui segmenti per regolare i tagli" hidden>
           <canvas class="waveform-canvas" id="waveform-canvas" aria-hidden="true"></canvas>
           <div class="timeline-regions" id="timeline-regions"></div>
+          <div class="timeline-fx-track" id="timeline-fx-track" role="group"
+               aria-label="Effetti audio allineati alla traccia originale">
+            <div class="fx-lane" id="fx-lane"></div>
+            <span class="fx-track-empty" id="fx-track-empty" aria-hidden="true">FX · Importa un riser per aggiungerlo qui</span>
+          </div>
           <div class="playhead" id="playhead"><span></span></div>
         </div>
       </div>
@@ -388,7 +393,61 @@
       </div>
     </section>
 
+    <section class="audio-mixer" id="audio-mixer" aria-labelledby="mixer-title" hidden>
+      <div class="audio-mixer-head">
+        <h2 id="mixer-title">Mixer audio</h2>
+        <p>Regola i livelli mentre ascolti. Le modifiche vengono salvate nel progetto.</p>
+      </div>
+      <div class="audio-mixer-tracks">
+        <div class="mixer-track mixer-track-voice">
+          <div class="mixer-track-title"><span class="mixer-track-dot" aria-hidden="true"></span>
+            <strong>Voce originale</strong><span>Traccia principale</span></div>
+          <div class="mixer-level">
+            <input type="range" id="voice-gain" min="-36" max="12" step="1" value="0"
+                   aria-label="Volume della voce originale" aria-valuetext="100%">
+            <output id="voice-gain-label" for="voice-gain">100% · 0 dB</output>
+          </div>
+          <div class="mixer-actions">
+            <button id="voice-mute" class="mixer-mute" type="button" aria-pressed="false">Silenzia</button>
+            <button id="voice-reset" class="mixer-reset" type="button" title="Ripristina volume voce a 100%" aria-label="Ripristina volume voce">↺</button>
+          </div>
+        </div>
+        <div class="mixer-track mixer-track-fx">
+          <div class="mixer-track-title"><span class="mixer-track-dot" aria-hidden="true"></span>
+            <strong>Effetti FX</strong><span>Tutti i riser importati</span></div>
+          <div class="mixer-level">
+            <input type="range" id="fx-gain" min="-36" max="12" step="1" value="0"
+                   aria-label="Volume generale degli effetti FX" aria-valuetext="100%">
+            <output id="fx-gain-label" for="fx-gain">100% · 0 dB</output>
+          </div>
+          <div class="mixer-actions">
+            <button id="fx-mute" class="mixer-mute" type="button" aria-pressed="false">Silenzia</button>
+            <button id="fx-reset" class="mixer-reset" type="button" title="Ripristina volume FX a 100%" aria-label="Ripristina volume FX">↺</button>
+          </div>
+        </div>
+      </div>
+      <p class="mixer-note">100% = volume originale · oltre il 100% amplifica il suono. Silenzia esclude la traccia anche dall’export; l’ascolto FX live è un controllo separato.</p>
+    </section>
+
+    <section class="fx-panel" id="fx-panel" aria-labelledby="fx-title" hidden>
+      <div class="fx-header">
+        <div>
+          <h2 id="fx-title">Effetti audio <span class="fx-pill">OPZIONALE</span></h2>
+          <p>Importa un riser, un whoosh o un altro suono. Il file rimane sul tuo Mac.</p>
+        </div>
+        <div class="fx-header-actions">
+          <button class="button button-outline fx-monitor-toggle" id="fx-monitor-toggle" type="button"
+                  aria-pressed="true" title="Attiva o disattiva l'ascolto live degli effetti durante Play" hidden>♫ FX attivi</button>
+          <button class="button button-outline" id="fx-import" type="button">+ Importa audio</button>
+        </div>
+      </div>
+      <p class="fx-hint" id="fx-monitor-status" role="status" aria-live="polite" hidden></p>
+      <p class="fx-hint" id="fx-hint">Nessun effetto. Seleziona un punto nel video e importa un file MP3, WAV, M4A, AAC, FLAC o OGG.</p>
+      <div class="fx-list" id="fx-list"></div>
+    </section>
+
     <input type="file" id="file-input" accept="video/mp4,video/quicktime,video/webm,video/x-matroska,.m4v,.mov,.mkv" hidden>
+    <input type="file" id="fx-input" accept=".mp3,.wav,.m4a,.aac,.flac,.ogg,audio/*" hidden>
     <input type="file" id="project-input" accept=".json,.pausio.json,application/json" hidden>
     <div class="job-banner" id="job-banner" role="status" aria-live="polite" hidden>
       <span class="spinner" aria-hidden="true"></span>

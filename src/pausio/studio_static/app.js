@@ -7,6 +7,7 @@ let lastJobNotice = "", toastTimeout = 0, dragLevel = 0;
 let didNotifyRecovery = false;
 let waveformData = null, waveformRequestedFor = null, timelineZoom = 1, previewSourceMode = "original";
 let dragHandleActive = false;
+const fxWaveforms=new Map(),fxWaveformsPending=new Set();
 let simulationFrame = null;
 let captionDraft = null, captionSource = null, captionMediaKey = null;
 let captionPositionMode = false;
@@ -149,6 +150,240 @@ const outputTime = ms => {
   return elapsed;
 };
 const working = () => uploading || !!project?.importing || project?.job?.status==="running";
+
+/* The video player is the clock: HTML audio elements monitor local FX live,
+   while the FFmpeg preview/export already contain the final mix. Do not double play.
+   Commands/FFmpeg remain the source of truth for the actual rendered sound. */
+let fxMonitoringEnabled = true;
+let fxAudioContext = null;
+let voiceGainNode = null, voiceSourceNode = null;
+let audioMixerDraft = null;
+const clipMixerDrafts = new Map();
+const baseAudioMix = () => ({voice_gain_db:0,voice_muted:false,fx_gain_db:0,fx_muted:false});
+const currentAudioMix = () => audioMixerDraft || project?.audio_mix || baseAudioMix();
+const currentClipMix = clip => clipMixerDrafts.get(clip.id) || clip;
+const gainPercent = db => Math.round(Math.pow(10,db/20)*100);
+const gainText = db => gainPercent(db)+"% · "+(db>0?"+":"")+db+" dB";
+const gainScalar = db => Math.pow(10,db/20);
+
+function syncVoicePlayback(){
+  if(!project?.media)return;
+  const mix=currentAudioMix();
+  // FFmpeg preview includes voice gain/mute already; never apply it twice.
+  const level=mode==="rendered"?1:mix.voice_muted?0:gainScalar(mix.voice_gain_db);
+  if(voiceGainNode){
+    v.volume=1;
+    voiceGainNode.gain.value=level;
+  }else{
+    v.volume=Math.max(0,Math.min(1,level));
+  }
+}
+
+const liveFxPlayers = new Map();
+function pauseLiveFx(){
+  for(const {audio} of liveFxPlayers.values())if(!audio.paused)audio.pause();
+}
+function disposeLiveFx(id){
+  const player=liveFxPlayers.get(id);if(!player)return;
+  player.audio.pause();player.audio.removeAttribute("src");player.audio.load();
+  if(player.source)player.source.disconnect();
+  if(player.gain)player.gain.disconnect();
+  liveFxPlayers.delete(id);
+}
+function reconcileLiveFx(){
+  const allowed=new Map((project?.audio_clips||[])
+    .filter(c=>c.available).map(c=>[c.id,c]));
+  for(const [id,player] of liveFxPlayers){
+    if(!allowed.has(id)||allowed.get(id).asset_sha256!==player.sha)disposeLiveFx(id);
+  }
+}
+function unlockFxAudio(){
+  if(!project?.media)return;
+  if(!fxAudioContext){
+    const AudioContextType=window.AudioContext||window.webkitAudioContext;
+    if(AudioContextType){
+      try{fxAudioContext=new AudioContextType();}
+      catch{/* HTMLAudioElement fallback still works on supported browsers. */}
+    }
+  }
+  if(fxAudioContext&&!voiceGainNode){
+    try{
+      voiceSourceNode=fxAudioContext.createMediaElementSource(v);
+      voiceGainNode=fxAudioContext.createGain();
+      voiceSourceNode.connect(voiceGainNode);
+      voiceGainNode.connect(fxAudioContext.destination);
+    }catch{
+      // Native volume is a safe fallback; amplification above 0 dB needs Web Audio.
+      voiceGainNode=null;
+    }
+  }
+  syncVoicePlayback();
+  if(fxAudioContext?.state==="suspended")
+    fxAudioContext.resume().catch(()=>toast("Audio del browser sospeso. Premi Play o ascolta la preview FFmpeg.","error"));
+}
+function createLiveFxPlayer(clip){
+  const audio=new Audio();
+  audio.preload="auto";
+  audio.src="/api/audio/"+encodeURIComponent(clip.asset_sha256);
+  audio.loop=false;
+  const player={audio,sha:clip.asset_sha256,gain:null,source:null,starting:false,failed:false};
+  if(fxAudioContext){
+    try{
+      const source=fxAudioContext.createMediaElementSource(audio);
+      const gain=fxAudioContext.createGain();
+      source.connect(gain);gain.connect(fxAudioContext.destination);
+      player.source=source;player.gain=gain;
+    }catch{/* If Web Audio is unavailable, the media element uses its own volume. */}
+  }
+  audio.addEventListener("error",()=>{
+    if(!player.failed){
+      player.failed=true;
+      toast("Il browser non riesce a riprodurre questo FX. Usa «Genera preview» per ascoltarlo con FFmpeg.","error");
+    }
+    audio.pause();
+  });
+  liveFxPlayers.set(clip.id,player);
+  return player;
+}
+function monitoredOutputMs(){
+  if(!project?.media||!fxMonitoringEnabled||mode==="rendered"||v.paused||v.ended||v.seeking)
+    return null;
+  const source=Math.round((v.currentTime||0)*1000);
+  if(!project.plan)return source;
+  // FX commands are in the edited timeline: never play them in a removed gap.
+  const kept=segments().some(seg=>source>=seg.start_ms&&source<seg.end_ms);
+  return kept?outputTime(source):null;
+}
+function syncLiveFx(){
+  reconcileLiveFx();
+  const time=monitoredOutputMs();
+  if(time===null){pauseLiveFx();return;}
+  const current=new Set();
+  for(const clip of project.audio_clips||[]){
+    if(!clip.available)continue;
+    const relative=time-clip.start_ms;
+    if(relative<0||relative>=clip.duration_ms)continue;
+    current.add(clip.id);
+    const player=liveFxPlayers.get(clip.id)||createLiveFxPlayer(clip);
+    if(player.failed)continue;
+    const {audio,gain}=player;
+    const mix=currentAudioMix(),selected=currentClipMix(clip);
+    const effectiveGain=(mix.fx_muted||selected.muted||v.muted)?0:
+      gainScalar(selected.gain_db+mix.fx_gain_db);
+    if(gain){gain.gain.value=effectiveGain;audio.volume=1;}
+    else{audio.volume=Math.max(0,Math.min(1,effectiveGain));}
+    audio.playbackRate=v.playbackRate;
+    const position=relative/1000;
+    // Resync after seeking or cut simulation jumps; avoid excessive micro-seeks.
+    if(Math.abs((audio.currentTime||0)-position)>.12){
+      try{audio.currentTime=position;}catch{/* Seek will be retried after metadata. */}
+    }
+    if(audio.paused&&!player.starting){
+      player.starting=true;
+      audio.play().catch(error=>{
+        // A seek/pause or cut boundary can abort a pending play() normally.
+        // Do not permanently mark a valid asset broken for this case.
+        if(error?.name==="AbortError"||v.paused||mode==="rendered"||
+           !fxMonitoringEnabled)return;
+        if(!player.failed){
+          player.failed=true;
+          toast("Impossibile ascoltare l'FX live. Prova la preview FFmpeg.","error");
+        }
+      }).finally(()=>{player.starting=false;});
+    }
+  }
+  for(const [id,player] of liveFxPlayers)
+    if(!current.has(id)&&!player.audio.paused)player.audio.pause();
+}
+function updateFxMonitorUI(){
+  const clips=project?.audio_clips||[];
+  const toggle=el("fx-monitor-toggle"),status=el("fx-monitor-status");
+  toggle.hidden=!project?.media||!clips.length;
+  status.hidden=!project?.media||!clips.length;
+  if(!clips.length)return;
+  toggle.disabled=mode==="rendered";
+  toggle.setAttribute("aria-pressed",String(mode==="rendered"||fxMonitoringEnabled));
+  toggle.textContent=mode==="rendered"?"♫ FX nel video":fxMonitoringEnabled?"♫ FX attivi":"♫ FX spenti";
+  status.textContent=mode==="rendered"?
+    "L'anteprima FFmpeg contiene già gli effetti: nessuna duplicazione audio.":
+    fxMonitoringEnabled?"FX udibili durante Play, insieme alla voce. Anteprima live; verifica il mix finale con «Genera preview».":
+    "Ascolto degli FX disattivato: il rendering finale li include comunque.";
+}
+
+function paintAudioMixer(){
+  const mix=currentAudioMix();
+  for(const bus of ["voice","fx"]){
+    const muted=mix[bus+"_muted"],gain=mix[bus+"_gain_db"];
+    const slider=el(bus+"-gain"),label=el(bus+"-gain-label"),button=el(bus+"-mute");
+    if(document.activeElement!==slider||!audioMixerDraft)slider.value=String(gain);
+    slider.setAttribute("aria-valuetext",gainText(gain)+(muted?" · silenziato":""));
+    label.textContent=muted?"Silenz.: "+gainText(gain):gainText(gain);
+    button.setAttribute("aria-pressed",String(muted));
+    button.textContent=muted?"Riattiva":"Silenzia";
+    button.closest(".mixer-track").classList.toggle("is-muted",muted);
+  }
+}
+function drawAudioMixer(){
+  paintAudioMixer();
+  const has=!!project?.media,busy=working();
+  for(const bus of ["voice","fx"]){
+    const emptyFx=bus==="fx"&&!(project?.audio_clips||[]).length;
+    for(const suffix of ["gain","mute","reset"])
+      el(bus+"-"+suffix).disabled=!has||busy||emptyFx;
+  }
+}
+async function commitAudioBus(bus,changes){
+  const before=project?.audio_mix||baseAudioMix();
+  const next={...before,...changes};
+  const unchanged=Object.keys(next).every(key=>before[key]===next[key]);
+  if(unchanged){
+    audioMixerDraft=null;paintAudioMixer();syncVoicePlayback();syncLiveFx();
+    return;
+  }
+  await edit("audio.mixer.configure",next);
+}
+function ensureLiveAudioPreview(){
+  // Switching via changeMode() would rebuild and detach the slider while
+  // dragging. Switch only the media source; the next saved event redraws UI.
+  if(mode!=="rendered"||!project?.media)return;
+  const sourceAt=sourceFromOutput(Math.round((v.currentTime||0)*1000));
+  v.pause();pauseLiveFx();
+  mode="original";previewSourceMode="original";
+  v.src="/api/media?v="+encodeURIComponent(mediaKey);
+  v.addEventListener("loadedmetadata",()=>{
+    v.currentTime=Math.min(v.duration||0,sourceAt/1000);
+    transport();
+  },{once:true});
+  v.load();
+  for(const button of document.querySelectorAll("[data-mode]")){
+    const selected=button.dataset.mode==="original";
+    button.classList.toggle("active",selected);
+    button.setAttribute("aria-pressed",String(selected));
+  }
+  updateFxMonitorUI();syncVoicePlayback();transport();
+}
+function setupAudioMixer(){
+  for(const bus of ["voice","fx"]){
+    const slider=el(bus+"-gain"),field=bus+"_gain_db",muted=bus+"_muted";
+    slider.addEventListener("input",()=>{
+      ensureLiveAudioPreview();
+      const value=Number(slider.value);
+      audioMixerDraft={...currentAudioMix(),[field]:value};
+      paintAudioMixer();syncVoicePlayback();syncLiveFx();
+    });
+    slider.addEventListener("change",()=>run(()=>commitAudioBus(bus,{[field]:Number(slider.value)})));
+    el(bus+"-mute").addEventListener("click",()=>{
+      ensureLiveAudioPreview();
+      run(()=>commitAudioBus(bus,{[muted]:!(project?.audio_mix||baseAudioMix())[muted]}));
+    });
+    el(bus+"-reset").addEventListener("click",()=>{
+      ensureLiveAudioPreview();
+      run(()=>commitAudioBus(bus,{[field]:0,[muted]:false}));
+    });
+  }
+}
+setupAudioMixer();
+
 function toast(message,kind="success"){
   const n=el("toast");n.textContent=message;n.className="toast"+(kind==="error"?" error":"");n.hidden=false;
   clearTimeout(toastTimeout);toastTimeout=setTimeout(()=>n.hidden=true,6000);
@@ -170,6 +405,7 @@ function busyLabel(kind){
 }
 function update(next){
   project=next;
+  audioMixerDraft=null;clipMixerDrafts.clear();
   const has=!!next.file, plan=!!next.plan, approved=!!next.approved, ready=!!next.export_ready, busy=working();
   if(mode==="edited"&&(!plan||(next.media&&editedDuration()>=next.media.duration_ms))){
     mode="original";
@@ -179,11 +415,26 @@ function update(next){
   document.body.classList.toggle("has-media",has);
   syncCutControls(next, busy);
   syncCaptionSettings(next, busy);
+  el("fx-panel").hidden=!has;
+  el("audio-mixer").hidden=!has;
+  el("fx-import").disabled=!has||busy;
   if(next.media_id && mediaKey!==next.media_id){
     mediaKey=next.media_id;mode="original";previewSourceMode="original";
     waveformData=null;waveformRequestedFor=null;
+    fxWaveforms.clear();fxWaveformsPending.clear();
+    for(const id of [...liveFxPlayers.keys()])disposeLiveFx(id);
     paintWaveform();
     v.pause();v.src="/api/media?v="+encodeURIComponent(mediaKey);v.load();tab("cuts");
+  }
+  if(mode==="rendered"&&!next.preview_ready&&next.media&&mediaKey===next.media_id){
+    const sourceAt=sourceFromOutput(Math.round((v.currentTime||0)*1000));
+    v.pause();pauseLiveFx();mode="original";previewSourceMode="original";
+    v.src="/api/media?v="+encodeURIComponent(mediaKey);
+    v.addEventListener("loadedmetadata",()=>{
+      v.currentTime=Math.min(v.duration||0,sourceAt/1000);
+      transport();
+    },{once:true});
+    v.load();
   }
   el("empty-state").hidden=has;el("video-workspace").hidden=!has;
   el("stage-title").textContent=has?"Anteprima del tuo video":"Il tuo spazio creativo";
@@ -265,7 +516,8 @@ function update(next){
     el("saved-time").textContent=shortDuration(Math.max(0,duration-editedDuration()));
     el("keep-time").textContent=shortDuration(editedDuration());
   }
-  drawSegments();drawTimeline();drawTranscript();drawCaptionEditor();transport();
+  drawSegments();drawTimeline();drawFx();drawTranscript();drawCaptionEditor();
+  updateFxMonitorUI();drawAudioMixer();syncVoicePlayback();syncLiveFx();transport();
   if(has&&next.waveform_status==="ready"&&waveformRequestedFor!==next.media_id){
     waveformRequestedFor=next.media_id;
     fetch("/api/waveform",{cache:"no-store"}).then(async response=>{
@@ -430,6 +682,255 @@ function updateCaptionOverlay(){
   const value=cue?.text||"";
   if(overlay.textContent!==value)overlay.textContent=value;
 }
+
+/* FX are stored in EDITED time, but the displayed source waveform uses SOURCE time.
+   Split FX into pieces at every kept-interval boundary, avoiding false alignment. */
+function fxSourcePieces(clip){
+  const duration=project?.media?.duration_ms||0;
+  const keep=project?.plan?segments():[{start_ms:0,end_ms:duration}];
+  const total=project?.plan?editedDuration():duration;
+  const last=Math.min(total,clip.start_ms+clip.duration_ms);
+  let elapsed=0;
+  const pieces=[];
+  for(const segment of keep){
+    const len=segment.end_ms-segment.start_ms;
+    const from=Math.max(elapsed,clip.start_ms),to=Math.min(elapsed+len,last);
+    if(from<to)pieces.push({
+      sourceStart:segment.start_ms+from-elapsed,
+      sourceEnd:segment.start_ms+to-elapsed,
+      assetStart:from-clip.start_ms,
+      assetEnd:to-clip.start_ms
+    });
+    elapsed+=len;
+  }
+  return pieces;
+}
+function requestFxWaveform(clip){
+  const sha=clip.asset_sha256;
+  if(!clip.available||fxWaveforms.has(sha)||fxWaveformsPending.has(sha))return;
+  fxWaveformsPending.add(sha);
+  fetch("/api/audio/waveform/"+sha,{cache:"no-store"}).then(async res=>{
+    if(!res.ok)throw Error("Waveform FX non disponibile.");
+    return res.json();
+  }).then(data=>{
+    if(data.asset_sha256!==sha||!Array.isArray(data.values))throw Error("Waveform errata");
+    fxWaveforms.set(sha,data.values);paintFxWaveforms();
+  }).catch(()=>fxWaveforms.set(sha,[])).finally(()=>fxWaveformsPending.delete(sha));
+}
+function paintFxWaveforms(){
+  for(const canvas of document.querySelectorAll(".fx-clip-waveform")){
+    const peaks=fxWaveforms.get(canvas.dataset.sha);
+    const bounds=canvas.getBoundingClientRect();
+    const w=Math.max(1,Math.round(bounds.width)),h=Math.max(1,Math.round(bounds.height));
+    if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}
+    const ctx=canvas.getContext("2d");if(!ctx)continue;
+    ctx.clearRect(0,0,w,h);
+    if(!peaks?.length)continue;
+    const from=Number(canvas.dataset.from),to=Number(canvas.dataset.to),duration=Number(canvas.dataset.duration);
+    ctx.fillStyle="rgba(241,217,252,.82)";
+    for(let x=0;x<w;x++){
+      const a=Math.floor((from+(to-from)*x/w)/duration*peaks.length);
+      const b=Math.max(a+1,Math.ceil((from+(to-from)*(x+1)/w)/duration*peaks.length));
+      let peak=0;
+      for(let i=a;i<Math.min(b,peaks.length);i++)peak=Math.max(peak,peaks[i]);
+      const height=Math.max(1,peak/1000*(h-8));
+      ctx.fillRect(x,Math.round((h-height)/2),1,Math.ceil(height));
+    }
+  }
+}
+function bindFxDrag(mark,clip,sourceStart){
+  const edited=project?.plan?editedDuration():project.media.duration_ms;
+  const max=Math.max(0,Math.min(project.media.duration_ms,edited)-1);
+  const clamp=x=>Math.max(0,Math.min(max,Math.round(x)));
+  const commit=ms=>ms===clip.start_ms?Promise.resolve():edit("audio.update",
+    {clip_id:clip.id,start_ms:ms,gain_db:clip.gain_db});
+  mark.addEventListener("click",event=>event.stopPropagation());
+  mark.addEventListener("keydown",event=>{
+    if(!["ArrowLeft","ArrowRight"].includes(event.key)||working())return;
+    event.preventDefault();event.stopPropagation();
+    const step=event.shiftKey?500:100;
+    run(()=>commit(clamp(clip.start_ms+(event.key==="ArrowRight"?step:-step))));
+  });
+  mark.addEventListener("pointerdown",event=>{
+    if(event.button!==0||working())return;
+    event.preventDefault();event.stopPropagation();
+    dragHandleActive=true;mark.classList.add("dragging");
+    mark.setPointerCapture(event.pointerId);
+    const firstX=event.clientX;
+    const width=el("timeline-track").getBoundingClientRect().width;
+    const sourceDuration=project.media.duration_ms;
+    const map=project.plan?outputTime:(x=>x);
+    let pending=clip.start_ms;
+    const move=ev=>{
+      const delta=(ev.clientX-firstX)/Math.max(1,width)*sourceDuration;
+      const at=Math.max(0,Math.min(sourceDuration,sourceStart+delta));
+      pending=clamp(clip.start_ms+Math.round((map(at)-map(sourceStart))/100)*100);
+      mark.style.transform="translateX("+(ev.clientX-firstX)+"px)";
+    };
+    const finish=ev=>{cleanup(ev);run(()=>commit(pending));};
+    const cancel=ev=>cleanup(ev);
+    const cleanup=ev=>{
+      mark.removeEventListener("pointermove",move);
+      mark.removeEventListener("pointerup",finish);
+      mark.removeEventListener("pointercancel",cancel);
+      if(mark.hasPointerCapture(ev.pointerId))mark.releasePointerCapture(ev.pointerId);
+      mark.classList.remove("dragging");mark.style.transform="";
+      window.setTimeout(()=>{dragHandleActive=false;},0);
+    };
+    mark.addEventListener("pointermove",move);
+    mark.addEventListener("pointerup",finish);
+    mark.addEventListener("pointercancel",cancel);
+  });
+}
+
+function drawFx(){
+  const list=el("fx-list"),lane=el("fx-lane");list.replaceChildren();lane.replaceChildren();
+  const clips=project?.audio_clips||[];
+  const duration=project?.media?.duration_ms||0;
+  el("fx-track-empty").hidden=clips.length>0;
+  el("fx-hint").textContent=clips.length?
+    clips.length+" effetto/i audio · Waveform e FX condividono la scala. Le clip sono suddivise visivamente dove ci sono tagli. Trascina o usa ← →.":
+    "Nessun effetto. Posiziona il cursore sul video e importa un riser, un whoosh o un altro audio.";
+  for(const clip of clips){
+    const pieces=fxSourcePieces(clip);
+    for(const [index,frag] of pieces.entries()){
+      const mark=document.createElement("button");
+      mark.type="button";
+      mark.className="fx-clip-mark"+(clip.available?"":" missing")+
+        ((clip.muted||currentAudioMix().fx_muted)?" is-muted":"");
+      mark.dataset.clipId=clip.id;
+      mark.title=clip.filename+" · inizio nel montaggio "+msFormat(clip.start_ms,true)+" · trascina o usa le frecce";
+      mark.setAttribute("aria-label","Sposta effetto "+clip.filename+", inizio "+
+        msFormat(clip.start_ms,true)+" nel montaggio. Frecce ±0,1 s; Shift ±0,5 s.");
+      mark.disabled=working();
+      mark.style.left=(frag.sourceStart/duration*100).toFixed(4)+"%";
+      mark.style.width=((frag.sourceEnd-frag.sourceStart)/duration*100).toFixed(4)+"%";
+      const canvas=document.createElement("canvas");canvas.className="fx-clip-waveform";
+      canvas.dataset.sha=clip.asset_sha256;canvas.dataset.from=frag.assetStart;
+      canvas.dataset.to=frag.assetEnd;canvas.dataset.duration=clip.duration_ms;
+      canvas.setAttribute("aria-hidden","true");mark.append(canvas);
+      if(index===0){
+        const title=document.createElement("span");title.className="fx-clip-title";
+        title.textContent=clip.filename;mark.append(title);
+      }
+      bindFxDrag(mark,clip,frag.sourceStart);
+      lane.append(mark);
+    }
+    if(clip.available)requestFxWaveform(clip);
+    const item=document.createElement("div");item.className="fx-item";
+    const name=document.createElement("div");name.className="fx-item-name";
+    const label=document.createElement("strong");label.textContent=clip.filename;
+    const status=document.createElement("span");
+    status.textContent=!clip.available?"File mancante · reimporta per ricollegare":
+      !pieces.length?"Fuori dalla durata montata · modifica inizio":
+      "Durata "+shortDuration(clip.duration_ms)+" · FX incluso nella preview e nell'export";
+    if(!clip.available)status.className="fx-missing";
+    name.append(label,status);item.append(name);
+    const controls=[
+      ["Inizio (sec)","start_ms",clip.start_ms/1000,.001,0,Math.max(0,((project.plan?editedDuration():duration)-1)/1000)],
+      ["Volume (dB)","gain_db",clip.gain_db,1,-36,12]
+    ];
+    for(const [title,key,val,step,min,max] of controls){
+      const wrapper=document.createElement("label");wrapper.textContent=title;
+      const input=document.createElement("input");input.type="number";
+      input.min=min;input.max=max;input.step=step;
+      input.value=String(val);input.disabled=working();
+      input.setAttribute("aria-label",title+" "+clip.filename);
+      if(key==="gain_db"){
+        input.addEventListener("input",()=>{
+          if(!input.checkValidity())return;
+          const value=Number(input.value);
+          clipMixerDrafts.set(clip.id,{...currentClipMix(clip),gain_db:value});
+          const slider=item.querySelector(".clip-volume-range");
+          const out=item.querySelector(".clip-mixer output");
+          if(slider)slider.value=String(value);
+          if(out)out.textContent=gainText(value);
+          syncLiveFx();
+        });
+      }
+      input.addEventListener("change",()=>run(async()=>{
+        if(key==="gain_db")ensureLiveAudioPreview();
+        if(!input.checkValidity()||!Number.isFinite(Number(input.value)))
+          throw Error("Valore audio fuori dai limiti.");
+        const value=key==="start_ms"?Math.round(Number(input.value)*1000):Number(input.value);
+        if(key==="gain_db"){
+          if(value===clip.gain_db)return;
+          await edit("audio.clip.mix",{clip_id:clip.id,gain_db:value,
+            muted:clip.muted===true});
+        }else{
+          await edit("audio.update",{clip_id:clip.id,
+            start_ms:value,gain_db:clip.gain_db});
+        }
+      }));
+      wrapper.append(input);item.append(wrapper);
+    }
+    const clipMixer=document.createElement("div");
+    clipMixer.className="clip-mixer"+(clip.muted?" is-muted":"");
+    const mixLabel=document.createElement("label");mixLabel.textContent="Volume effetto";
+    const slider=document.createElement("input");slider.type="range";
+    slider.className="clip-volume-range";
+    slider.min="-36";slider.max="12";slider.step="1";slider.value=String(clip.gain_db);
+    slider.disabled=working();
+    slider.setAttribute("aria-label","Regola volume "+clip.filename);
+    slider.setAttribute("aria-valuetext",gainText(clip.gain_db));
+    const level=document.createElement("output");level.textContent=gainText(clip.gain_db);
+    const mixerButtons=document.createElement("div");mixerButtons.className="clip-mixer-controls";
+    const clipMute=document.createElement("button");clipMute.type="button";
+    clipMute.className="clip-mute";clipMute.disabled=working();
+    clipMute.textContent=clip.muted?"Riattiva":"Silenzia";
+    clipMute.setAttribute("aria-label",(clip.muted?"Riattiva":"Silenzia")+" effetto "+clip.filename);
+    clipMute.setAttribute("aria-pressed",String(!!clip.muted));
+    clipMute.addEventListener("click",()=>{
+      ensureLiveAudioPreview();
+      run(()=>edit("audio.clip.mix",{
+        clip_id:clip.id,gain_db:clip.gain_db,muted:!clip.muted
+      }));
+    });
+    const clipReset=document.createElement("button");clipReset.type="button";
+    clipReset.className="clip-reset";clipReset.disabled=working();
+    clipReset.textContent="↺";
+    clipReset.title="Ripristina volume effetto al livello iniziale (-12 dB)";
+    clipReset.setAttribute("aria-label","Ripristina volume effetto "+clip.filename);
+    clipReset.addEventListener("click",()=>{
+      ensureLiveAudioPreview();
+      run(async()=>{
+        if(clip.gain_db===-12&&!clip.muted)return;
+        await edit("audio.clip.mix",{clip_id:clip.id,gain_db:-12,muted:false});
+      });
+    });
+    slider.addEventListener("input",()=>{
+      ensureLiveAudioPreview();
+      const value=Number(slider.value);
+      level.textContent=gainText(value);
+      slider.setAttribute("aria-valuetext",gainText(value));
+      const number=item.querySelector('input[aria-label^="Volume (dB)"]');
+      if(number)number.value=String(value);
+      clipMixerDrafts.set(clip.id,{...currentClipMix(clip),gain_db:value});
+      syncLiveFx();
+    });
+    slider.addEventListener("change",()=>run(async()=>{
+      const value=Number(slider.value);
+      if(value===clip.gain_db)return;
+      await edit("audio.clip.mix",{clip_id:clip.id,gain_db:value,muted:!!clip.muted});
+    }));
+    mixerButtons.append(clipMute,clipReset);
+    clipMixer.append(mixLabel,slider,level,mixerButtons);
+    item.append(clipMixer);
+    if(clip.available){
+      const audio=document.createElement("audio");audio.controls=true;audio.preload="none";
+      audio.src="/api/audio/"+clip.asset_sha256;
+      audio.setAttribute("aria-label","Ascolta "+clip.filename);
+      item.append(audio);
+    }
+    const remove=document.createElement("button");remove.type="button";remove.className="fx-remove";
+    remove.textContent="Rimuovi";remove.disabled=working();
+    remove.setAttribute("aria-label","Rimuovi effetto "+clip.filename);
+    remove.addEventListener("click",()=>run(()=>edit("audio.remove",{clip_id:clip.id})));
+    item.append(remove);list.append(item);
+  }
+  paintFxWaveforms();
+}
+
 function drawTimeline(){
   const parts=el("timeline-regions");parts.replaceChildren();if(!project?.media)return;
   const duration=project.media.duration_ms,keep=segments();
@@ -619,6 +1120,7 @@ async function clearSession(){
   mediaKey=null;
   mode="original";
   v.pause();v.removeAttribute("src");v.load();
+  for(const id of [...liveFxPlayers.keys()])disposeLiveFx(id);
   toast("Sessione e video locali eliminati.");
 }
 function changeMode(chosen){
@@ -630,7 +1132,8 @@ function changeMode(chosen){
   const sourceTime=oldMode==="rendered"?sourceFromOutput(oldTime):oldTime;
   const nextTime=chosen==="rendered"?outputTime(sourceTime):
     chosen==="edited"?nextSimulatedSourceTime(sourceTime):sourceTime;
-  v.pause();mode=chosen;
+  v.pause();pauseLiveFx();mode=chosen;
+  syncVoicePlayback();
   if(chosen==="rendered"||oldMode==="rendered"){
     const url=chosen==="rendered"?"/api/preview?v="+encodeURIComponent(mediaKey)+
       "&rev="+project.project_revision:"/api/media?v="+encodeURIComponent(mediaKey);
@@ -672,18 +1175,25 @@ function followEdits(){
 // when a tab is backgrounded. Do not run the loop in other preview modes.
 function simulationTick(){
   simulationFrame=null;
-  if(mode!=="edited"||v.paused||v.ended)return;
-  followEdits();
+  if(v.paused||v.ended)return;
+  if(mode==="edited")followEdits();
+  syncLiveFx();
   transport();
-  if(mode==="edited"&&!v.paused)simulationFrame=requestAnimationFrame(simulationTick);
+  if(!v.paused&&(mode==="edited"||(mode!=="rendered"&&fxMonitoringEnabled&&
+       (project?.audio_clips||[]).length))){
+    simulationFrame=requestAnimationFrame(simulationTick);
+  }
 }
 function syncSimulationLoop(){
-  if(mode==="edited"&&!v.paused&&!v.ended){
+  const active=!v.paused&&!v.ended&&(mode==="edited"||
+    (mode!=="rendered"&&fxMonitoringEnabled&&(project?.audio_clips||[]).length));
+  if(active){
     if(simulationFrame===null)simulationFrame=requestAnimationFrame(simulationTick);
   }else if(simulationFrame!==null){
     cancelAnimationFrame(simulationFrame);
     simulationFrame=null;
   }
+  if(!active)pauseLiveFx();
 }
 function play(){
   if(!project?.media)return;
@@ -691,6 +1201,7 @@ function play(){
   if(mode==="edited"&&segments().length){
     v.currentTime=nextSimulatedSourceTime(Math.round(v.currentTime*1000))/1000;
   }else if(v.ended)v.currentTime=0;
+  unlockFxAudio();
   v.play().catch(()=>toast("Codec non riproducibile. Usa MP4 H.264 per la preview.","error"));
 }
 function jump(seconds){
@@ -706,6 +1217,53 @@ function biggestGap(){
     cursor=s.end_ms;
   }return max;
 }
+function importAudio(file){
+  if(!file)return;
+  if(!project?.media)return toast("Importa prima un video.","error");
+  if(working())return toast("Completa prima l'operazione in corso.","error");
+  const ext=(file.name.split(".").pop()||"").toLowerCase();
+  if(!["mp3","wav","m4a","aac","flac","ogg"].includes(ext))
+    return toast("Scegli un audio MP3, WAV, M4A, AAC, FLAC o OGG.","error");
+  if(!file.size||file.size>60*1024*1024)
+    return toast("Audio vuoto oppure superiore a 60 MB.","error");
+  const sourceTime=mode==="rendered"?sourceFromOutput((v.currentTime||0)*1000):(v.currentTime||0)*1000;
+  const anchor=mode==="rendered"?(v.currentTime||0)*1000:project.plan?outputTime(sourceTime):sourceTime;
+  uploading=true;el("job-banner").hidden=false;el("job-message").textContent="Importazione FX · 0%";
+  const xhr=new XMLHttpRequest();xhr.open("POST","/api/audio/import");
+  xhr.setRequestHeader("Content-Type","application/octet-stream");
+  xhr.setRequestHeader("X-Pausio-Client","studio");
+  xhr.setRequestHeader("X-Pausio-Revision",String(project.project_revision));
+  xhr.setRequestHeader("X-Pausio-Start-Ms",String(Math.max(0,Math.min(project.media.duration_ms-1,
+    Math.round(anchor)))));
+  xhr.setRequestHeader("X-Filename",encodeURIComponent(file.name));
+  xhr.upload.addEventListener("progress",event=>{
+    if(event.lengthComputable)el("job-message").textContent=
+      "Importazione FX · "+Math.round(event.loaded/event.total*100)+"%";
+  });
+  xhr.addEventListener("load",()=>{
+    uploading=false;el("fx-input").value="";
+    let result={};try{result=JSON.parse(xhr.responseText);}catch{}
+    if(xhr.status===200){
+      update(result);toast("Audio importato sul Mac. Regola posizione e volume nella traccia FX.");
+    }else{
+      el("job-banner").hidden=true;
+      toast(result.error||"Importazione audio non riuscita.","error");
+      refresh().catch(()=>{});
+    }
+  });
+  xhr.addEventListener("error",()=>{uploading=false;el("job-banner").hidden=true;
+    toast("Connessione al server locale interrotta.","error");refresh().catch(()=>{});});
+  xhr.send(file);
+}
+el("fx-monitor-toggle").addEventListener("click",()=>{
+  if(mode==="rendered")return;
+  fxMonitoringEnabled=!fxMonitoringEnabled;
+  if(fxMonitoringEnabled)unlockFxAudio();else pauseLiveFx();
+  updateFxMonitorUI();syncLiveFx();syncSimulationLoop();
+});
+el("fx-import").addEventListener("click",()=>el("fx-input").click());
+el("fx-input").addEventListener("change",()=>importAudio(el("fx-input").files?.[0]));
+
 function importVideo(file){
   if(!file)return;
   if(working())return toast("Completa prima l'operazione in corso.","error");
@@ -882,11 +1440,17 @@ el("forward-five").addEventListener("click",()=>jump(5));
 el("play-pause").addEventListener("click",play);
 el("video-center-play").addEventListener("click",play);
 v.addEventListener("click",play);
-v.addEventListener("timeupdate",()=>{followEdits();transport();});
-v.addEventListener("play",()=>{followEdits();syncSimulationLoop();transport();});
-v.addEventListener("pause",()=>{syncSimulationLoop();transport();});
-v.addEventListener("ended",()=>{syncSimulationLoop();transport();});
-v.addEventListener("seeked",()=>{followEdits();transport();});
+v.addEventListener("timeupdate",()=>{followEdits();syncLiveFx();transport();});
+v.addEventListener("play",()=>{unlockFxAudio();followEdits();syncLiveFx();syncSimulationLoop();transport();});
+v.addEventListener("pause",()=>{pauseLiveFx();syncSimulationLoop();transport();});
+v.addEventListener("ended",()=>{pauseLiveFx();syncSimulationLoop();transport();});
+v.addEventListener("waiting",pauseLiveFx);
+v.addEventListener("stalled",pauseLiveFx);
+v.addEventListener("playing",()=>{syncLiveFx();syncSimulationLoop();});
+v.addEventListener("seeking",pauseLiveFx);
+v.addEventListener("seeked",()=>{followEdits();syncLiveFx();transport();});
+v.addEventListener("ratechange",syncLiveFx);
+v.addEventListener("volumechange",syncLiveFx);
 v.addEventListener("loadedmetadata",transport);
 v.addEventListener("error",()=>{if(project?.file)toast("Impossibile riprodurre il codec nel browser. Usa MP4 H.264.","error");});
 el("timeline-track").addEventListener("click",event=>{
@@ -936,6 +1500,7 @@ function resizeTimeline(){
   surface.scrollLeft=Math.max(0,cursor*width);
   el("timeline-ruler").scrollLeft=surface.scrollLeft;
   paintWaveform();
+  paintFxWaveforms();
 }
 el("timeline-zoom").addEventListener("change",event=>{
   timelineZoom=Number(event.target.value)||1;

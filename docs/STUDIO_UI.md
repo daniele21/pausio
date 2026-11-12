@@ -79,3 +79,24 @@ Upstream design inspirations (our implementation and four UI skills are original
 - https://github.com/anthropics/skills/blob/main/skills/frontend-design/SKILL.md
 - https://github.com/vercel-labs/agent-skills/blob/main/skills/web-design-guidelines/SKILL.md
 - https://github.com/nextlevelbuilder/ui-ux-pro-max-skill
+
+## Ascolto live degli effetti nella preview del video
+
+La presenza della waveform viola **non basta** a far ascoltare un riser: ora il player sovrappone l'audio importato alla voce originale durante Play in modalità **Originale** o **Simulazione**, senza dover creare ogni volta un MP4. Il controllo **♫ FX attivi/spenti** disabilita soltanto l'ascolto live, **non** rimuove l'effetto dal rendering. Le clip FX rispettano posizione, durata, guadagno in dB, velocità, play/pause e seek del video, oltre ai tagli esclusi. In modalità **Preview FFmpeg** il monitor FX è disabilitato per evitare il raddoppio dei suoni: l'MP4 renderizzato ha già il mix incorporato. Un formato non riproducibile nel browser viene segnalato con indicazione di generare una preview FFmpeg. Per decidere il volume finale, ascolta sempre la preview renderizzata, non soltanto l'ascolto live che può avere piccoli ritardi alle transizioni.
+
+## FX audio locali
+
+La traccia FX opzionale permette di importare riser e altri effetti in MP3/WAV/M4A/AAC/FLAC/OGG (60 MB e 3 minuti massimo). Un effetto è aggiunto al momento del playhead (la fine si allinea al punto selezionato), e può essere ascoltato isolatamente, spostato in secondi, modificato in dB o rimosso. Preview e export FFmpeg mixano la voce originale e gli effetti. Undo/Redo e l'export `.pausio.json` conservano i comandi, ma non i byte degli audio. Alla riapertura sulla stessa macchina i file privati sono recuperati; su un altro Mac occorre reimportare lo stesso audio, verificato tramite SHA-256. Render bloccato per file mancanti o alterati.
+
+### Tracce audio sovrapposte e riferimenti temporali
+
+La waveform superiore continua a rappresentare i **timestamp del video originale**, perché le maniglie dei tagli agiscono sul sorgente. La seconda traccia **FX**, direttamente sotto la waveform nello stesso scroller, riutilizza il medesimo righello, zoom e playhead. Gli effetti sono salvati in **tempo montato** e la loro visualizzazione viene proiettata sui segmenti KEEP della prima traccia: se un riser attraversa un salto di montaggio, appare suddiviso in più porzioni, senza introdurre una pausa nel suo audio. La waveform FX è ottenuta da FFmpeg e non simulata. Trascina una clip per spostarla oppure usa le frecce (100 ms, con ⇧ 500 ms); il risultato viene registrato come `audio.update`, quindi può essere annullato e riprodotto da progetto esportato. La preview FFmpeg rimane l'autorità sull'audio mixato, perché la timeline è una rappresentazione per il montaggio e non una DAW.
+
+
+## Mixer audio Voce / FX
+
+Subito sotto la timeline è visibile il **Mixer audio**: una corsia per **Voce originale** e una per **Effetti FX**. Entrambe offrono uno slider -36/+12 dB, percentuale equivalente (100% = 0 dB), un pulsante **Silenzia/Riattiva** e reset a 100%. Gli FX dispongono anche di uno slider specifico per ogni riser, con input numerico in dB per precisione, mute e reset al volume predefinito del riser (-12 dB). FX generale × volume clip = livello effettivo. Un valore superiore a 100% amplifica il segnale, ma può introdurre distorsione in ascolto live: FFmpeg applica il limiter al mix finale. Il mixer non modifica il file originale.
+
+Durante il drag degli slider il **monitor live** aggiorna immediatamente il volume della voce e del riser, senza creare decine di comandi. Al rilascio viene emesso **un evento strutturato**. Lo stato finale è conservato nel progetto, recuperato al riavvio, esportato nel JSON e supporta Undo/Redo. I comandi sono `audio.mixer.configure` per i due bus e `audio.clip.mix` per un singolo effetto. Il controllo "♫ FX attivi" è invece una *preferenza temporanea di ascolto live*: non deve essere confuso con **Silenzia** del bus FX, che rende muti gli effetti anche in export. La preview FFmpeg applica il mix in modo definitivo e non riproduce i suoni una seconda volta dal monitor browser. Cambiando il mixer durante una preview FFmpeg si ritorna al lettore originale, evitando di ascoltare una preview non aggiornata.
+
+Per i progetti precedenti al mixer, voce e bus FX partono da 100%, non silenziati, mentre ciascun riser mantiene il proprio gain precedente (-12 dB quando appena importato). Il JSON `.pausio.json` conserva i parametri ma non incorpora i file audio (che devono essere reimportati su altri dispositivi).

@@ -134,3 +134,12 @@ These are guidance for coding agents. Pausio owns optional on-device ASR; weight
 - [Architecture](docs/ARCHITECTURE.md) · [Decisions](docs/DECISIONS.md) · [Roadmap](docs/ROADMAP.md) · [Dependencies/licensing](docs/DEPENDENCIES.md).
 
 The source-license decision remains open: public repository visibility does not automatically grant reuse rights. See `docs/DEPENDENCIES.md`.
+
+## Effetti audio personalizzati (riser, whoosh, impact)
+
+Dopo aver importato il video in Studio, apri **Effetti audio** sotto la timeline e clicca **+ Importa audio**. Sono supportati MP3, WAV, M4A, AAC, FLAC e OGG fino a 60 MB e 3 minuti. L'effetto viene posizionato per terminare sul playhead quando possibile. Puoi modificare l'inizio e il volume in dB, ascoltare il file isolato e rimuoverlo. **Genera preview** applica il mixing FFmpeg, come l'export MP4; la sola simulazione dei tagli non contiene il mix finale. Ogni azione produce un comando importabile/esportabile e annullabile. I file audio sono copiati e conservati privatamente sul Mac, ma **non inclusi** nel `.pausio.json`: trasferendo il progetto devi reimportare gli audio originali, riconosciuti per SHA-256. Se mancano, il render viene bloccato; **Elimina dati locali** elimina anche questi file.
+
+
+### Regola il volume di voce e riser
+
+Nel **Mixer audio** sotto la timeline trovi due slider, **Voce originale** e **Effetti FX**, ciascuno con percentuale, dB, pulsante **Silenzia** e reset. Puoi inoltre modificare il volume di ogni riser con il relativo slider, silenziarlo individualmente o ripristinarlo a -12 dB. Le modifiche si ascoltano mentre il video viene riprodotto e vengono applicate al rendering FFmpeg. Tutti i parametri del mixer vengono registrati come istruzioni esportabili/importabili e annullabili. In modalità **Preview FFmpeg** il suono è già incorporato nel video: regolando un livello si ritorna all'ascolto live finché non rigeneri la preview.
