@@ -1,5 +1,45 @@
 # Pausio Mobile Capture — gobbo e download sul telefono
 
+## Estensione desktop (Capture PC verticale)
+
+La stessa pagina `/capture` funziona da `pausio studio` su
+`http://127.0.0.1:<porta>/capture`, senza secondo server né ambiente Python.
+Da desktop compaiono la selezione delle webcam e dei microfoni disponibili,
+un indicatore del livello audio, il ritaglio orizzontale/verticale, lo zoom,
+e la qualità della composizione (540×960, 720×1280, 1080×1920).
+I device ID non sono salvati in `localStorage`; lo script, la velocità
+del gobbo e i parametri non sensibili del crop lo sono.
+
+Per fotocamere non 9:16 il recorder utilizza `canvas.captureStream(30)`
+e crea una registrazione da traccia **verticale 9:16** e traccia audio
+**originale** dal microfono. L'anteprima canvas mostra il medesimo crop
+che viene registrato. Le preferenze `width`, `height` e `aspectRatio`
+di `getUserMedia` da sole non garantirebbero un MP4 verticale.
+Quando un dispositivo touch ha già uno stream nativo esattamente 9:16
+con ritaglio default, usa la traccia nativa per evitare CPU aggiuntiva.
+Un input 16:9 può perdere risoluzione orizzontale: le dimensioni
+dell'output non implicano qualità superiore al sorgente.
+
+**Dalla pagina locale 127.0.0.1**, dopo la registrazione il pulsante
+`Usa questo take in Pausio Studio` invia il Blob con conferma esplicita
+a `POST /api/import` usando lo stesso protocollo sicuro dell'import
+manuale. Il backend conserva la copia privata nella sessione; sostituire
+un video precedente richiede conferma. Sulla pagina Pages, questo pulsante
+è assente e rimane il download manuale. Mai inoltrare video a servizi
+esterni o esporre il backend locale su Internet/LAN.
+
+### QA desktop
+
+- Browser Chromium headless con webcam/microfono simulati: dopo
+  `MediaRecorder` verificare **con FFprobe** le effettive dimensioni
+  720×1280 e la presenza di traccia audio, oltre al download non vuoto.
+- Layout 1440, 1100, 950, 860, 768, 390, 320px senza overflow.
+- Import locale diretto della registrazione fino al ritorno allo Studio.
+- Test hardware da completare: Safari/macOS, webcam 1080p, microfono
+  esterno, A/V sync, continuità della traccia, temperatura/CPU e browser
+  mobili reali. Il frame rate canvas può essere inferiore su dispositivi
+  lenti. Il file conserva solo il ritaglio, mai il testo del gobbo.
+
 ## Stato e responsabilità
 
 La pagina `capture.html` è una **webapp statica**, originale, senza dipendenze JS, upload, account o connessioni obbligatorie. È distinta dal server Studio, che resta vincolato a `127.0.0.1` e **non va esposto su Internet o in LAN**.
