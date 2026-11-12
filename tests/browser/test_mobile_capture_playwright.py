@@ -183,6 +183,18 @@ class DesktopCapturePlaywrightTests(unittest.TestCase):
                                  f"Capture layout overflow at {width}: {overflow}")
             self.assertTrue(page.locator("#activate-camera").is_visible())
             self.assertTrue(page.locator("#video-device").is_visible())
+            if width==950:
+                for axis in ("x","y","zoom"):
+                    group=page.locator(".crop-setting").filter(
+                        has=page.locator(f"#crop-{axis}")).bounding_box()
+                    label=page.locator(f"#crop-{axis}-value").bounding_box()
+                    slider=page.locator(f"#crop-{axis}").bounding_box()
+                    self.assertGreater(slider["y"],label["y"],
+                                       f"Crop {axis} slider should sit below its label")
+                    self.assertGreaterEqual(slider["x"],group["x"]-1)
+                    self.assertLessEqual(slider["right"] if "right" in slider else
+                                         slider["x"]+slider["width"],
+                                         group["x"]+group["width"]+1)
             if width in (950,390,320):
                 ARTIFACTS.mkdir(parents=True,exist_ok=True)
                 page.screenshot(path=str(ARTIFACTS/f"capture-responsive-{width}.png"),full_page=True)
