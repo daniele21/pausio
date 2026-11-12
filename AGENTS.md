@@ -46,3 +46,11 @@ Skills follow the [Agent Skills specification](https://agentskills.io/specificat
 5. Report exactly what was tested and what remains unverified. No claims of perfect fidelity without real recorded footage.
 
 Use feature branches / PRs for substantive changes. Document architectural decisions in `docs/DECISIONS.md`. No raw video or transcripts in Git.
+
+## Agent-ready editing contract (planned direction)
+
+For any overlay, audio loudness, media-library, self-hosted runner or chat connector change, **read [docs/AGENTIC_EDITING_PLAN.md](docs/AGENTIC_EDITING_PLAN.md) before implementation**. ChatGPT and Claude Chat provide creative/editorial reasoning through users' existing chat subscriptions; Pausio provides read-only observations and validated editing tools, and MUST NOT silently add OpenAI/Anthropic API-key inference or an in-process semantic video agent. The same typed edits must work in UI, import/export and future MCP tools with identical renderer semantics.
+
+Every agent-facing write MUST be a versioned, bounded, deterministic project command or atomic batch with source-media SHA-256, expected project revision, asset identity, provenance and testable validation. MCP handlers call the same application service as Studio. Do not expose the local Studio HTTP server directly over the internet, allow arbitrary shell commands, grant filesystem-wide access, bypass user approval, or transmit user video/transcript/asset bytes remotely without opt-in. Chat client and MCP support are capability gates: implement a minimal real-client spike before promising automated editing. See WP0/WP1/WP7 of the plan.
+
+The existing Playwright, FFmpeg, Python, media hash, autosave and privacy requirements apply unchanged to agent-proposed edits. Any conflict with the plan must be resolved in an ADR first.
