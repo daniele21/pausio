@@ -160,6 +160,8 @@ class StudioPlaywrightAudit(unittest.TestCase):
         edited=self.wait_state("revision",redone["project_revision"]+1)
         self.assertEqual(edited["video_fx"][0]["end_scale_pct"],112)
         self.assertEqual(edited["video_fx"][0]["start_scale_pct"],112)
+        # Project IO belongs to Media workspace, not focused Cut review.
+        self.page.locator('[data-workspace-nav="media"]').click()
         with self.page.expect_download() as download:
             self.page.locator("#project-export").click()
         exported=self.root/"visual-fx.pausio.json"
