@@ -49,6 +49,24 @@
           <h2 id="workspace-context-title">Media del progetto</h2>
           <p id="workspace-context-description">Importa un video, poi seleziona una modalità dalla barra laterale.</p>
         </section>
+        <section class="workspace-library workspace-audio-library" id="workspace-audio-library" aria-labelledby="workspace-audio-heading" hidden>
+          <div class="workspace-library-head">
+            <h3 id="workspace-audio-heading">Effetti importati</h3>
+            <button type="button" class="button button-outline workspace-add" id="workspace-audio-import" disabled>+ Importa</button>
+          </div>
+          <p class="workspace-library-hint">Seleziona un riser per modificarlo nell'inspector.</p>
+          <div class="workspace-library-items" id="workspace-audio-items"></div>
+        </section>
+        <section class="workspace-library workspace-caption-library" id="workspace-caption-library" aria-labelledby="workspace-caption-heading" hidden>
+          <div class="workspace-library-head">
+            <h3 id="workspace-caption-heading">Frasi del video</h3>
+          </div>
+          <label class="workspace-library-search-label" for="workspace-caption-search">Cerca nei sottotitoli</label>
+          <input type="search" id="workspace-caption-search" placeholder="Cerca una frase..." autocomplete="off">
+          <p class="workspace-library-hint" id="workspace-caption-count"></p>
+          <div class="workspace-library-items" id="workspace-caption-items"></div>
+          <button type="button" class="text-button" id="workspace-caption-transcribe">Apri trascrizione</button>
+        </section>
         <section class="rail-intro">
           <p class="eyebrow">WORKFLOW</p>
           <h1 id="workflow-title">Il tuo video,<br><em>il tuo ritmo.</em></h1>
