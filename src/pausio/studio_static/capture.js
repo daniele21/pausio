@@ -436,7 +436,7 @@
   }
   async function newTake() {
     if (mode !== "finished") return;
-    if (!savedAfterRecording && !window.confirm("Hai salvato il video sul telefono? Iniziando un nuovo take perderai l'anteprima attuale.")) return;
+    if (!savedAfterRecording && !window.confirm("Hai salvato il take sul dispositivo? Iniziando un nuovo take perderai l'anteprima attuale.")) return;
     els.playback.pause();
     els.playback.removeAttribute("src");
     els.playback.load();
@@ -446,8 +446,32 @@
     notice("Pronto per un altro take. Il copione e le impostazioni restano disponibili.");
     await activateCamera();
   }
-  els.camera.addEventListener("click", activateCamera);
-  els.flip.addEventListener("click", async () => { if (mode !== "preview") return; facing = facing === "user" ? "environment" : "user"; await activateCamera(); });
+  els.camera.addEventListener("click",activateCamera);
+  els.openStudio.addEventListener("click",importIntoStudio);
+  for(const select of [els.videoDevice,els.audioDevice]){
+    select.addEventListener("change",()=>{if(mode==="preview")activateCamera();});
+  }
+  for(const control of [els.quality,els.panX,els.panY,els.zoom]){
+    control.addEventListener("input",()=>{
+      if(mode!=="preview"&&mode!=="idle")return;
+      updateFramingLabels();remember();
+      if(mode==="preview"){
+        try{configureComposition();}
+        catch(error){notice("Ritaglio verticale non disponibile: "+error.message,true);}
+      }
+    });
+  }
+  els.resetCrop.addEventListener("click",()=>{
+    els.panX.value="50";els.panY.value="50";els.zoom.value="100";
+    updateFramingLabels();remember();
+    if(mode==="preview")configureComposition();
+  });
+  els.flip.addEventListener("click",async()=>{
+    if(mode!=="preview")return;
+    facing=facing==="user"?"environment":"user";
+    els.videoDevice.value="";
+    await activateCamera();
+  });
   els.start.addEventListener("click", startRecording);
   els.stop.addEventListener("click", stopRecording);
   els.next.addEventListener("click", newTake);
@@ -469,7 +493,11 @@
       event.preventDefault(); event.returnValue = "";
     }
   });
-  prefs(); refreshPrompter(); setMode("idle");
+  prefs();refreshPrompter();updateFramingLabels();setMode("idle");
+  refreshDeviceChoices().catch(()=>{});
+  navigator.mediaDevices?.addEventListener?.("devicechange",()=>{
+    if(mode==="idle"||mode==="preview")refreshDeviceChoices().catch(()=>{});
+  });
   if (!window.isSecureContext && !["localhost","127.0.0.1"].includes(location.hostname)) {
     els.camera.disabled = true;
     notice("La fotocamera da browser richiede HTTPS. Apri questa pagina da un sito HTTPS.", true);
