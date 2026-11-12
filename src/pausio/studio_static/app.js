@@ -501,9 +501,8 @@ function update(next){
     "Originale protetto. Nessuna modifica viene applicata automaticamente.";
   el("timeline-placeholder").hidden=has;el("timeline-track").hidden=!has;
   const duration=has?next.media.duration_ms:0;
-  for(const [id,frac] of [["tick-quarter",.25],["tick-half",.5],["tick-threequarter",.75],["tick-end",1]]){
-    el(id).textContent=has?msFormat(duration*frac):"—";
-  }
+  drawTimeRuler();
+  el("timeline-center-playhead").disabled=!has;
   for(const step of document.querySelectorAll(".step")){
     const type=step.dataset.step;
     const done=type==="import"?has:type==="analyze"?!!next.suggested_plan:
@@ -1303,6 +1302,8 @@ function transport(){
   el("current-time").textContent=msFormat(rendered?at:edited?outputTime(at):at,true);
   el("total-time").textContent=msFormat(rendered||edited?editedDuration():duration,true);
   el("playhead").style.left=(duration?sourceAt/duration*100:0)+"%";
+  el("timeline-source-clock").textContent=duration?
+    "Sorgente "+rulerClock(sourceAt):"Sorgente —";
   el("timeline-track").setAttribute("aria-label","Timeline originale, posizione "+
     msFormat(sourceAt,true)+". Frecce ±5 secondi. Maniglie per regolare i tagli.");
   el("play-pause").textContent=v.paused?"▶":"Ⅱ";
@@ -1842,22 +1843,99 @@ setInterval(()=>{
      project?.waveform_status==="running")refresh().catch(()=>{});
 },850);
 refresh().catch(error=>toast(error.message,"error"));
-function resizeTimeline(){
+/* The ruler and every media lane use SOURCE time. The playback counter may
+   show edited/output time; zoom and ruler must never silently change basis. */
+const TIMELINE_ZOOMS=[1,2,4,8];
+function timelineSourceMs(){
+  const t=Math.max(0,(v.currentTime||0)*1000);
+  return mode==="rendered"?sourceFromOutput(t):t;
+}
+function rulerClock(ms){
+  const total=Math.max(0,Math.round(ms));
+  const hh=Math.floor(total/3600000),mm=Math.floor(total%3600000/60000),
+    ss=Math.floor(total%60000/1000),tenths=Math.floor(total%1000/100);
+  if(hh)return String(hh).padStart(2,"0")+":"+
+    String(mm).padStart(2,"0")+":"+String(ss).padStart(2,"0");
+  return String(mm).padStart(2,"0")+":"+String(ss).padStart(2,"0")+
+    (project?.media?.duration_ms<60000?"."+tenths:"");
+}
+function drawTimeRuler(){
+  const parent=el("timeline-ruler-content"),duration=project?.media?.duration_ms||0;
+  parent.replaceChildren();
+  if(!duration)return;
+  const width=Math.max(200,el("timeline-track").getBoundingClientRect().width);
+  const desiredMs=duration*92/width;
+  const steps=[100,200,250,500,1000,2000,2500,5000,10000,15000,
+    30000,60000,120000,300000,600000,900000,1800000,3600000];
+  const step=steps.find(x=>x>=desiredMs)||3600000*Math.ceil(desiredMs/3600000);
+  const drawTick=(ms,isEnd=false)=>{
+    const tick=document.createElement("span");
+    tick.className="timeline-time-tick";
+    tick.style.left=(ms/duration*100)+"%";
+    if(ms===0)tick.classList.add("first");
+    if(isEnd)tick.classList.add("last");
+    tick.textContent=rulerClock(ms);
+    parent.append(tick);
+  };
+  drawTick(0);
+  for(let ms=step;ms<duration;ms+=step)drawTick(ms);
+  if(duration>=step*.7)drawTick(duration,true);
+}
+function timelineLocate(sourceMs=timelineSourceMs(),position=.5){
+  if(!project?.media)return;
+  const surface=el("timeline-surface"),track=el("timeline-track");
+  const ratio=Math.max(0,Math.min(1,sourceMs/project.media.duration_ms));
+  const x=8+ratio*track.getBoundingClientRect().width;
+  surface.scrollLeft=Math.max(0,Math.min(surface.scrollWidth-surface.clientWidth,
+    x-surface.clientWidth*Math.max(0,Math.min(1,position))));
+  el("timeline-ruler").scrollLeft=surface.scrollLeft;
+}
+function resizeTimeline(anchorMs=null){
   const surface=el("timeline-surface"),track=el("timeline-track");
   if(!surface||!track)return;
+  const oldWidth=Math.max(1,track.getBoundingClientRect().width);
+  const oldScroll=surface.scrollLeft;
+  const anchor=anchorMs!==null&&project?.media?
+    Math.max(0,Math.min(1,anchorMs/project.media.duration_ms)):null;
+  const oldAnchorX=anchor===null?null:8+oldWidth*anchor-oldScroll;
   const width=Math.max(200,(surface.clientWidth-16)*timelineZoom);
-  const cursor=surface.clientWidth>0?surface.scrollLeft/Math.max(1,track.scrollWidth):0;
   track.style.width=width+"px";
   el("timeline-ruler-content").style.width=width+"px";
-  surface.scrollLeft=Math.max(0,cursor*width);
+  if(anchor!==null){
+    // Keep the same source timestamp under the same screen x when possible.
+    // When the playhead is off-screen, center it instead of preserving an
+    // invisible anchor. This also works through a rendered output preview.
+    const viewportX=oldAnchorX>=0&&oldAnchorX<=surface.clientWidth?
+      oldAnchorX:surface.clientWidth/2;
+    surface.scrollLeft=Math.max(0,8+width*anchor-viewportX);
+  }else{
+    const oldRange=Math.max(1,oldWidth+16-surface.clientWidth);
+    const newRange=Math.max(0,width+16-surface.clientWidth);
+    surface.scrollLeft=Math.max(0,oldScroll/oldRange*newRange);
+  }
   el("timeline-ruler").scrollLeft=surface.scrollLeft;
-  paintWaveform();
-  paintFxWaveforms();
+  drawTimeRuler();paintWaveform();paintFxWaveforms();
+}
+function setTimelineZoom(value){
+  const next=TIMELINE_ZOOMS.includes(Number(value))?Number(value):1;
+  const anchor=project?.media?timelineSourceMs():null;
+  timelineZoom=next;
+  el("timeline-zoom").value=String(next);
+  el("timeline-zoom-out").disabled=next===TIMELINE_ZOOMS[0];
+  el("timeline-zoom-in").disabled=next===TIMELINE_ZOOMS.at(-1);
+  resizeTimeline(anchor);
 }
 el("timeline-zoom").addEventListener("change",event=>{
-  timelineZoom=Number(event.target.value)||1;
-  resizeTimeline();
+  setTimelineZoom(event.target.value);
 });
+el("timeline-zoom-out").addEventListener("click",()=>{
+  setTimelineZoom(TIMELINE_ZOOMS[Math.max(0,TIMELINE_ZOOMS.indexOf(timelineZoom)-1)]);
+});
+el("timeline-zoom-in").addEventListener("click",()=>{
+  setTimelineZoom(TIMELINE_ZOOMS[Math.min(TIMELINE_ZOOMS.length-1,
+    TIMELINE_ZOOMS.indexOf(timelineZoom)+1)]);
+});
+el("timeline-center-playhead").addEventListener("click",()=>timelineLocate());
 el("timeline-surface").addEventListener("scroll",()=>{
   el("timeline-ruler").scrollLeft=el("timeline-surface").scrollLeft;
 });
@@ -1892,5 +1970,6 @@ window.addEventListener("resize",()=>{
 syncTimelineOrder();
 syncFxPanelOrder();
 resizeTimeline();
+setTimelineZoom(timelineZoom);
 initializeDesktopWorkspace();
 
