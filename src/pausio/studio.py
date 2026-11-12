@@ -31,6 +31,7 @@ from pausio.captions import (
 from pausio.media import MediaError, MediaInfo, detect_silences, probe, probe_audio, render, waveform_envelope
 from pausio.planner import CUT_PRESETS, validate_cut_settings, policy_from_cut_settings, propose_segments
 from pausio.project_commands import ProjectTape, ProjectFormatError, UI_COMMANDS, default_audio_mix
+from pausio.visual_fx_auto import propose_visual_fx
 from pausio.studio_persistence import StudioSessionStore, RecoveryError, default_studio_directory
 
 MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024
@@ -427,6 +428,31 @@ class StudioWorkspace:
                 raise StudioError(str(exc)) from exc
             self._install_tape(next_tape)
 
+    def suggest_visual_fx(self, raw: dict) -> dict:
+        """Read-only, revision-bound candidate proposal (not an editing event)."""
+        with self.lock:
+            self._ensure_unlocked()
+            if self.tape is None or self.info is None or self.media_sha256 is None:
+                raise StudioError("Importa un video prima di suggerire effetti.")
+            if not isinstance(raw, dict) or set(raw) != {"revision", "preset"}:
+                raise StudioError("Preset FX richiede revision e preset.")
+            revision = raw["revision"]
+            if type(revision) is not int or revision != self.tape.revision:
+                raise StudioError("Versione del progetto non aggiornata. Ricarica e riprova.")
+            if type(raw["preset"]) is not str:
+                raise StudioError("Preset FX non valido.")
+            try:
+                return propose_visual_fx(
+                    segments=[dict(s) for s in self.tape.view.segments],
+                    transcript=self.transcript,
+                    existing=[dict(fx) for fx in self.tape.view.video_fx],
+                    preset=raw["preset"],
+                    media_sha256=self.media_sha256,
+                    base_revision=revision,
+                )
+            except ValueError as exc:
+                raise StudioError(str(exc)) from exc
+
     def command(self, raw: dict) -> None:
         """Execute a version-checked typed command requested by the Studio UI."""
         with self.lock:
@@ -615,7 +641,14 @@ class StudioWorkspace:
                         current_captions = self.tape.view.captions
                         current_style = self.tape.view.caption_style
                         current_config = self.tape.view.caption_config
-                    current_audio_mix = dict(self.tape.view.audio_mix)
+                        current_audio_mix = dict(self.tape.view.audio_mix)
+                        indexed = {seg["id"]: i for i,seg in enumerate(self.tape.view.segments)}
+                        current_visual_fx = [
+                            {"segment_index": indexed[fx["segment_id"]],
+                             **{key:value for key,value in fx.items()
+                                if key not in {"id","segment_id"}}}
+                            for fx in self.tape.view.video_fx
+                        ]
                     mapped = remap_captions(current_captions, plan.segments)
                     render(
                         source, self.directory / ("preview.mp4" if kind == "preview" else "export.mp4"),
@@ -624,6 +657,7 @@ class StudioWorkspace:
                         captions=mapped, caption_style=current_style,
                         caption_config=current_config,
                         audio_fx=active_fx, audio_mix=current_audio_mix,
+                        video_fx=current_visual_fx,
                     )
                     with self.lock:
                         if kind == "preview":
@@ -796,6 +830,10 @@ class StudioHandler(BaseHTTPRequestHandler):
             if path == "/api/command":
                 self.server.workspace.command(self._read_json())
                 self._json(200, self.server.workspace.snapshot())
+                return
+            if path == "/api/visual-fx/suggest":
+                proposal = self.server.workspace.suggest_visual_fx(self._read_json())
+                self._json(200, proposal)
                 return
             if path == "/api/captions/generate":
                 self.server.workspace.generate_captions(self._read_json())
