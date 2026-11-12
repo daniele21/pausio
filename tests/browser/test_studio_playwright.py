@@ -636,6 +636,21 @@ class StudioPlaywrightAudit(unittest.TestCase):
             self.assertEqual(run.call_args.kwargs["language"],"it")
         self.wait_condition(lambda:"Pausio ASR" in self.page.locator(
             ".transcript-source").inner_text())
+        self.assertTrue(self.page.locator("#transcript-review").is_visible())
+        self.assertEqual(self.page.locator(".transcript-item").count(),1)
+        revision=state["project_revision"]
+        self.page.locator("#transcript-search").fill("ciao")
+        self.assertEqual(self.page.locator(".transcript-item").count(),1)
+        self.page.locator("#transcript-next").click()
+        self.assertEqual(self.page.locator(".transcript-item.is-selected").count(),1)
+        self.assertEqual(self.page.evaluate("transcriptSelectedIndex"),0)
+        self.assertEqual(self.state()["project_revision"],revision)
+        self.page.locator("#transcript-search").fill("inesistente")
+        self.assertEqual(self.page.locator(".transcript-item").count(),0)
+        self.assertIn("Nessuna frase",self.page.locator("#transcript-list").inner_text())
+        self.page.locator("#transcript-search").fill("")
+        self.assertEqual(self.page.locator(".transcript-item").count(),1)
+        self.shot("transcript-compact-1440")
         self.assertFalse(self.errors,self.errors)
 
     def test_generate_edit_and_preview_social_captions_in_browser(self):
@@ -728,7 +743,39 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertEqual(dragged["last_command"],"caption.retime")
         self.assertGreater(dragged["captions"][0]["start_ms"],keyed["captions"][0]["start_ms"])
         self.assertEqual(dragged["project_revision"],keyed["project_revision"]+1)
-        updated=dragged
+        self.assertEqual(self.page.locator(".caption-edge-handle.start").count(),
+                         len(dragged["captions"]))
+        self.assertEqual(self.page.locator(".caption-edge-handle.end").count(),
+                         len(dragged["captions"]))
+        right=self.page.locator(".caption-edge-handle.end").first
+        right.scroll_into_view_if_needed()
+        rect=right.bounding_box()
+        self.assertIsNotNone(rect)
+        px,py=rect["x"]+rect["width"]/2,rect["y"]+rect["height"]/2
+        self.page.mouse.move(px,py);self.page.mouse.down()
+        self.page.mouse.move(px-13,py,steps=6);self.page.mouse.up()
+        trimmed=self.wait_state("revision",dragged["project_revision"]+1)
+        self.assertEqual(trimmed["last_command"],"caption.retime")
+        self.assertEqual(trimmed["project_revision"],dragged["project_revision"]+1)
+        self.assertEqual(trimmed["captions"][0]["start_ms"],dragged["captions"][0]["start_ms"])
+        self.assertLess(trimmed["captions"][0]["end_ms"],dragged["captions"][0]["end_ms"])
+        self.assertGreaterEqual(trimmed["captions"][0]["end_ms"]-trimmed["captions"][0]["start_ms"],80)
+        self.assertTrue(self.page.locator("#timeline-snap").is_checked())
+        snapped=self.page.evaluate("""() => {
+          const cue=project.captions[0],target=segments()[0].end_ms;
+          return snapCueTime(target+20,cue,project.media.duration_ms,700,{});
+        }""")
+        self.assertTrue(snapped["snapped"])
+        self.page.locator("#timeline-snap").uncheck()
+        unsnapped=self.page.evaluate("""() => {
+          const cue=project.captions[0],target=segments()[0].end_ms;
+          return snapCueTime(target+20,cue,project.media.duration_ms,700,{});
+        }""")
+        self.assertFalse(unsnapped["snapped"])
+        self.assertEqual(self.page.evaluate("localStorage.getItem('pausio-caption-snap')"),"off")
+        self.page.locator("#timeline-snap").check()
+        self.shot("caption-trim-handles-1440")
+        updated=trimmed
         # Seek inside the retimed cue, not at its former timestamp.
         self.page.evaluate("""(sec) => {
           document.querySelector('#preview-video').currentTime=sec;
