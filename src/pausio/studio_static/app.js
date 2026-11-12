@@ -521,7 +521,7 @@ function update(next){
     editorSelection=null;
   }
   drawSegments();drawTimeline();drawFx();drawTranscript();drawCaptionEditor();
-  syncEditorSelection();
+  drawCaptionTimeline();syncEditorSelection();
   updateFxMonitorUI();drawAudioMixer();syncVoicePlayback();syncLiveFx();transport();
   syncDesktopCommands();
   if(has&&next.waveform_status==="ready"&&waveformRequestedFor!==next.media_id){
@@ -587,6 +587,10 @@ function selectedEditorItem(){
     const clip=(project.audio_clips||[]).find(item=>item.id===editorSelection.id);
     return clip?{type:"fx",value:clip}:null;
   }
+  if(editorSelection.type==="caption"){
+    const cue=(project.captions||[]).find(item=>item.id===editorSelection.id);
+    return cue?{type:"caption",value:cue}:null;
+  }
   return null;
 }
 function syncEditorSelection(){
@@ -602,15 +606,23 @@ function syncEditorSelection(){
         msFormat(selected.value.start_ms,true)+" – "+
         msFormat(selected.value.end_ms,true)+" · "+
         shortDuration(selected.value.end_ms-selected.value.start_ms);
-    }else{
+    }else if(selected.type==="fx"){
       const clip=selected.value;
       el("selection-title").textContent=clip.filename;
       el("selection-description").textContent=
         "FX · "+msFormat(clip.start_ms,true)+" nel montaggio · "+
         gainText(clip.gain_db)+(clip.muted?" · Silenziato":"");
+    }else{
+      const cue=selected.value;
+      const index=(project.captions||[]).findIndex(c=>c.id===cue.id);
+      el("selection-title").textContent="Sottotitolo "+(index+1);
+      el("selection-description").textContent=
+        msFormat(cue.start_ms,true)+" – "+msFormat(cue.end_ms,true)+
+        " · "+cue.text;
     }
     el("selection-goto").textContent=selected.type==="fx"?
-      "Apri controlli effetto":"Apri intervallo";
+      "Apri controlli effetto":selected.type==="caption"?
+      "Correggi sottotitolo":"Apri intervallo";
   }
   for(const card of document.querySelectorAll(".segment-card")){
     const isSelected=selected?.type==="segment"&&card.dataset.segmentId===selected.value.id;
@@ -627,15 +639,22 @@ function syncEditorSelection(){
     if(item.classList.contains("fx-clip-mark"))
       item.setAttribute("aria-pressed",String(!!isSelected));
   }
+  for(const item of document.querySelectorAll(".caption-cue-mark, .caption-edit-card")){
+    const isSelected=selected?.type==="caption"&&item.dataset.captionId===selected.value.id;
+    item.classList.toggle("is-selected",!!isSelected);
+    if(item.classList.contains("caption-cue-mark"))
+      item.setAttribute("aria-pressed",String(!!isSelected));
+  }
 }
 function selectEditorItem(type,id,options={}){
   editorSelection={type,id};
   if(type==="segment")setWorkspace("cuts");
   else if(type==="fx")setWorkspace("audio");
+  else if(type==="caption")setWorkspace("captions");
   syncEditorSelection();
   const selected=selectedEditorItem();
   if(options.seek&&selected){
-    const sourceTime=type==="segment"?selected.value.start_ms:
+    const sourceTime=type==="segment"||type==="caption"?selected.value.start_ms:
       project.plan?sourceFromOutput(selected.value.start_ms):selected.value.start_ms;
     const seekMs=mode==="rendered"?outputTime(sourceTime):sourceTime;
     v.currentTime=Math.max(0,seekMs)/1000;
@@ -646,13 +665,17 @@ function focusEditorSelection(){
   if(!selected)return;
   const selector=selected.type==="segment"?
     '.segment-card[data-segment-id="'+selected.value.id+'"]':
-    '.fx-item[data-clip-id="'+selected.value.id+'"]';
+    selected.type==="fx"?
+    '.fx-item[data-clip-id="'+selected.value.id+'"]':
+    '.caption-edit-card[data-caption-id="'+selected.value.id+'"]';
   const element=document.querySelector(selector);
   if(!element)return;
   element.scrollIntoView({block:"nearest",behavior:"instant"});
   const control=selected.type==="segment"?
     element.querySelector(".start-input"):
-    element.querySelector('input[aria-label^="Inizio"]');
+    selected.type==="fx"?
+    element.querySelector('input[aria-label^="Inizio"]'):
+    element.querySelector(".caption-edit-input");
   control?.focus({preventScroll:true});
 }
 
@@ -724,6 +747,7 @@ function drawCaptionEditor(){
   const list=el("caption-edit-list");list.replaceChildren();
   for(const cue of project?.captions||[]){
     const card=document.createElement("article");card.className="caption-edit-card";
+    card.dataset.captionId=cue.id;
     const heading=document.createElement("div");heading.className="caption-edit-heading";
     heading.textContent=msFormat(cue.start_ms,true)+" — "+msFormat(cue.end_ms,true);
     const input=document.createElement("textarea");
@@ -735,7 +759,13 @@ function drawCaptionEditor(){
       if(input.value.trim()===cue.text)return;
       await edit("caption.correct",{caption_id:cue.id,text:input.value.trim()});
     }));
-    card.append(heading,input,save);
+    const choose=document.createElement("button");
+    choose.type="button";choose.className="caption-select";
+    choose.textContent="Seleziona sulla timeline";
+    choose.setAttribute("aria-label","Seleziona sottotitolo da "+msFormat(cue.start_ms,true));
+    choose.addEventListener("click",()=>selectEditorItem("caption",cue.id,{seek:true}));
+    // Keep Save text first for existing keyboard order and automated flows.
+    card.append(heading,input,save,choose);
     list.append(card);
   }
 }
@@ -1033,6 +1063,38 @@ function drawFx(){
     item.append(remove);list.append(item);
   }
   paintFxWaveforms();
+}
+
+
+/* Caption cue timestamps are on the original source ruler. Excluded spans
+   remain visible here but will not appear in the rendered output timeline.
+   Clicking a cue is a selection/seek only; correction still uses caption.correct. */
+function drawCaptionTimeline(){
+  const track=el("timeline-caption-track"),lane=el("caption-cue-lane");
+  lane.replaceChildren();
+  const duration=project?.media?.duration_ms||0;
+  const cues=project?.captions||[];
+  const has=duration>0&&cues.length>0;
+  track.hidden=!has;
+  el("timeline-surface").classList.toggle("has-captions",has);
+  if(!has)return;
+  for(const [index,cue] of cues.entries()){
+    const mark=document.createElement("button");
+    mark.type="button";mark.className="caption-cue-mark";
+    mark.dataset.captionId=cue.id;
+    mark.setAttribute("aria-pressed","false");
+    mark.setAttribute("aria-label","Sottotitolo "+(index+1)+": "+
+      cue.text+", da "+msFormat(cue.start_ms,true)+" a "+msFormat(cue.end_ms,true));
+    mark.title=cue.text+" · "+msFormat(cue.start_ms,true)+
+      " – "+msFormat(cue.end_ms,true);
+    mark.style.left=(cue.start_ms/duration*100).toFixed(4)+"%";
+    mark.style.width=((cue.end_ms-cue.start_ms)/duration*100).toFixed(4)+"%";
+    mark.textContent=cue.text;
+    mark.addEventListener("click",event=>{
+      event.stopPropagation();selectEditorItem("caption",cue.id,{seek:true});
+    });
+    lane.append(mark);
+  }
 }
 
 function drawTimeline(){
