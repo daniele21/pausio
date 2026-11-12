@@ -15,9 +15,11 @@ import unittest
 import urllib.error
 import urllib.request
 from pathlib import Path
-from unittest.mock import call, patch, sentinel
+from unittest.mock import call, patch, sentinel, Mock
 
-from pausio.studio import STATIC_DIR, StudioWorkspace, StudioHandler, create_server, run_studio
+from pausio.studio import (STATIC_DIR, StudioWorkspace, StudioHandler, StudioServer,
+                           MAX_ACTIVE_CONNECTIONS, SOCKET_IDLE_TIMEOUT_S,
+                           STUDIO_LISTEN_BACKLOG, create_server, run_studio)
 from pausio.media import waveform_envelope, probe
 
 
@@ -100,6 +102,7 @@ class StudioHttpTests(unittest.TestCase):
             ConnectionResetError(54, "Connection reset by peer"),
             ConnectionAbortedError(53, "Software caused connection abort"),
             BrokenPipeError(32, "Broken pipe"),
+            TimeoutError("read idle socket timeout"),
         ):
             with self.subTest(exception=type(exception).__name__):
                 handler = object.__new__(StudioHandler)
@@ -118,6 +121,77 @@ class StudioHttpTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(RuntimeError, "application failure"):
                 handler.handle_one_request()
+
+    def test_dns_rebinding_host_is_rejected_for_read_head_and_write(self):
+        """Host must be checked for GET too: Origin-only checks cannot protect reads."""
+        cases = [
+            ("GET", "/api/state", None, {"Host": "attacker.example"}),
+            ("GET", "/api/media", None, {"Host": "attacker.example"}),
+            ("GET", "/", None, {"Host": "attacker.example"}),
+            ("HEAD", "/api/preview", None, {"Host": "attacker.example"}),
+            ("POST", "/api/jobs", b'{"kind":"analyze"}',
+             {"Host": "attacker.example", "Content-Type": "application/json",
+              "X-Pausio-Client": "studio"}),
+            ("GET", "/api/state", None, {"Host": "127.0.0.1:1"}),
+        ]
+        for method, path, data, headers in cases:
+            with self.subTest(method=method, path=path, host=headers["Host"]):
+                status, _, body = self.request(method, path, data, headers)
+                self.assertEqual(status, 403, body[:300])
+                if method != "HEAD":
+                    self.assertIn("Host non autorizzato", body.decode("utf-8"))
+        self.assertEqual(self.get_state()["job"]["status"], "idle")
+
+    def test_localhost_alias_allowed_but_foreign_origin_rejected(self):
+        status, _, payload = self.request(
+            "GET", "/api/state", headers={"Host": f"localhost:{self.server.server_port}"}
+        )
+        self.assertEqual(status, 200, payload[:100])
+        status, _, payload = self.request(
+            "POST", "/api/jobs", b'{"kind":"analyze"}',
+            {"Host": f"localhost:{self.server.server_port}",
+             "Content-Type": "application/json", "X-Pausio-Client": "studio",
+             "Origin": self.base},
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("Origine", json.loads(payload)["error"])
+        # A request from the alternate localhost origin reaches normal
+        # project validation; it must not be rejected as a foreign origin.
+        status, _, payload = self.request(
+            "POST", "/api/jobs", b'{"kind":"analyze"}',
+            {"Host": f"localhost:{self.server.server_port}",
+             "Content-Type": "application/json", "X-Pausio-Client": "studio",
+             "Origin": f"http://localhost:{self.server.server_port}"},
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("Importa prima", json.loads(payload)["error"])
+
+    def test_transport_has_bounded_connections_and_socket_timeout(self):
+        self.assertEqual(self.server.server_address[0], "127.0.0.1")
+        self.assertEqual(self.server.request_queue_size, STUDIO_LISTEN_BACKLOG)
+        self.assertGreater(MAX_ACTIVE_CONNECTIONS, 1)
+        self.assertLessEqual(MAX_ACTIVE_CONNECTIONS, 32)
+        self.assertGreater(SOCKET_IDLE_TIMEOUT_S, 0)
+        # All occupied slots -> refuse an extra local client, no thread spawned.
+        slots = self.server._client_slots
+        for _ in range(MAX_ACTIVE_CONNECTIONS):
+            self.assertTrue(slots.acquire(blocking=False))
+        try:
+            saturated = Mock()
+            self.server.process_request(saturated, ("127.0.0.1", 9999))
+            saturated.close.assert_called_once_with()
+        finally:
+            for _ in range(MAX_ACTIVE_CONNECTIONS):
+                slots.release()
+        self.assertTrue(slots.acquire(blocking=False))
+        slots.release()
+        # The transport sets a timeout on each accepted socket; no sleep test.
+        fake_sock = Mock()
+        with patch.object(StudioServer.__mro__[1], "get_request",
+                          return_value=(fake_sock, ("127.0.0.1", 19999))):
+            accepted, _ = self.server.get_request()
+        self.assertIs(accepted, fake_sock)
+        fake_sock.settimeout.assert_called_once_with(SOCKET_IDLE_TIMEOUT_S)
 
     def test_cross_origin_and_missing_client_token_are_rejected(self):
         status, _, data = self.request(

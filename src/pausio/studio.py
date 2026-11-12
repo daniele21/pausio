@@ -1,7 +1,8 @@
 """Pausio Studio: local-only HTTP workspace for reviewing real edits.
 
-No frontend build, cloud dependency, global data persistence, or shell commands.
-Every imported video remains in this server's temporary workspace until exit.
+No frontend build, cloud dependency, or shell commands.
+Imported videos and local ASR transcripts can be persisted to a private Studio
+workspace for crash recovery; never expose this HTTP listener beyond loopback.
 """
 
 from __future__ import annotations
@@ -35,6 +36,11 @@ from pausio.studio_persistence import StudioSessionStore, RecoveryError, default
 MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024
 MAX_JSON_BYTES = 4 * 1024 * 1024
 MAX_AUDIO_BYTES = 60 * 1024 * 1024
+# Local transport budgets. A hosted MCP gateway must enforce independent edge
+# authentication, quotas and DDoS controls; Studio remains loopback-only.
+MAX_ACTIVE_CONNECTIONS = 24
+SOCKET_IDLE_TIMEOUT_S = 15
+STUDIO_LISTEN_BACKLOG = 32
 AUDIO_EXTENSIONS = frozenset({'.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg'})
 ALLOWED_VIDEO_EXTENSIONS = frozenset({".mp4", ".mov", ".m4v", ".mkv", ".webm"})
 ASSETS = {
@@ -635,10 +641,37 @@ class StudioWorkspace:
 class StudioServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
+    request_queue_size = STUDIO_LISTEN_BACKLOG
 
     def __init__(self, address: tuple[str, int], workspace: StudioWorkspace):
         self.workspace = workspace
+        self._client_slots = threading.BoundedSemaphore(MAX_ACTIVE_CONNECTIONS)
         super().__init__(address, StudioHandler)
+
+    def get_request(self):
+        # A stalled request must not hold a worker forever. Normal media
+        # uploads are streamed; the timeout applies to each socket operation.
+        sock, peer = super().get_request()
+        sock.settimeout(SOCKET_IDLE_TIMEOUT_S)
+        return sock, peer
+
+    def process_request(self, request, client_address):
+        # ThreadingHTTPServer is otherwise unbounded. Reject excess local
+        # connections before allocating another request-handler thread.
+        if not self._client_slots.acquire(blocking=False):
+            request.close()
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self._client_slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._client_slots.release()
 
 
 class StudioHandler(BaseHTTPRequestHandler):
@@ -655,7 +688,7 @@ class StudioHandler(BaseHTTPRequestHandler):
         """
         try:
             super().handle_one_request()
-        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, TimeoutError):
             self.close_connection = True
 
     def log_message(self, format: str, *args: object) -> None:
@@ -692,11 +725,30 @@ class StudioHandler(BaseHTTPRequestHandler):
     def _failed(self, code: int, message: str) -> None:
         self._json(code, {"error": message})
 
+    def _check_local_host(self) -> bool:
+        # Host-based validation prevents a malicious Internet domain from
+        # DNS-rebinding into local Studio and reading /api/state or /api/media.
+        # Neither Origin nor a custom client header protects GET requests.
+        port = self.server.server_port
+        supplied = self.headers.get("Host", "")
+        if supplied not in {f"127.0.0.1:{port}", f"localhost:{port}"}:
+            self.close_connection = True
+            if self.command == "HEAD":
+                # HTTP HEAD responses cannot have a message body.
+                self._headers(403, 0, "application/json; charset=utf-8")
+                self.end_headers()
+            else:
+                self._failed(403, "Host non autorizzato.")
+            return False
+        return True
+
     def _check_post_security(self) -> None:
         if self.headers.get("X-Pausio-Client") != "studio":
             raise StudioError("Richiesta non autorizzata.")
         origin = self.headers.get("Origin")
-        valid = f"http://127.0.0.1:{self.server.server_port}"
+        # The allowed Host has already been checked. Match that exact origin;
+        # localhost and 127.0.0.1 must not silently become cross-origin.
+        valid = "http://" + self.headers["Host"]
         if origin is not None and origin != valid:
             raise StudioError("Origine non autorizzata.")
         content_type = self.headers.get("Content-Type", "").split(";")[0].strip()
@@ -725,6 +777,8 @@ class StudioHandler(BaseHTTPRequestHandler):
         return result
 
     def do_POST(self) -> None:
+        if not self._check_local_host():
+            return
         try:
             self._check_post_security()
             path = urlsplit(self.path).path
@@ -841,6 +895,8 @@ class StudioHandler(BaseHTTPRequestHandler):
                 self.server.workspace.abort_import(destination)
 
     def do_GET(self) -> None:
+        if not self._check_local_host():
+            return
         path = urlsplit(self.path).path
         if path == "/favicon.ico":
             # Browsers request this even without a declared icon. A deliberately
@@ -901,6 +957,8 @@ class StudioHandler(BaseHTTPRequestHandler):
         self._failed(404, "Risorsa non trovata.")
 
     def do_HEAD(self) -> None:
+        if not self._check_local_host():
+            return
         path = urlsplit(self.path).path
         if path == "/favicon.ico":
             self._headers(204, 0, "image/x-icon")

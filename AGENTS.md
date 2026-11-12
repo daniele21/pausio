@@ -30,6 +30,10 @@ Skills follow the [Agent Skills specification](https://agentskills.io/specificat
 | Caption segmentation, SRT/ASS, visual safe areas | `pausio-subtitles` |
 | Test changes, CI, regression fixtures, benchmarks | `pausio-test-engineering` |
 | Privacy, dependencies, permissions, licenses, release | `pausio-security-release` |
+| Studio HTTP, MCP transport, gateway, traffic limits, DoS/DDoS, DNS rebinding | `pausio-network-abuse-defense` |
+| MCP tools, authorization, chat agent permissions, prompt injection and private data | `pausio-mcp-trust-boundary` |
+| untrusted media import, codecs, archives, SVG, paths and upload validation | `pausio-input-media-defense` |
+| GitHub Actions, self-hosted transcription, workflow dispatch and runner secrets | `pausio-actions-runner-security` |
 | Bug diagnosis, code review, PR readiness | `pausio-pr-review` |
 | User journey, step flow, review and helpful empty/error states | `pausio-product-ux` |
 | Tokens, hierarchy, contrast, responsive layouts | `pausio-ui-design-system` |
@@ -54,3 +58,16 @@ For any overlay, audio loudness, media-library, self-hosted runner or chat conne
 Every agent-facing write MUST be a versioned, bounded, deterministic project command or atomic batch with source-media SHA-256, expected project revision, asset identity, provenance and testable validation. MCP handlers call the same application service as Studio. Do not expose the local Studio HTTP server directly over the internet, allow arbitrary shell commands, grant filesystem-wide access, bypass user approval, or transmit user video/transcript/asset bytes remotely without opt-in. Chat client and MCP support are capability gates: implement a minimal real-client spike before promising automated editing. See WP0/WP1/WP7 of the plan.
 
 The existing Playwright, FFmpeg, Python, media hash, autosave and privacy requirements apply unchanged to agent-proposed edits. Any conflict with the plan must be resolved in an ADR first.
+
+## Mandatory security skill selection (effective on every new integration)
+
+**Before changing any HTTP/MCP/remote integration, job, upload or GitHub Action:**
+- Inspect the trust boundary and load `.agents/skills/pausio-network-abuse-defense/SKILL.md` for traffic/resource and DNS-rebinding changes.
+- Load `.agents/skills/pausio-mcp-trust-boundary/SKILL.md` for each agent tool/connector and sensitive data flow.
+- Load `.agents/skills/pausio-input-media-defense/SKILL.md` for media import, FFmpeg ingestion, asset library, SVG and project bundles.
+- Load `.agents/skills/pausio-actions-runner-security/SKILL.md` for CI, release, dispatch or self-hosted transcription.
+- Apply the existing `pausio-security-release`, `pausio-edit-command-schema` and `pausio-test-engineering` as applicable.
+
+**Threat priority:** GitHub Pages is static and hosted by GitHub; local Studio/stdio MCP must stay on loopback. No public tunnel of Studio. A future public MCP gateway requires independent authenticated HTTPS, per-user and global quotas, bounded workers/jobs, abuse/incident monitoring and edge-level DDoS mitigation **before** any deployment. Local socket/Host controls do not prevent a distributed flood against public infrastructure. Never attach an untrusted public-repo PR workflow to the user's self-hosted Mac.
+
+All security controls must have adversarial tests; skill documents alone are not defenses. See `docs/SECURITY_THREAT_MODEL.md` for the trust matrix and acceptance gates.
