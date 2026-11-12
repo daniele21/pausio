@@ -11,6 +11,7 @@
   <script src="/app.js" defer></script>
   <script src="/visual_fx_ui.js" defer></script>
   <script src="/face_reframe_ui.js" defer></script>
+  <script src="/visual_transition_ui.js" defer></script>
 </head>
 <body>
   <div class="app-shell" id="app">
@@ -359,6 +360,28 @@
                 </div>
                 <div id="visual-fx-list" class="visual-fx-list" aria-label="Effetti visivi applicati"></div>
                 <button type="button" class="button button-ghost button-full" id="visual-fx-preview">Genera preview con effetti</button>
+              </div>
+            </section>
+            <section id="visual-transition-panel" class="visual-fx-panel" aria-labelledby="transition-heading">
+              <header class="visual-fx-heading">
+                <h3 id="transition-heading">Transizioni tra tagli</h3>
+                <p>Dip to black: sfumatura visiva senza sovrapporre fotogrammi né alterare l'audio originale. I tagli normali restano invariati.</p>
+              </header>
+              <div class="visual-fx-controls">
+                <label for="transition-boundary">Taglio tra due intervalli
+                  <select id="transition-boundary"></select>
+                </label>
+                <label for="transition-duration">Durata totale (ms)
+                  <select id="transition-duration">
+                    <option value="200">200 · molto rapida</option>
+                    <option value="300" selected>300 · breve</option>
+                    <option value="400">400 · delicata</option>
+                    <option value="600">600 · lenta</option>
+                  </select>
+                </label>
+                <button type="button" class="button button-outline button-full" id="transition-add">+ Aggiungi dip</button>
+                <p id="transition-status" class="visual-fx-status" role="status" aria-live="polite"></p>
+                <div id="transition-list" class="visual-fx-list" aria-label="Transizioni applicate"></div>
               </div>
             </section>
           </div>
