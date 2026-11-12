@@ -23,6 +23,16 @@ pausio studio
 
 Segui le [note ufficiali della release](.github/release/v0.1.0.md) per i limiti e le istruzioni complete; il flusso via `git clone` qui sotto resta utile a chi vuole sviluppare il progetto.
 
+## Provare la velocità del gobbo prima di REC
+
+Da `/capture`, incolla il copione e premi **▶ Prova gobbo**: il testo
+scorre anche senza fotocamera. Cambia `Velocità gobbo` durante la prova,
+metti in pausa, riprendi dallo stesso punto oppure usa **↺ Dall'inizio**.
+La modalità PROVA non registra audio o video e non crea file; **Registra**
+riparte invece dalla prima riga dopo il countdown. Vale sia per PC sia
+per smartphone. Maggiori dettagli in
+[Capture: guida e test](docs/MOBILE_CAPTURE.md).
+
 ## Pausio Capture su PC e telefono (verticale 9:16)
 
 Usa **lo stesso recorder** su desktop e smartphone con anteprima 9:16, gobbo
