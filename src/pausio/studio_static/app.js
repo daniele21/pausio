@@ -521,6 +521,7 @@ function update(next){
   }
   drawSegments();drawTimeline();drawFx();drawTranscript();drawCaptionEditor();
   drawCaptionTimeline();renderWorkspaceLibraries();syncEditorSelection();
+  window.pausioVideoFx?.update(next);
   updateFxMonitorUI();drawAudioMixer();syncVoicePlayback();syncLiveFx();transport();
   syncDesktopCommands();
   if(has&&next.waveform_status==="ready"&&waveformRequestedFor!==next.media_id){
