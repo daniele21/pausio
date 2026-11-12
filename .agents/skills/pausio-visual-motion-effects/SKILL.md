@@ -5,7 +5,7 @@ description: Use for Pausio punch-in/out, animated zoom, crop/pan keyframes, cam
 
 # Pausio visual rhythm — deliberate motion with deterministic effects
 
-Load this skill when implementing or modifying video FX, transition timing, reframing, keyframe interpolation, auto-suggested zoom, or kinetic captions. First read [visual motion plan](../../../docs/VISUAL_MOTION_EFFECTS_PLAN.md) and the existing project/event contract. Pair with `pausio-edit-command-schema`, `pausio-media-ffmpeg`, `pausio-video-interaction-ux`, `pausio-test-engineering` and `pausio-input-media-defense` where relevant.
+Load this skill when implementing or modifying video FX, transition timing, reframing, keyframe interpolation, auto-suggested zoom, or kinetic captions. First read [visual motion plan](../../../docs/VISUAL_MOTION_EFFECTS_PLAN.md) and [comparative automation research](../../../docs/VISUAL_FX_AUTOMATION_RESEARCH.md) and the existing project/event contract. Pair with `pausio-edit-command-schema`, `pausio-media-ffmpeg`, `pausio-video-interaction-ux`, `pausio-test-engineering` and `pausio-input-media-defense` where relevant.
 
 ## Non-negotiable engineering rules
 
@@ -30,3 +30,9 @@ Load this skill when implementing or modifying video FX, transition timing, refr
 - Auditory and visual human review: no loss of speech, distracting fast motion or caption obstruction.
 
 See [effect acceptance matrix](references/effect-qa.md).
+
+## Configurable automatic FX profiles (design-phase guard)
+
+Before adding automatic suggestions or UI preset controls, read `configs/visual_fx_presets_v1.json`, `schemas/pausio-visual-fx-presets-v1.schema.json` and `scripts/validate_visual_fx_presets.py`. Profiles are bounded design contracts, **not a running effect engine**. The engine must preserve these invariants: stable selection given identical source/cuts/settings/algorithm; transparent evidence/score and missing-signal report; no AI-made semantic claims; at most the configured density; no conflict with manual adjustments, user rejection or protected spoken words; no automatic project apply/export.
+
+Preset editing must validate all unknown keys/types/ranges and preserve exact accepted keyframe values in typed history. No unrestricted `ffmpeg_filter`, shell, code evaluation, arbitrary URL or third-party model import. For `personalizzato`, clone from a known profile and enforce the same schema and safety bounds. Work through an opt-in local proposal before adding authenticated MCP tools.
