@@ -77,3 +77,19 @@
 - **Portability**: an input and plan generated on macOS can be processed on Linux after source relocation.
 
 These are proposed acceptance criteria, not measured product performance.
+
+## Phase 4 — Agent-ready Studio (planned; subscription-based chat, no Pausio LLM)
+
+See [detailed agentic editing execution plan](AGENTIC_EDITING_PLAN.md) for dependencies, work packages, UX/API contracts, acceptance criteria and risk gates.
+
+- [ ] WP0: reconcile pending desktop capture / mobile portrait PR stack (#26–#28) with merged #22; independently prove MCP tool write from ChatGPT and Claude Chat in actually supported accounts/clients.
+- [ ] WP1: command schema v3, validated atomic instruction batches, revision checks, asset manifest and import/export migration.
+- [ ] WP2: text/statistic/code/image/video overlays on source-time timeline and the same deterministic FFmpeg preview/final path.
+- [ ] WP3: real integrated LUFS/LRA/true-peak measurement, configurable two-pass normalization and final AAC verification.
+- [ ] WP4: private music/riser/media library with asset hashes, licensing metadata, audition, gain/ducking/fades and agent-readable search.
+- [ ] WP5: optional transcription dispatch to a private self-hosted GitHub Actions runner using Pausio's existing ASR engine, never agent shell commands.
+- [ ] WP6: storyboard/frame/timecode/diagnostics observations for ChatGPT/Claude Chat to perform the creative video analysis.
+- [ ] WP7: scoped MCP tools and authenticated connector boundary; UI and agent share one command/render engine.
+- [ ] WP8: end-to-end talking-head pilot: GPT/Claude Chat analyzes video, edits Pausio, reviews preview, corrects, requests approval and delivers editable project + MP4.
+
+**Non-goal:** do not call GPT/Claude inference APIs from Pausio or recreate the creative analysis inside Pausio. Chat clients' file/tool support is an explicit MVP feasibility gate, not an assumed feature.
