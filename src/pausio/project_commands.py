@@ -21,8 +21,9 @@ from pausio.domain import EditPlan, Interval
 from pausio.planner import CUT_PRESETS, validate_cut_settings
 
 FORMAT = "pausio.project"
-VERSION = 3
-PREVIOUS_VERSION = 2
+VERSION = 4
+PREVIOUS_VERSION = 3
+MIGRATION_VERSION = 2
 LEGACY_VERSION = 1
 MAX_COMMANDS = 2000
 MAX_REVISION = 2_147_483_647
@@ -233,12 +234,14 @@ def _video_transform(raw: Any, segments: list[dict], duration_ms: int) -> dict:
         raise ProjectFormatError("Video FX must be inside its source KEEP segment")
     if end - start < 250 or end - start > 60_000:
         raise ProjectFormatError("Video FX must last between 250ms and 60 seconds")
-    if fx["kind"] not in ("punch", "slow_push") or not isinstance(fx["kind"], str):
+    if type(fx["kind"]) is not str or fx["kind"] not in ("punch", "slow_push", "ease_push", "ratchet"):
         raise ProjectFormatError("Unsupported video FX kind")
     for key in ("start_scale_pct", "end_scale_pct"):
         value = _integer(fx[key], key)
         if not 100 <= value <= 130:
             raise ProjectFormatError("Video zoom limited to 1.00x-1.30x")
+    if fx["kind"] == "ratchet" and end-start < 1200:
+        raise ProjectFormatError("Ratchet needs at least 1.2s for three stable steps")
     if fx["kind"] == "punch" and fx["start_scale_pct"] != fx["end_scale_pct"]:
         raise ProjectFormatError("Punch must have a constant zoom")
     for key in ("anchor_x_pct", "anchor_y_pct"):
@@ -634,7 +637,7 @@ class ProjectTape:
             # V1 files are intentionally read-only inputs; exporting always
             # upgrades to V2 with cursor at the end and preserved event IDs.
             return cls(obj["media"], obj["commands"])
-        if version in (PREVIOUS_VERSION, VERSION):
+        if version in (MIGRATION_VERSION, PREVIOUS_VERSION, VERSION):
             obj = _object(
                 document,
                 {"format", "schema_version", "media", "commands",
