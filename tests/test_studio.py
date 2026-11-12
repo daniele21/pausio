@@ -452,6 +452,41 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         self.assertFalse(new_state["approved"])
         self.assertEqual(len(self.workspace.tape.commands),2)
 
+    def test_dip_transition_command_preview_export_and_undo(self):
+        self.import_clip()
+        status,_,raw=self.post("/api/plan",{"segments":[
+            {"start_ms":0,"end_ms":1500},{"start_ms":2200,"end_ms":3900}
+        ]})
+        self.assertEqual(status,200,raw)
+        current=json.loads(raw)
+        left,right=current["editor_segments"]
+        trans={"id":"f"*32,"left_segment_id":left["id"],
+               "right_segment_id":right["id"],"kind":"dip_black","duration_ms":300}
+        before=current["project_revision"]
+        status,_,raw=self.post("/api/command",{
+            "revision":before,"type":"video.transition.add",
+            "payload":{"transition":trans}
+        })
+        self.assertEqual(status,200,raw)
+        changed=json.loads(raw)
+        self.assertEqual(changed["video_transitions"],[trans])
+        self.assertFalse(changed["approved"])
+        self.assertEqual(self.post("/api/command",{
+            "revision":before,"type":"video.transition.add","payload":{"transition":trans}
+        })[0],409)
+        status,_,_=self.post("/api/jobs",{"kind":"preview"})
+        self.assertEqual(status,202)
+        ready=self.await_job("preview")
+        self.assertTrue(ready["preview_ready"])
+        status,_,raw=self.request("GET","/api/project/export")
+        self.assertEqual(status,200)
+        self.assertIn("video.transition.add",[e["type"] for e in json.loads(raw)["commands"]])
+        status,_,raw=self.post("/api/command",{
+            "revision":changed["project_revision"],"type":"history.undo","payload":{}
+        })
+        self.assertEqual(status,200,raw)
+        self.assertEqual(json.loads(raw)["video_transitions"],[])
+
     def test_visual_fx_readonly_suggestions_then_typed_preview_and_export(self):
         self.import_clip()
         initial=self.get_state()
