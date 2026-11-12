@@ -41,12 +41,18 @@
             <option value="1080">1080 × 1920 · maggiore carico</option>
           </select>
         </label>
-        <div class="slider-line"><label for="crop-x">Inquadratura orizzontale</label><strong id="crop-x-value">50%</strong></div>
-        <input id="crop-x" type="range" min="0" max="100" step="1" value="50">
-        <div class="slider-line"><label for="crop-y">Inquadratura verticale</label><strong id="crop-y-value">50%</strong></div>
-        <input id="crop-y" type="range" min="0" max="100" step="1" value="50">
-        <div class="slider-line"><label for="crop-zoom">Zoom ritaglio</label><strong id="crop-zoom-value">100%</strong></div>
-        <input id="crop-zoom" type="range" min="100" max="180" step="5" value="100">
+        <div class="crop-setting">
+          <div class="slider-line"><label for="crop-x">Inquadratura orizzontale</label><strong id="crop-x-value">50%</strong></div>
+          <input id="crop-x" type="range" min="0" max="100" step="1" value="50">
+        </div>
+        <div class="crop-setting">
+          <div class="slider-line"><label for="crop-y">Inquadratura verticale</label><strong id="crop-y-value">50%</strong></div>
+          <input id="crop-y" type="range" min="0" max="100" step="1" value="50">
+        </div>
+        <div class="crop-setting">
+          <div class="slider-line"><label for="crop-zoom">Zoom ritaglio</label><strong id="crop-zoom-value">100%</strong></div>
+          <input id="crop-zoom" type="range" min="100" max="180" step="5" value="100">
+        </div>
         <button id="crop-reset" type="button" class="button secondary button-full">Ripristina inquadratura</button>
         <p class="small" id="capture-tech-info" role="status">La webcam orizzontale sarà ritagliata in 9:16. Il formato del file viene controllato dopo la registrazione.</p>
       </aside>
@@ -112,8 +118,8 @@ La lezione pratica? Controlla sempre i file di configurazione prima di pubblicar
           <select id="prompter-position"><option value="top">In alto · vicino alla lente</option><option value="middle">Al centro</option></select>
         </label>
         <label class="checkbox-line" for="auto-scroll"><input id="auto-scroll" type="checkbox" checked> Scorrimento automatico durante il take</label>
-        <div class="info"><strong>Per un video più naturale</strong><p>Metti il telefono all'altezza degli occhi, leggi frasi brevi e guarda vicino alla fotocamera. Per 1080p e microfono esterno, verifica il risultato sul tuo dispositivo.</p></div>
-        <p class="small">Funziona da browser HTTPS. La fotocamera richiede un permesso esplicito. La scelta del formato dipende dal browser (MP4 o WebM).</p>
+        <div class="info"><strong>Per un video più naturale</strong><p>Metti la lente all'altezza degli occhi. Su PC centra il volto con il ritaglio 9:16; controlla sempre il livello del microfono e il take registrato.</p></div>
+        <p class="small">Funziona su localhost o HTTPS. Fotocamera e microfono richiedono il permesso del browser. Il file può essere MP4 oppure WebM.</p>
       </aside>
     </main>
     <footer>PAUSIO · CAPTURE STUDIO <span>Privacy first · Nessun upload</span></footer>
