@@ -51,6 +51,20 @@ di correzione già esistente; i timestamp della traccia non sono ancora
 modificabili trascinando i blocchi. Per modificare il testo usa «Salva
 testo», che registra un comando `caption.correct` versionato.
 
+La timeline supporta ora zoom 1×–8× con regolazione ancorata al
+playhead, tacche temporali adattive e un pulsante «Cursore» per tornare
+alla posizione corrente. Il righello e gli intervalli KEEP/FX/cue
+usano **tempi del sorgente**: il contatore della preview può invece
+mostrare il tempo del montaggio, per cui le due misure sono distinte.
+
+Per correggere la sincronizzazione di un singolo sottotitolo usa i
+campi «Inizio (secondi)» e «Fine (secondi)», oppure trascina la frase
+sulla traccia. Frecce ←/→ sulla cue = ±100 ms, Shift = ±500 ms;
+il trascinamento sposta la cue mantenendone la durata. Ogni gesto
+valido produce un singolo comando versionato `caption.retime`;
+le sovrapposizioni e i tempi fuori dal video sono rifiutati. Dopo una
+correzione, riesegui la preview FFmpeg e riconferma il montaggio.
+
 Il click su un intervallo video seleziona invece il KEEP segment e
 apre i relativi campi Da/A. Su desktop l'inspector rimane contestuale;
 la selezione e il ridimensionamento dei pannelli non vengono esportati
