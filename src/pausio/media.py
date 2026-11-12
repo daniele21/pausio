@@ -41,6 +41,22 @@ def require_binary(name: str) -> str:
     return exe
 
 
+def ffmpeg_has_filter(name: str) -> bool:
+    """Check the actual FFmpeg binary used by Pausio, not an installed library.
+
+    In particular, libass installed separately does not add the 'ass'
+    filter to an FFmpeg executable that was built without --enable-libass.
+    """
+    if not re.fullmatch(r"[a-z][a-z0-9_]{0,39}", name):
+        raise ValueError("Invalid FFmpeg filter name")
+    result = _run([require_binary("ffmpeg"), "-hide_banner", "-filters"], timeout_s=20)
+    # FFmpeg prints three capability markers followed by the filter name.
+    return any(
+        re.match(r"^\s*[TSC.]{3}\s+" + re.escape(name) + r"\s", line)
+        for line in result.stdout.splitlines()
+    )
+
+
 def _run(args: list[str], timeout_s: int = 120) -> subprocess.CompletedProcess[str]:
     try:
         p = subprocess.run(
@@ -191,6 +207,17 @@ def render(
     # Validate subtitle text/style for both preview and final output.
     if captions:
         ass_document(captions, style=caption_style, settings=caption_config)
+        if not dry_run and not ffmpeg_has_filter("ass"):
+            executable = require_binary("ffmpeg")
+            raise MediaError(
+                "Il filtro 'ass' non è disponibile in FFmpeg (" + executable + "). "
+                "Per imprimere i sottotitoli serve una build con libass. "
+                "Su macOS: brew install ffmpeg-full; poi "
+                "export PATH=\"$(brew --prefix ffmpeg-full)/bin:$PATH\" "
+                "e riavvia Pausio dal medesimo terminale. "
+                "Verifica: ffmpeg -hide_banner -filters | grep ' ass '. "
+                "Non basta installare libass separatamente."
+            )
 
     components: list[str] = []
     concat_inputs: list[str] = []

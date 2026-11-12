@@ -7,7 +7,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from pausio.domain import Interval
-from pausio.media import MediaError, parse_silences, render, waveform_envelope
+from pausio.media import MediaError, ffmpeg_has_filter, parse_silences, render, waveform_envelope
 
 
 class TestMedia(unittest.TestCase):
@@ -61,6 +61,45 @@ class TestMedia(unittest.TestCase):
             self.assertEqual(
                 original_filter.split(";")[:-1], draft_filter.split(";")[:-1]
             )
+
+    def test_ffmpeg_has_filter_uses_actual_binary_listing(self):
+        from subprocess import CompletedProcess
+        listing = """
+Filters:
+  T.. = Timeline support
+  .S. = Slice threading
+  ..C = Command support
+ ... ass               V->V       Render ASS subtitles
+ ... subtitles         V->V       Render text subtitles
+"""
+        with (
+            patch("pausio.media.require_binary", return_value="/tmp/ffmpeg"),
+            patch("pausio.media._run", return_value=CompletedProcess([], 0, listing, "")) as run,
+        ):
+            self.assertTrue(ffmpeg_has_filter("ass"))
+            self.assertTrue(ffmpeg_has_filter("subtitles"))
+            self.assertFalse(ffmpeg_has_filter("nonexistent"))
+            self.assertEqual(run.call_args.args[0][0], "/tmp/ffmpeg")
+            self.assertIn("-filters", run.call_args.args[0])
+
+    def test_render_captions_fails_early_without_libass(self):
+        with TemporaryDirectory() as d:
+            source=Path(d)/"input.mov"
+            source.touch()
+            cues=[{"id":"a"*32,"start_ms":200,"end_ms":900,"text":"CIAO"}]
+            with (
+                patch("pausio.media.ffmpeg_has_filter", return_value=False),
+                patch("pausio.media.require_binary", return_value="/opt/homebrew/bin/ffmpeg"),
+            ):
+                with self.assertRaisesRegex(MediaError, "ffmpeg-full"):
+                    render(source,Path(d)/"output.mp4",
+                           (Interval(0,1000),),has_audio=True,captions=cues)
+                # Dry run may still show the command without executing FFmpeg.
+                cmd=render(source,Path(d)/"preview.mp4",
+                           (Interval(0,1000),),has_audio=True,dry_run=True,captions=cues)
+                self.assertIn("ass=filename=", cmd[cmd.index("-filter_complex")+1])
+                render(source,Path(d)/"without.mp4",
+                       (Interval(0,1000),),has_audio=True,dry_run=True)
 
     def test_render_burns_ass_captions_only_when_requested(self):
         with TemporaryDirectory() as d:

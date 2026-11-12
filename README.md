@@ -143,3 +143,18 @@ Dopo aver importato il video in Studio, apri **Effetti audio** sotto la timeline
 ### Regola il volume di voce e riser
 
 Nel **Mixer audio** sotto la timeline trovi due slider, **Voce originale** e **Effetti FX**, ciascuno con percentuale, dB, pulsante **Silenzia** e reset. Puoi inoltre modificare il volume di ogni riser con il relativo slider, silenziarlo individualmente o ripristinarlo a -12 dB. Le modifiche si ascoltano mentre il video viene riprodotto e vengono applicate al rendering FFmpeg. Tutti i parametri del mixer vengono registrati come istruzioni esportabili/importabili e annullabili. In modalità **Preview FFmpeg** il suono è già incorporato nel video: regolando un livello si ritorna all'ascolto live finché non rigeneri la preview.
+
+## FFmpeg subtitles (macOS): filter ass / libass
+
+Pausio needs an FFmpeg binary compiled with libass when burning subtitles. Homebrew's standard ffmpeg may not expose the ass filter even if libass is installed. Use ffmpeg-full and ensure Pausio uses that binary:
+
+~~~bash
+brew install ffmpeg-full
+export PATH="$(brew --prefix ffmpeg-full)/bin:$PATH"
+which ffmpeg
+ffmpeg -hide_banner -filters | grep ' ass '
+pausio doctor
+pausio studio
+~~~
+
+Restart Studio from the same terminal after changing PATH. With this fix, doctor reports captions_ass and a useful warning; subtitle render checks the actual executable before invoking FFmpeg. Video without subtitles is unaffected.
