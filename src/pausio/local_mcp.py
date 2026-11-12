@@ -144,7 +144,7 @@ def call_tool(name: str, arguments: dict, studio: StudioClient) -> dict:
         if set(arguments) != {"revision", "type", "payload"}:
             raise MCPToolError("Expected exactly revision, type and payload")
         revision, kind, payload = arguments["revision"], arguments["type"], arguments["payload"]
-        if type(revision) is not int or revision < 0 or kind not in EDIT_TYPES or not isinstance(payload, dict):
+        if type(revision) is not int or revision < 0 or not isinstance(kind, str) or kind not in EDIT_TYPES or not isinstance(payload, dict):
             raise MCPToolError("Unsupported or invalid typed edit command")
         state = studio.request("POST", "/api/command", arguments)
         return {"project_revision": state.get("project_revision"),
