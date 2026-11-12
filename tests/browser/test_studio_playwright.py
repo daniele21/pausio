@@ -152,6 +152,10 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertTrue(self.page.locator("#selection-inspector").is_visible())
         self.assertEqual(self.page.locator(".workspace-audio-item.is-selected").count(),1)
         self.assertEqual(self.page.locator("#app").get_attribute("data-workspace"),"audio")
+        input_rect=self.page.locator(".fx-item.is-selected input[aria-label^='Inizio']").bounding_box()
+        approve_rect=self.page.locator("#approve-action").bounding_box()
+        self.assertLess(input_rect["y"]+input_rect["height"],approve_rect["y"]+2,
+                        "Selected FX timing must remain visible above approval")
         self.shot("audio-fx-selected-1440")
         self.assertEqual(self.page.locator(".fx-clip-mark.is-selected").count(),
                          self.page.locator(".fx-clip-mark").count())
