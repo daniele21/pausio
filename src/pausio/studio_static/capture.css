@@ -78,7 +78,7 @@
 
 /* Framing label and range must stay in the same responsive grid cell. */
 .crop-setting { min-width:0; }
-.crop-setting input[type=range] { display:block; width:100%; }
+.crop-setting input[type=range] { display:block; width:calc(100% - 2px); margin-inline:1px; }
 @media (min-width:851px) and (max-width:1100px) {
   .device-settings .crop-setting { align-self:end; }
 }
