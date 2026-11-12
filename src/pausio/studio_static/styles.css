@@ -1543,3 +1543,16 @@ a { color: inherit; text-decoration: none; }
   .transcript-item .transcript-seek { grid-template-columns:49px minmax(0,1fr); min-height:39px; }
   .caption-edge-handle { width:13px; min-width:13px; }
 }
+
+/* Tablet timeline toolbars must wrap after the added snap control. */
+@media (min-width: 651px) and (max-width: 1000px) {
+  .timeline-top { flex-wrap:wrap; align-items:flex-start; }
+  .timeline-actions {
+    flex:1 1 480px;
+    min-width:0;
+    max-width:100%;
+    justify-content:flex-end;
+    flex-wrap:wrap;
+    gap:7px;
+  }
+}
