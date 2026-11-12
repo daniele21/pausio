@@ -618,6 +618,23 @@ class StudioPlaywrightAudit(unittest.TestCase):
         updated=self.state()
         self.assertEqual(updated["last_command"],"caption.set")
         self.assertFalse(updated["approved"])
+        self.assertEqual(self.page.locator(".caption-cue-mark").count(),len(updated["captions"]))
+        self.assertTrue(self.page.locator("#timeline-caption-track").is_visible())
+        cue=updated["captions"][0]
+        cue_ratio=self.page.locator(".caption-cue-mark").first.evaluate(
+            "(node)=>parseFloat(node.style.left)")
+        self.assertAlmostEqual(cue_ratio,100*cue["start_ms"]/updated["media"]["duration_ms"],delta=.02)
+        selection_revision=updated["project_revision"]
+        self.page.locator(".caption-cue-mark").first.click()
+        self.assertEqual(self.page.locator("#app").get_attribute("data-workspace"),"captions")
+        self.assertEqual(self.page.locator(".caption-edit-card.is-selected").count(),1)
+        self.assertEqual(self.page.locator(".caption-cue-mark[aria-pressed='true']").count(),1)
+        self.assertEqual(self.state()["project_revision"],selection_revision)
+        self.page.locator("#selection-goto").click()
+        self.assertTrue(self.page.locator(".caption-edit-card.is-selected textarea").evaluate(
+            "(node)=>document.activeElement===node"))
+        self.page.locator("#selection-clear").click()
+        self.assertEqual(self.state()["project_revision"],selection_revision)
         self.page.evaluate("() => document.querySelector('#preview-video').currentTime=.45")
         self.wait_condition(lambda:self.page.locator("#caption-overlay").is_visible())
         self.assertIn("Tre",self.page.locator("#caption-overlay").inner_text())
