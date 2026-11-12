@@ -1,6 +1,6 @@
 # Video FX v1 — first working Pausio Studio slice
 
-Status: feature branch, **not yet a main release** until integration CI/Playwright and merge. This documentation describes the intended UX implemented in PR #46, not advanced effects planned in prior research.
+Status: **developed and integration-tested in the daniele/* feature pipeline**. Not included in the historical `v0.1.0` wheel. Verify the integration PR and main CI before claiming a shipped GitHub release. This documentation describes the intended UX implemented in PR #46, not advanced effects planned in prior research.
 
 ## Creator flow
 
