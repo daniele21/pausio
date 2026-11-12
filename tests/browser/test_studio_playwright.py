@@ -705,10 +705,10 @@ class StudioPlaywrightAudit(unittest.TestCase):
         moved=self.wait_state("revision",selection_revision+1)
         self.assertEqual(moved["last_command"],"caption.retime")
         self.assertEqual(moved["captions"][0]["start_ms"],200)
-        self.page.locator("#undo-action").click()
+        self.page.locator("#desktop-undo-action").click()
         undone=self.wait_state("revision",moved["project_revision"]+1)
         self.assertEqual(undone["captions"][0]["start_ms"],cue["start_ms"])
-        self.page.locator("#redo-action").click()
+        self.page.locator("#desktop-redo-action").click()
         redone=self.wait_state("revision",undone["project_revision"]+1)
         self.assertEqual(redone["captions"][0]["start_ms"],200)
         mark=self.page.locator(".caption-cue-mark").first
