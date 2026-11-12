@@ -44,6 +44,18 @@ class VisualFxRendererTests(unittest.TestCase):
         self.assertIn("format=yuv420p",expr)
         self.assertEqual(expr,motion_filter(groups[0],0,(540,960)))
 
+    def test_eased_zoom_and_three_step_ratchet_are_numeric_only(self):
+        for kind,token in (("ease_push","3-2*"),("ratchet","floor(3*")):
+            with self.subTest(kind=kind):
+                prepared=prepare_motion_fx(
+                    (Interval(0,1800),),
+                    [entry(start=300,end=1600,kind=kind,amount=124)]
+                )
+                graph=motion_filter(prepared[0],0,(540,960))
+                self.assertIn(token,graph)
+                self.assertNotIn("system",graph)
+                self.assertIn("format=yuv420p",graph)
+
     def test_overlapping_events_rejected(self):
         s=(Interval(0,3000),)
         with self.assertRaises(ValueError):
