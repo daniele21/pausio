@@ -61,6 +61,6 @@ def compile_dips(segments: tuple, transitions: list[dict]|None)->dict[int,list[s
             s=segments[idx]
             length=(s.end_ms-s.start_ms)/1000
             durations=[float(stage.split(":d=")[1].split(":")[0]) for stage in fades[idx]]
-            if sum(durations)>min(0.7,length*0.35):
+            if sum(durations)>min(0.5,length*0.25):
                 raise ValueError("Consecutive dips are too dense for this segment")
     return fades
