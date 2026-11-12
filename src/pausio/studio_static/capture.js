@@ -648,7 +648,15 @@
       event.preventDefault(); event.returnValue = "";
     }
   });
-  prefs();refreshPrompter();updateFramingLabels();setMode("idle");
+  prefs();
+  // Desktop retains the cropped 9:16 composition by default; phones keep
+  // the full-frame wide default of PR #22 unless the creator chose otherwise.
+  try {
+    const saved=JSON.parse(localStorage.getItem(STORE_KEY)||"null");
+    if(window.matchMedia("(min-width:851px)").matches && !["wide","social"].includes(saved?.framing))
+      els.framing.value="social";
+  }catch(_error){if(window.matchMedia("(min-width:851px)").matches)els.framing.value="social";}
+  refreshPrompter();updateFramingLabels();setMode("idle");
   if(window.matchMedia("(max-width:850px)").matches)els.gobboSettings.open=false;
   refreshDeviceChoices().catch(()=>{});
   navigator.mediaDevices?.addEventListener?.("devicechange",()=>{
