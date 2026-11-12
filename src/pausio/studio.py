@@ -154,6 +154,7 @@ class StudioWorkspace:
                 "captions": [dict(c) for c in self.tape.view.captions] if self.tape else [],
                 "audio_clips": [{**dict(c), "available": (self._audio_path(c["asset_sha256"]).is_file() and not self._audio_path(c["asset_sha256"]).is_symlink())} for c in self.tape.view.audio_clips] if self.tape else [],
                 "audio_mix": dict(self.tape.view.audio_mix) if self.tape else default_audio_mix(),
+                "video_fx": [dict(fx) for fx in self.tape.view.video_fx] if self.tape else [],
                 "caption_style": self.tape.view.caption_style if self.tape else "social",
                 "caption_config": self.tape.view.caption_config if self.tape else CAPTION_PRESETS["social"],
                 "caption_presets": CAPTION_PRESETS,

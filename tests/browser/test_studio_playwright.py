@@ -515,7 +515,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
             self.page.locator("#project-export").click()
         saved=self.root/"project.pausio.json";download.value.save_as(saved)
         data=json.loads(saved.read_text())
-        self.assertEqual(data["schema_version"],2)
+        self.assertEqual(data["schema_version"],3)
         self.assertIn("segment.update",[c["type"] for c in data["commands"]])
 
         self.page.locator("#preview-action").click()
