@@ -516,7 +516,12 @@ function update(next){
     el("saved-time").textContent=shortDuration(Math.max(0,duration-editedDuration()));
     el("keep-time").textContent=shortDuration(editedDuration());
   }
+  if(next.media_id!==editorSelectionMedia){
+    editorSelectionMedia=next.media_id;
+    editorSelection=null;
+  }
   drawSegments();drawTimeline();drawFx();drawTranscript();drawCaptionEditor();
+  syncEditorSelection();
   updateFxMonitorUI();drawAudioMixer();syncVoicePlayback();syncLiveFx();transport();
   syncDesktopCommands();
   if(has&&next.waveform_status==="ready"&&waveformRequestedFor!==next.media_id){
@@ -567,10 +572,95 @@ function update(next){
     }
   }
 }
+
+/* An ephemeral selection connects the existing timeline and inspector controls.
+   It never owns source edits, so changing selection does not increment revision. */
+let editorSelection = null;
+let editorSelectionMedia = null;
+function selectedEditorItem(){
+  if(!editorSelection||!project?.media)return null;
+  if(editorSelection.type==="segment"){
+    const segment=segments().find(item=>item.id===editorSelection.id);
+    return segment?{type:"segment",value:segment}:null;
+  }
+  if(editorSelection.type==="fx"){
+    const clip=(project.audio_clips||[]).find(item=>item.id===editorSelection.id);
+    return clip?{type:"fx",value:clip}:null;
+  }
+  return null;
+}
+function syncEditorSelection(){
+  const selected=selectedEditorItem();
+  if(!selected)editorSelection=null;
+  const panel=el("selection-inspector");
+  panel.hidden=!selected;
+  if(selected){
+    if(selected.type==="segment"){
+      const index=segments().findIndex(s=>s.id===selected.value.id);
+      el("selection-title").textContent="Intervallo "+(index+1)+" · Mantieni";
+      el("selection-description").textContent=
+        msFormat(selected.value.start_ms,true)+" – "+
+        msFormat(selected.value.end_ms,true)+" · "+
+        shortDuration(selected.value.end_ms-selected.value.start_ms);
+    }else{
+      const clip=selected.value;
+      el("selection-title").textContent=clip.filename;
+      el("selection-description").textContent=
+        "FX · "+msFormat(clip.start_ms,true)+" nel montaggio · "+
+        gainText(clip.gain_db)+(clip.muted?" · Silenziato":"");
+    }
+    el("selection-goto").textContent=selected.type==="fx"?
+      "Apri controlli effetto":"Apri intervallo";
+  }
+  for(const card of document.querySelectorAll(".segment-card")){
+    const isSelected=selected?.type==="segment"&&card.dataset.segmentId===selected.value.id;
+    card.classList.toggle("is-selected",!!isSelected);
+  }
+  for(const region of document.querySelectorAll(".timeline-region")){
+    const isSelected=selected?.type==="segment"&&region.dataset.segmentId===selected.value.id;
+    region.classList.toggle("is-selected",!!isSelected);
+    region.setAttribute("aria-pressed",String(!!isSelected));
+  }
+  for(const item of document.querySelectorAll(".fx-item, .fx-clip-mark")){
+    const isSelected=selected?.type==="fx"&&item.dataset.clipId===selected.value.id;
+    item.classList.toggle("is-selected",!!isSelected);
+    if(item.classList.contains("fx-clip-mark"))
+      item.setAttribute("aria-pressed",String(!!isSelected));
+  }
+}
+function selectEditorItem(type,id,options={}){
+  editorSelection={type,id};
+  if(type==="segment")setWorkspace("cuts");
+  else if(type==="fx")setWorkspace("audio");
+  syncEditorSelection();
+  const selected=selectedEditorItem();
+  if(options.seek&&selected){
+    const sourceTime=type==="segment"?selected.value.start_ms:
+      project.plan?sourceFromOutput(selected.value.start_ms):selected.value.start_ms;
+    const seekMs=mode==="rendered"?outputTime(sourceTime):sourceTime;
+    v.currentTime=Math.max(0,seekMs)/1000;
+  }
+}
+function focusEditorSelection(){
+  const selected=selectedEditorItem();
+  if(!selected)return;
+  const selector=selected.type==="segment"?
+    '.segment-card[data-segment-id="'+selected.value.id+'"]':
+    '.fx-item[data-clip-id="'+selected.value.id+'"]';
+  const element=document.querySelector(selector);
+  if(!element)return;
+  element.scrollIntoView({block:"nearest",behavior:"instant"});
+  const control=selected.type==="segment"?
+    element.querySelector(".start-input"):
+    element.querySelector('input[aria-label^="Inizio"]');
+  control?.focus({preventScroll:true});
+}
+
 function drawSegments(){
   const list=el("segment-list");list.replaceChildren();
   for(const [index,s] of segments().entries()){
     const card=document.createElement("article");card.className="segment-card";card.dataset.index=index;
+    card.dataset.segmentId=s.id;
     card.innerHTML='<div class="segment-top"><span class="segment-title"><span class="segment-index">'+
       String(index+1).padStart(2,"0")+'</span>Mantieni</span><span class="segment-duration">'+
       shortDuration(s.end_ms-s.start_ms)+'</span></div>'+
@@ -578,6 +668,12 @@ function drawSegments(){
       '<label>A (secondi)<input class="end-input" type="number" min="0" step=".01"></label></div>'+
       '<div class="segment-card-actions"><button type="button" class="segment-action listen">▶ Ascolta da qui</button>'+
       '<button type="button" class="segment-action remove">Escludi</button></div>';
+    const choose=document.createElement("button");
+    choose.type="button";choose.className="segment-select";
+    choose.textContent="Seleziona intervallo";
+    choose.setAttribute("aria-label","Seleziona intervallo "+(index+1)+" nella timeline");
+    choose.addEventListener("click",()=>selectEditorItem("segment",s.id,{seek:true}));
+    card.querySelector(".segment-top").append(choose);
     const from=card.querySelector(".start-input"),to=card.querySelector(".end-input");
     from.value=(s.start_ms/1000).toFixed(2);to.value=(s.end_ms/1000).toFixed(2);
     from.disabled=working();to.disabled=working();card.querySelector(".remove").disabled=working()||segments().length<=1;
@@ -800,6 +896,7 @@ function drawFx(){
       mark.className="fx-clip-mark"+(clip.available?"":" missing")+
         ((clip.muted||currentAudioMix().fx_muted)?" is-muted":"");
       mark.dataset.clipId=clip.id;
+      mark.addEventListener("click",()=>{if(!dragHandleActive)selectEditorItem("fx",clip.id);});
       mark.title=clip.filename+" · inizio nel montaggio "+msFormat(clip.start_ms,true)+" · trascina o usa le frecce";
       mark.setAttribute("aria-label","Sposta effetto "+clip.filename+", inizio "+
         msFormat(clip.start_ms,true)+" nel montaggio. Frecce ±0,1 s; Shift ±0,5 s.");
@@ -819,6 +916,7 @@ function drawFx(){
     }
     if(clip.available)requestFxWaveform(clip);
     const item=document.createElement("div");item.className="fx-item";
+    item.dataset.clipId=clip.id;
     const name=document.createElement("div");name.className="fx-item-name";
     const label=document.createElement("strong");label.textContent=clip.filename;
     const status=document.createElement("span");
@@ -826,7 +924,12 @@ function drawFx(){
       !pieces.length?"Fuori dalla durata montata · modifica inizio":
       "Durata "+shortDuration(clip.duration_ms)+" · FX incluso nella preview e nell'export";
     if(!clip.available)status.className="fx-missing";
-    name.append(label,status);item.append(name);
+    const choose=document.createElement("button");
+    choose.type="button";choose.className="fx-select";
+    choose.textContent="Seleziona";
+    choose.setAttribute("aria-label","Seleziona effetto "+clip.filename);
+    choose.addEventListener("click",()=>selectEditorItem("fx",clip.id,{seek:true}));
+    name.append(label,status,choose);item.append(name);
     const controls=[
       ["Inizio (sec)","start_ms",clip.start_ms/1000,.001,0,Math.max(0,((project.plan?editedDuration():duration)-1)/1000)],
       ["Volume (dB)","gain_db",clip.gain_db,1,-36,12]
@@ -940,6 +1043,16 @@ function drawTimeline(){
   for(const s of keep){
     const index=keep.indexOf(s),prev=index?keep[index-1]:null,next=keep[index+1]||null;
     const div=document.createElement("div");div.className="timeline-region";
+    div.dataset.segmentId=s.id;div.tabIndex=0;
+    div.setAttribute("role","button");div.setAttribute("aria-pressed","false");
+    div.setAttribute("aria-label","Seleziona intervallo "+(index+1)+", "+
+      msFormat(s.start_ms,true)+" – "+msFormat(s.end_ms,true));
+    div.addEventListener("click",()=>selectEditorItem("segment",s.id));
+    div.addEventListener("keydown",event=>{
+      if(!["Enter","Space"].includes(event.code))return;
+      event.preventDefault();event.stopPropagation();
+      selectEditorItem("segment",s.id,{seek:true});
+    });
     div.style.left=(s.start_ms/duration*100).toFixed(4)+"%";
     div.style.width=((s.end_ms-s.start_ms)/duration*100).toFixed(4)+"%";
     div.title="Mantieni "+msFormat(s.start_ms,true)+" – "+msFormat(s.end_ms,true);
@@ -1113,6 +1226,8 @@ function initializeDesktopWorkspace(){
   el("desktop-undo-action").addEventListener("click",()=>el("undo-action").click());
   el("desktop-redo-action").addEventListener("click",()=>el("redo-action").click());
   el("desktop-approve-action").addEventListener("click",()=>el("approve-action").click());
+  el("selection-clear").addEventListener("click",()=>{editorSelection=null;syncEditorSelection();});
+  el("selection-goto").addEventListener("click",focusEditorSelection);
   el("desktop-export-action").addEventListener("click",()=>{
     if(!el("download-action").hidden)el("download-action").click();
     else el("export-action").click();
