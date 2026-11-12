@@ -66,6 +66,19 @@ class VideoFxCommandsTests(unittest.TestCase):
                 "segment_id": self.b["id"], "start_ms": 7000, "end_ms": 12000})
         self.assertEqual(changed.view.video_fx[0], fx)
 
+    def test_ease_and_ratchet_are_versioned_replayable_motions(self):
+        for kind in ("ease_push", "ratchet"):
+            with self.subTest(kind=kind):
+                base=effect(self.a,kind=kind,scale=126)
+                tape=self.tape.append("video.transform.add",{"effect":base})
+                self.assertEqual(tape.view.video_fx[0]["kind"],kind)
+                copy_=ProjectTape.from_dict(tape.as_dict())
+                self.assertEqual(copy_.view.video_fx,tape.view.video_fx)
+                self.assertEqual(copy_.undo().view.video_fx,())
+        old=self.tape.as_dict()
+        old["schema_version"]=3
+        self.assertEqual(ProjectTape.from_dict(old).as_dict()["schema_version"],4)
+
     def test_invalid_effects_rejected_without_mutating_original(self):
         base = effect(self.a)
         for change in (
