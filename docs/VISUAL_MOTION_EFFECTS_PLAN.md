@@ -12,6 +12,9 @@ User-provided 11.23 s screen recording (552x672, H.264, **no audio track**) of a
 
 ## Automatic editing: versioned profiles and open-source implementation references
 
+**Decisions per upstream project:** [Visual FX Feature Adoption Matrix](VISUAL_FX_FEATURE_ADOPTION_MATRIX.md): exact features accepted/deferred/rejected, preset behavior and implementation slices. Read before adding any imported algorithm or third-party dependency.
+
+
 The companion [open-source research and automation design](VISUAL_FX_AUTOMATION_RESEARCH.md) checks actual implementation details from auto-editor, add-zooms, talking-head-jumpcut-zoom, ai-video-reframing, autobroll, PySceneDetect and clipcast. Use this before designing the automatic suggestion engine, rather than assuming any repository can be copied directly.
 
 The four first-class UI choices are **Naturale** (default; max 3 FX/min, min gap 8s, peak 1.16x, hard cuts), **Educativo** (max 6/min, min gap 4.5s, peak 1.22x, contextual dissolve), **Dinamico** (opt-in; max 10/min, min gap 2.8s, peak 1.28x, rare contextual dissolve/dip) and **Personalizzato** (editable copy of Educativo with hard safety bounds). All are maximum budgets, never obligations to fill the timeline.
