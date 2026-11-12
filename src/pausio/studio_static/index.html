@@ -261,6 +261,15 @@
           <div><p class="eyebrow">REVISIONE / 02</p><h2>Ogni scelta, tua.</h2></div>
           <span class="inspector-counter" id="segment-count">—</span>
         </div>
+        <section class="selection-inspector" id="selection-inspector" aria-label="Elemento selezionato" hidden>
+          <div class="selection-inspector-top">
+            <span class="selection-eyebrow">SELEZIONE TIMELINE</span>
+            <button type="button" class="selection-clear" id="selection-clear" aria-label="Deseleziona elemento">✕</button>
+          </div>
+          <strong id="selection-title"></strong>
+          <p id="selection-description"></p>
+          <button class="selection-goto button button-outline" type="button" id="selection-goto">Mostra proprietà</button>
+        </section>
         <div class="inspector-tabs" role="tablist" aria-label="Pannelli di revisione">
           <button type="button" class="inspector-tab active" id="cuts-tab" role="tab" aria-selected="true" aria-controls="cuts-panel">Tagli</button>
           <button type="button" class="inspector-tab" id="transcript-tab" role="tab" aria-selected="false" aria-controls="transcript-panel">Trascrizione</button>
