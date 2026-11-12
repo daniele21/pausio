@@ -76,3 +76,7 @@ All security controls must have adversarial tests; skill documents alone are not
 ## Motion effects and transitions
 
 When changing any video zoom/crop/keyframe, jump-cut transition, automatic visual rhythm or kinetic caption feature, load `.agents/skills/pausio-visual-motion-effects/SKILL.md` and read `docs/VISUAL_MOTION_EFFECTS_PLAN.md` before implementation. Visual effects are not freeform FFmpeg commands: each effect is a versioned, bounded project event with source-accurate timestamps, preview/export parity, undo/redo and explicit acceptance of automated suggestions. Avoid noisy automatic effects on every cut. Combine with media security and command schema skills.
+
+### Rule for auto visual-effects profiles
+
+`configs/visual_fx_presets_v1.json` and `schemas/pausio-visual-fx-presets-v1.schema.json` are currently **configuration designs**, not working editing features. Read `docs/VISUAL_FX_AUTOMATION_RESEARCH.md` and use `pausio-visual-motion-effects` before adding/modifying profile fields or the suggestion engine; run `python scripts/validate_visual_fx_presets.py`. Default Naturale; preserve manual edits; no silent effect application, permission escalation, raw FFmpeg expression or remote model API. Stage candidate generation and review separately from project mutation and output export.
