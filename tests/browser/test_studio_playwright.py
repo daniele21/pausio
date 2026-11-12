@@ -699,6 +699,36 @@ class StudioPlaywrightAudit(unittest.TestCase):
             "(node)=>document.activeElement===node"))
         self.page.locator("#selection-clear").click()
         self.assertEqual(self.state()["project_revision"],selection_revision)
+        # Change a single cue timing in the UI, recorded as a portable event.
+        self.page.locator(".caption-time-start").first.fill("0.200")
+        self.page.locator(".caption-time-start").first.press("Tab")
+        moved=self.wait_state("revision",selection_revision+1)
+        self.assertEqual(moved["last_command"],"caption.retime")
+        self.assertEqual(moved["captions"][0]["start_ms"],200)
+        self.page.locator("#undo-action").click()
+        undone=self.wait_state("revision",moved["project_revision"]+1)
+        self.assertEqual(undone["captions"][0]["start_ms"],cue["start_ms"])
+        self.page.locator("#redo-action").click()
+        redone=self.wait_state("revision",undone["project_revision"]+1)
+        self.assertEqual(redone["captions"][0]["start_ms"],200)
+        mark=self.page.locator(".caption-cue-mark").first
+        mark.focus();mark.press("ArrowRight")
+        keyed=self.wait_state("revision",redone["project_revision"]+1)
+        self.assertEqual(keyed["last_command"],"caption.retime")
+        self.assertEqual(keyed["captions"][0]["start_ms"],300)
+        # The same command is emitted once for a drag on the source ruler.
+        mark=self.page.locator(".caption-cue-mark").first
+        mark.scroll_into_view_if_needed()
+        rect=mark.bounding_box()
+        self.assertIsNotNone(rect)
+        px,py=rect["x"]+rect["width"]/2,rect["y"]+rect["height"]/2
+        self.page.mouse.move(px,py);self.page.mouse.down()
+        self.page.mouse.move(px+30,py,steps=6);self.page.mouse.up()
+        dragged=self.wait_state("revision",keyed["project_revision"]+1)
+        self.assertEqual(dragged["last_command"],"caption.retime")
+        self.assertGreater(dragged["captions"][0]["start_ms"],keyed["captions"][0]["start_ms"])
+        self.assertEqual(dragged["project_revision"],keyed["project_revision"]+1)
+        updated=dragged
         self.page.evaluate("() => document.querySelector('#preview-video').currentTime=.45")
         self.wait_condition(lambda:self.page.locator("#caption-overlay").is_visible())
         self.assertIn("Tre",self.page.locator("#caption-overlay").inner_text())
