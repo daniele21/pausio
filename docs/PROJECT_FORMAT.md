@@ -4,7 +4,7 @@
 
 **Every editing action is a typed instruction.** The UI never directly owns the final timeline. The pure Python reducer `src/pausio/project_commands.py` validates/replays an ordered command tape and derives the same `EditPlan` used by FFmpeg.
 
-The current format is `pausio.project`, `schema_version: 2` and is documented by [JSON Schema v2](../schemas/pausio-project-v2.schema.json). **Existing v1 files remain readable** using a strict migration (all commands preserved; history cursor placed at the end). V1 schema: [JSON Schema v1](../schemas/pausio-project-v1.schema.json). JSON Schema checks the *shape*; the reducer additionally checks ordering, interval overlap, valid IDs, existing targets, media duration bounds and command history semantics.
+The current format is `pausio.project`, `schema_version: 3` and is documented by [JSON Schema v3](../schemas/pausio-project-v3.schema.json). v2 remains readable using [JSON Schema v2](../schemas/pausio-project-v2.schema.json). **Existing v1 files remain readable** using a strict migration (all commands preserved; history cursor placed at the end). V1 schema: [JSON Schema v1](../schemas/pausio-project-v1.schema.json). JSON Schema checks the *shape*; the reducer additionally checks ordering, interval overlap, valid IDs, existing targets, media duration bounds and command history semantics.
 
 ## Example
 
@@ -13,7 +13,7 @@ Below is explanatory sample data, **not a file for importing against your own vi
 ```json
 {
   "format": "pausio.project",
-  "schema_version": 2,
+  "schema_version": 3,
   "media": {
     "filename": "ripresa.mp4",
     "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -151,3 +151,7 @@ Extend structured effects (captions, crop, color, audio), selection tools, AI/pr
 `audio.mixer.configure` definisce in maniera atomica `voice_gain_db` (integer -36..12), `voice_muted` (boolean), `fx_gain_db` (integer -36..12), `fx_muted` (boolean). Il default implicito per i progetti vecchi è `{ "voice_gain_db": 0, "voice_muted": false, "fx_gain_db": 0, "fx_muted": false }`.
 
 `audio.clip.mix` contiene `{ "clip_id": <id>, "gain_db": <int -36..12>, "muted": <bool> }`. I nuovi reducer preservano i vecchi `audio.add/update` privi del campo `muted`; questo attributo è opzionale e sottintende `false` finché l'utente non modifica il mute di una clip. Tutti i livelli e i mute sono event-sourced: Undo/Redo, export/import e renderer FFmpeg usano gli stessi valori. Il mix applica `voice_gain_db` alla traccia originale, `fx_gain_db + clip.gain_db` a ciascun FX e usa volume zero per i bus/FX silenziati, con limiter in uscita.
+
+## Visual FX events — project v3
+
+A single native event family adds bounded, source-anchored punch and progressive zoom transforms: `video.transform.add`, `video.transform.update`, `video.transform.remove`. Each effect carries a 32-character ID, KEEP segment ID, `start_ms`, `end_ms` in **original source time**, `kind` (`punch` or `slow_push`), integer percent `start_scale_pct` and `end_scale_pct` in [100,130], and `anchor_x_pct`/`anchor_y_pct` in [0,100]. Minimum duration 250 ms, maximum 60 s, total maximum 18 effects. Overlap in one KEEP segment is rejected. Trimming/removing a KEEP span that would orphan an effect fails explicitly: remove/rework the effect first rather than silently shifting it into another phrase. Undo, Redo, JSON export/reimport and media SHA verification use the canonical v3 tape. v1/v2 are accepted and exported as v3 without rewriting their historical events. Renderer/GUI support is tracked separately and must be present before declaring the feature usable.
