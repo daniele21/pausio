@@ -733,7 +733,12 @@ class StudioHandler(BaseHTTPRequestHandler):
         supplied = self.headers.get("Host", "")
         if supplied not in {f"127.0.0.1:{port}", f"localhost:{port}"}:
             self.close_connection = True
-            self._failed(403, "Host non autorizzato.")
+            if self.command == "HEAD":
+                # HTTP HEAD responses cannot have a message body.
+                self._headers(403, 0, "application/json; charset=utf-8")
+                self.end_headers()
+            else:
+                self._failed(403, "Host non autorizzato.")
             return False
         return True
 
