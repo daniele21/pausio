@@ -117,6 +117,55 @@ class StudioPlaywrightAudit(unittest.TestCase):
                             timeout=30000)
         return result
 
+    def test_video_fx_manual_automatic_review_and_real_preview(self):
+        """Visible 9:16 zoom editing + evidence-only suggestion + undo/export."""
+        initial=self.upload_analyze()
+        self.page.locator('[data-workspace-nav="cuts"]').click()
+        self.assertTrue(self.page.locator("#visual-fx-panel").is_visible())
+        self.assertEqual(self.page.locator("#visual-fx-preset").input_value(),"naturale")
+        revision=initial["project_revision"]
+        self.page.locator("#visual-fx-suggest").click()
+        self.wait_condition(lambda: "proposti" in self.page.locator(
+            "#visual-fx-suggest-status").inner_text())
+        # A suggestion MUST NOT mutate the project. All proposals have exact
+        # source timestamps, and none are silently approved.
+        self.assertEqual(self.state()["project_revision"], revision)
+        self.assertEqual(self.state()["video_fx"], [])
+        self.assertGreaterEqual(self.page.locator(".visual-fx-entry.is-suggested").count(),1)
+        self.page.locator(".visual-fx-entry.is-suggested button").first.click()
+        added=self.wait_state("revision", revision+1)
+        self.assertEqual(len(added["video_fx"]),1)
+        fx=added["video_fx"][0]
+        self.assertEqual(fx["kind"],"punch")
+        self.assertFalse(added["approved"])
+        self.wait_condition(lambda: self.page.locator(".visual-fx-mark").count()==1)
+        self.assertTrue(self.page.locator(".visual-fx-entry:not(.is-suggested)").is_visible())
+        self.page.locator("#visual-fx-preview").click()
+        preview=self.wait_state("preview","completed",timeout=120000)
+        self.assertTrue(preview["preview_ready"])
+        self.shot("video-fx-rendered-preview")
+        self.page.locator("#undo-action").click()
+        undone=self.wait_state("revision",added["project_revision"]+1)
+        self.assertEqual(undone["video_fx"],[])
+        self.page.locator("#redo-action").click()
+        redone=self.wait_state("revision",undone["project_revision"]+1)
+        self.assertEqual(len(redone["video_fx"]),1)
+        self.assertEqual(redone["video_fx"][0],fx)
+        # Manual adjustment is a single typed update command.
+        self.page.locator(".visual-fx-entry:not(.is-suggested) input[aria-label='Zoom finale (%)']").fill("112")
+        self.page.locator(".visual-fx-entry:not(.is-suggested) button",has_text="Salva modifiche").click()
+        edited=self.wait_state("revision",redone["project_revision"]+1)
+        self.assertEqual(edited["video_fx"][0]["end_scale_pct"],112)
+        self.assertEqual(edited["video_fx"][0]["start_scale_pct"],112)
+        with self.page.expect_download() as download:
+            self.page.locator("#project-export").click()
+        exported=self.root/"visual-fx.pausio.json"
+        download.value.save_as(exported)
+        document=json.loads(exported.read_text())
+        self.assertEqual(document["schema_version"],3)
+        self.assertIn("video.transform.update",[row["type"] for row in document["commands"]])
+        self.assertFalse(self.errors,self.errors)
+
     def test_custom_audio_fx_import_in_real_browser(self):
         self.upload_analyze()
         self.page.locator('[data-workspace-nav="audio"]').click()
