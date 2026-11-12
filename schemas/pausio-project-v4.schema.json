@@ -997,6 +997,93 @@
               }
             }
           }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "payload"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "type": {
+              "const": "video.transition.add"
+            },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "transition"
+              ],
+              "properties": {
+                "transition": {
+                  "$ref": "#/$defs/video_transition"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "payload"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "type": {
+              "const": "video.transition.update"
+            },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "transition"
+              ],
+              "properties": {
+                "transition": {
+                  "$ref": "#/$defs/video_transition"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "payload"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "type": {
+              "const": "video.transition.remove"
+            },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "transition_id"
+              ],
+              "properties": {
+                "transition_id": {
+                  "$ref": "#/$defs/id"
+                }
+              }
+            }
+          }
         }
       ]
     },
@@ -1097,6 +1184,37 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 100
+        }
+      }
+    },
+    "video_transition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "left_segment_id",
+        "right_segment_id",
+        "kind",
+        "duration_ms"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "left_segment_id": {
+          "$ref": "#/$defs/id"
+        },
+        "right_segment_id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "const": "dip_black",
+          "type": "string"
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 200,
+          "maximum": 600
         }
       }
     }
