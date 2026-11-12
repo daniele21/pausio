@@ -1,5 +1,33 @@
 # Pausio Mobile Capture — gobbo e download sul telefono
 
+## Prova gobbo prima di registrare (desktop e mobile)
+
+Puoi usare **▶ Prova gobbo** appena apri la pagina Capture, anche
+**senza autorizzare fotocamera e microfono**. Il gobbo appare sullo sfondo
+verticale e inizia a scorrere in base ai WPM configurati. Durante la prova:
+
+- Lo slider **Velocità gobbo** modifica i WPM in tempo reale senza riportare
+  il testo alla prima riga.
+- **Ⅱ Pausa prova** ferma testo e timer nel punto corrente; **▶ Riprendi prova**
+  riparte dalla stessa riga, senza salti.
+- **↺ Dall'inizio** azzera timer e posizione e riavvia la prova.
+- L'etichetta **PROVA GOBBO · Nessun video registrato** distingue
+  chiaramente questa modalità da REC.
+- Il gobbo può essere provato senza webcam; quando la fotocamera è già
+  attiva, la prova si sovrappone all'anteprima 9:16 reale. Cambiare
+  fotocamera ripristina la posizione iniziale.
+- Premendo **Registra**, Pausio termina la prova, torna alla prima riga,
+  esegue il countdown e **solo allora** crea un MediaRecorder. Lo scorrimento
+  durante la registrazione rispetta il toggle «Scorrimento automatico
+  durante il take»; la prova, invece, scorre sempre per poter valutare i WPM.
+- Se il browser perde visibilità, la prova viene messa automaticamente
+  in pausa. Il testo, la velocità e le altre preferenze non sensibili
+  rimangono locali; la prova non genera alcun file.
+
+La prova non ascolta la tua voce e non sincronizza automaticamente le
+parole lette: serve a scegliere la velocità più naturale prima del take.
+Verificare manualmente l'esperienza su Safari/macOS e Samsung A56.
+
 ## Estensione desktop (Capture PC verticale)
 
 La stessa pagina `/capture` funziona da `pausio studio` su
