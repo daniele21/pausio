@@ -273,7 +273,7 @@ class ProjectReplayTests(unittest.TestCase):
         tape = analyze(ProjectTape(media()))
         d = tape.as_dict()
         mutated = copy.deepcopy(d)
-        mutated["schema_version"] = 3
+        mutated["schema_version"] = 4
         with self.assertRaises(ProjectFormatError):
             ProjectTape.from_dict(mutated)
         mutated = copy.deepcopy(d)
@@ -361,7 +361,7 @@ class ProjectReplayTests(unittest.TestCase):
         del v1["revision"]
         v1["schema_version"] = 1
         restored = ProjectTape.from_dict(v1)
-        self.assertEqual(restored.as_dict()["schema_version"], 2)
+        self.assertEqual(restored.as_dict()["schema_version"], 3)
         self.assertEqual(restored.commands, original.commands)
         self.assertEqual(restored.view, original.view)
         self.assertEqual(restored.history_cursor, len(original.commands))
