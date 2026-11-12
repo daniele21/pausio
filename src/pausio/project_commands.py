@@ -40,6 +40,7 @@ _TYPES = frozenset({
     "timeline.approve",
     "caption.set",
     "caption.correct",
+    "caption.retime",
     "caption.style",
     "caption.configure",
     "caption.clear",
@@ -339,6 +340,21 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
                 {**c, "text": text} if c["id"] == ident else c
                 for c in captions
             ]
+            approved = False
+        elif kind == "caption.retime":
+            _object(payload, {"caption_id", "start_ms", "end_ms"}, kind)
+            ident = _id(payload["caption_id"], "caption_id")
+            start = _integer(payload["start_ms"], "caption.start_ms")
+            end = _integer(payload["end_ms"], "caption.end_ms")
+            if not any(c["id"] == ident for c in captions):
+                raise ProjectFormatError("Sottotitolo non trovato.")
+            # Validate the COMPLETE proposed cue sequence, not just its target:
+            # editing one cue must never create overlaps or leave source bounds.
+            proposed = [
+                {**cue, "start_ms": start, "end_ms": end} if cue["id"] == ident else cue
+                for cue in captions
+            ]
+            captions = _captions(proposed, duration)
             approved = False
         elif kind == "caption.style":
             _object(payload, {"style"}, kind)

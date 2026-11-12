@@ -549,6 +549,43 @@
               "$ref": "#/$defs/id"
             },
             "type": {
+              "const": "caption.retime"
+            },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "caption_id",
+                "start_ms",
+                "end_ms"
+              ],
+              "properties": {
+                "caption_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "start_ms": {
+                  "$ref": "#/$defs/ms"
+                },
+                "end_ms": {
+                  "$ref": "#/$defs/ms"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "payload"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "type": {
               "const": "caption.style"
             },
             "payload": {

@@ -106,6 +106,44 @@ class ProjectReplayTests(unittest.TestCase):
                 tape.append(kind, payload)
         self.assertEqual(tape.view.captions[0]["text"], "Tre consigli AI")
 
+    def test_caption_retime_versioned_reversible_and_source_remapped(self):
+        from pausio.captions import remap_captions
+        from pausio.domain import Interval
+        tape=analyze(ProjectTape(media())).append("caption.set", {
+            "style":"social","cues":[
+                {"id":"a"*32,"start_ms":100,"end_ms":1400,"text":"Primo"},
+                {"id":"b"*32,"start_ms":2400,"end_ms":3700,"text":"Secondo"},
+            ],
+        }).append("timeline.approve",{})
+        self.assertTrue(tape.view.approved)
+        moved=tape.append("caption.retime",{
+            "caption_id":"a"*32,"start_ms":300,"end_ms":1700,
+        })
+        self.assertEqual((moved.view.captions[0]["start_ms"],
+                          moved.view.captions[0]["end_ms"]),(300,1700))
+        self.assertFalse(moved.view.approved)
+        self.assertTrue(moved.undo().view.approved)
+        self.assertEqual(moved.undo().view.captions[0]["start_ms"],100)
+        self.assertEqual(moved.undo().redo().view,moved.view)
+        self.assertEqual(ProjectTape.from_dict(
+            json.loads(json.dumps(moved.as_dict()))).view,moved.view)
+        mapped=remap_captions(moved.view.captions,
+            (Interval(0,1000),Interval(2500,4000)))
+        self.assertEqual([(c["start_ms"],c["end_ms"]) for c in mapped],
+                         [(300,1000),(1000,2200)])
+        for bad in (
+            {"caption_id":"a"*32,"start_ms":1400,"end_ms":2700},
+            {"caption_id":"a"*32,"start_ms":-100,"end_ms":1000},
+            {"caption_id":"a"*32,"start_ms":800,"end_ms":800},
+            {"caption_id":"a"*32,"start_ms":800,"end_ms":12001},
+            {"caption_id":"a"*32,"start_ms":True,"end_ms":1200},
+            {"caption_id":"a"*32,"start_ms":400.5,"end_ms":1200},
+            {"caption_id":"f"*32,"start_ms":400,"end_ms":1200},
+            {"caption_id":"a"*32,"start_ms":400,"end_ms":1200,"extra":1},
+        ):
+            with self.subTest(payload=bad),self.assertRaises(ProjectFormatError):
+                moved.append("caption.retime",bad)
+
     def test_caption_config_replays_with_undo_and_rejects_untrusted_values(self):
         from pausio.captions import default_caption_config
         tape=analyze(ProjectTape(media())).append("caption.set", {

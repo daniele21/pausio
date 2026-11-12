@@ -368,6 +368,38 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertEqual(self.state()["project_revision"],revision)
         self.assertFalse(self.errors,self.errors)
 
+
+    def test_adaptive_source_ruler_and_zoom_anchor(self):
+        self.upload_analyze()
+        self.assertGreater(self.page.locator(".timeline-time-tick").count(),4)
+        self.page.evaluate("document.getElementById('preview-video').currentTime=1.75")
+        self.wait_condition(lambda: not self.page.evaluate(
+            "document.getElementById('preview-video').seeking"))
+        self.page.locator("#timeline-zoom").select_option("2")
+        self.page.locator("#timeline-center-playhead").click()
+        def cursor_x():
+            return self.page.evaluate("""() => {
+              const track=document.getElementById('timeline-track');
+              const surface=document.getElementById('timeline-surface');
+              const bounds=track.getBoundingClientRect(),viewport=surface.getBoundingClientRect();
+              const current=timelineSourceMs();
+              return bounds.left+current/project.media.duration_ms*bounds.width-viewport.left;
+            }""")
+        before=cursor_x()
+        before_count=self.page.locator(".timeline-time-tick").count()
+        self.page.locator("#timeline-zoom-in").click()
+        after=cursor_x()
+        self.assertEqual(self.page.locator("#timeline-zoom").input_value(),"4")
+        self.assertAlmostEqual(before,after,delta=5,
+                               msg="Zoom should preserve the source position under the playhead")
+        self.assertGreater(self.page.locator(".timeline-time-tick").count(),before_count)
+        self.assertIn("Sorgente 00:01",self.page.locator("#timeline-source-clock").inner_text())
+        self.page.locator("#timeline-zoom-out").click()
+        self.assertEqual(self.page.locator("#timeline-zoom").input_value(),"2")
+        self.assertFalse(self.page.locator("#timeline-center-playhead").is_disabled())
+        self.shot("source-ruler-anchored-zoom-1440")
+        self.assertFalse(self.errors,self.errors)
+
     def test_desktop_navigation_and_resizable_timeline(self):
         self.assertTrue(self.page.locator(".studio-navigation").is_visible())
         self.assertTrue(self.page.locator("#analyze-action").is_visible())
@@ -667,7 +699,40 @@ class StudioPlaywrightAudit(unittest.TestCase):
             "(node)=>document.activeElement===node"))
         self.page.locator("#selection-clear").click()
         self.assertEqual(self.state()["project_revision"],selection_revision)
-        self.page.evaluate("() => document.querySelector('#preview-video').currentTime=.45")
+        # Change a single cue timing in the UI, recorded as a portable event.
+        self.page.locator(".caption-time-start").first.fill("0.200")
+        self.page.locator(".caption-time-start").first.press("Tab")
+        moved=self.wait_state("revision",selection_revision+1)
+        self.assertEqual(moved["last_command"],"caption.retime")
+        self.assertEqual(moved["captions"][0]["start_ms"],200)
+        self.page.locator("#desktop-undo-action").click()
+        undone=self.wait_state("revision",moved["project_revision"]+1)
+        self.assertEqual(undone["captions"][0]["start_ms"],cue["start_ms"])
+        self.page.locator("#desktop-redo-action").click()
+        redone=self.wait_state("revision",undone["project_revision"]+1)
+        self.assertEqual(redone["captions"][0]["start_ms"],200)
+        mark=self.page.locator(".caption-cue-mark").first
+        mark.focus();mark.press("ArrowRight")
+        keyed=self.wait_state("revision",redone["project_revision"]+1)
+        self.assertEqual(keyed["last_command"],"caption.retime")
+        self.assertEqual(keyed["captions"][0]["start_ms"],300)
+        # The same command is emitted once for a drag on the source ruler.
+        mark=self.page.locator(".caption-cue-mark").first
+        mark.scroll_into_view_if_needed()
+        rect=mark.bounding_box()
+        self.assertIsNotNone(rect)
+        px,py=rect["x"]+rect["width"]/2,rect["y"]+rect["height"]/2
+        self.page.mouse.move(px,py);self.page.mouse.down()
+        self.page.mouse.move(px+30,py,steps=6);self.page.mouse.up()
+        dragged=self.wait_state("revision",keyed["project_revision"]+1)
+        self.assertEqual(dragged["last_command"],"caption.retime")
+        self.assertGreater(dragged["captions"][0]["start_ms"],keyed["captions"][0]["start_ms"])
+        self.assertEqual(dragged["project_revision"],keyed["project_revision"]+1)
+        updated=dragged
+        # Seek inside the retimed cue, not at its former timestamp.
+        self.page.evaluate("""(sec) => {
+          document.querySelector('#preview-video').currentTime=sec;
+        }""",(dragged["captions"][0]["start_ms"]+100)/1000)
         self.wait_condition(lambda:self.page.locator("#caption-overlay").is_visible())
         self.assertIn("Tre",self.page.locator("#caption-overlay").inner_text())
         edit=self.page.locator(".caption-edit-card").first

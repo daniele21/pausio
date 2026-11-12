@@ -412,6 +412,8 @@
         <div class="timeline-actions">
           <span class="legend-item"><span class="legend-dot keep"></span>Mantieni</span>
           <span class="legend-item"><span class="legend-dot cut"></span>Escluso</span>
+          <button class="timeline-tool-button" id="timeline-zoom-out" type="button"
+            aria-label="Riduci zoom timeline" title="Riduci zoom timeline">−</button>
           <label class="timeline-zoom-label" for="timeline-zoom">
             Zoom
             <select id="timeline-zoom" aria-label="Ingrandimento timeline">
@@ -421,6 +423,14 @@
               <option value="8">8×</option>
             </select>
           </label>
+          <button class="timeline-tool-button" id="timeline-zoom-in" type="button"
+            aria-label="Aumenta zoom timeline" title="Aumenta zoom timeline">+</button>
+          <button class="timeline-locate-button" id="timeline-center-playhead" type="button" disabled
+            title="Porta il cursore di riproduzione al centro della timeline">
+            <span aria-hidden="true">⌖</span> Cursore
+          </button>
+          <output class="timeline-source-clock" id="timeline-source-clock" aria-label="Tempo sorgente">
+            Sorgente —</output>
           <button class="button button-outline timeline-preview-action" id="preview-action" type="button" disabled
             title="Renderizza la timeline attuale con FFmpeg in bassa risoluzione, senza confermare il montaggio">
             Genera preview
@@ -435,9 +445,7 @@
         </div>
       </div>
       <div class="timeline-ruler" id="timeline-ruler" aria-hidden="true">
-        <div class="timeline-ruler-content" id="timeline-ruler-content">
-          <span>00:00</span><span id="tick-quarter">—</span><span id="tick-half">—</span><span id="tick-threequarter">—</span><span id="tick-end">—</span>
-        </div>
+        <div class="timeline-ruler-content" id="timeline-ruler-content"></div>
       </div>
       <div class="timeline-surface" id="timeline-surface">
         <div class="timeline-placeholder" id="timeline-placeholder">

@@ -68,6 +68,24 @@ individually movable subtitle cues **are not claimed to exist** in v0.1.0.
   targeting and preservation of project revision. Browser QA and screenshots
   must still be executed before merge.
 
+## Timeline precision / cue timing (new development on daniele/editor-timeline-v2)
+
+- Adaptive source-time ruler with tick density appropriate to the zoom. It uses
+  source media duration even when the player displays rendered/output time.
+- Zoom at 1×, 2×, 4×, 8× maintains the playhead under the same viewport x
+  (or centers it if outside). Toolbar includes +/− and «Cursore».
+- Every caption has start/end numeric source-time fields in the inspector;
+  caption cue blocks can be moved with pointer drag or keyboard arrows
+  (100 ms, Shift = 500 ms).
+- All timing edits invoke `caption.retime` with exact source ms and cue ID.
+  The replay reducer validates the complete cue array, invalidates approval,
+  and participates in Undo/Redo and portable project export/import. Visual
+  selection and zoom remain untracked presentation state.
+- Cue track dragging **moves without changing duration**. Resizing start/end
+  uses numeric fields; trim handles and snapping remain follow-up UX work.
+- FFmpeg remaps validated source cue intervals through existing KEEP segments.
+  A new command does not introduce a second render-time timeline.
+
 ## Next milestones
 
 ### P1 — clip-centric timeline and contextual inspector (partly implemented)
@@ -91,8 +109,8 @@ individually movable subtitle cues **are not claimed to exist** in v0.1.0.
 - Expose existing caption commands, font/preset/position, and live preview
   with social platform safe-area overlay.
 - The cue lane is currently **select-only**; before allowing temporal dragging,
-  define and implement a dedicated typed cue-time command with reducer,
-  schema validation, FFmpeg remapping and undo/replay tests.
+  use the implemented typed `caption.retime` command; add timeline edge
+  trim handles only after pointer and keyboard acceptance tests.
 - Avoid fake controls for media speed, fades, per-word animation, SRT export.
 
 ### P3 — QA and polish

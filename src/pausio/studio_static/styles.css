@@ -1457,3 +1457,38 @@ a { color: inherit; text-decoration: none; }
     display: none;
   }
 }
+
+/* EDITOR TIMELINE PRECISION V2 */
+.timeline-time-tick { position:absolute; top:2px; font-size:10px; line-height:1.45; font-variant-numeric:tabular-nums; color:var(--ink-secondary); white-space:nowrap; transform:translateX(-50%); pointer-events:none; }
+.timeline-time-tick:before { content:""; position:absolute; height:5px; width:1px; background:#758293; left:50%; bottom:-6px; }
+.timeline-time-tick.first { transform:none; }
+.timeline-time-tick.last { transform:translateX(-100%); }
+.timeline-time-tick.first:before { left:0; }
+.timeline-time-tick.last:before { left:100%; }
+.timeline-ruler-content { position:relative; display:block; flex:none; height:22px; margin:0 8px; }
+.timeline-ruler { display:block; padding-top:7px; padding-bottom:4px; min-height:31px; }
+.timeline-tool-button,.timeline-locate-button { border:1px solid var(--border); border-radius:6px; background:var(--surface-raised); color:var(--ink-secondary); font:inherit; font-size:12px; cursor:pointer; height:31px; min-width:31px; padding:5px 9px; }
+.timeline-tool-button { font-size:18px; line-height:1; font-weight:600; width:31px; padding:4px; }
+.timeline-locate-button { display:inline-flex; align-items:center; gap:5px; white-space:nowrap; color:var(--ink); }
+.timeline-tool-button:hover:not(:disabled),.timeline-locate-button:hover:not(:disabled) { border-color:var(--accent); background:var(--surface-hover); }
+.timeline-tool-button:disabled,.timeline-locate-button:disabled { opacity:.45; cursor:not-allowed; }
+.timeline-source-clock { font-variant-numeric:tabular-nums; font-size:10px; color:var(--ink-secondary); white-space:nowrap; padding:0 5px; align-self:center; }
+@media (max-width:1200px) { .timeline-source-clock { display:none; } .timeline-actions { row-gap:5px; } }
+@media (max-width:650px) { .timeline-locate-button { padding:5px 7px; font-size:11px; } }
+
+/* CAPTION RETIME CONTROLS V2: displayed source seconds, versioned edits. */
+.caption-timing-fields { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:8px; margin:7px 0; }
+.caption-timing-fields label { display:flex; flex-direction:column; gap:5px; min-width:0; color:var(--ink-secondary); font-size:10px; line-height:1.3; }
+.caption-timing-fields input {
+  width:100%; min-width:0; padding:8px;
+  border:1px solid var(--border);
+  background:var(--surface-raised);
+  color:var(--ink);
+  border-radius:6px;
+  font:inherit; font-size:12px;
+  font-variant-numeric:tabular-nums;
+}
+.caption-timing-fields input:focus-visible { outline:2px solid var(--accent-bright); outline-offset:2px; }
+.caption-timing-fields input:invalid { border-color:var(--danger); }
+.caption-cue-mark { touch-action:none; cursor:grab; }
+.caption-cue-mark:active { cursor:grabbing; }
