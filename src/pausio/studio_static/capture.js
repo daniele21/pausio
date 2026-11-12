@@ -120,51 +120,190 @@
     ];
     return candidates.find(type => MediaRecorder.isTypeSupported(type)) || "";
   }
+  const captureQuality = () => Number(els.quality.value) || 720;
+  const cameraDimensions = () => {
+    const settings = stream?.getVideoTracks()[0]?.getSettings?.() || {};
+    return {width:els.live.videoWidth || settings.width || 0,
+      height:els.live.videoHeight || settings.height || 0};
+  };
+  function updateFramingLabels() {
+    $("crop-x-value").textContent=els.panX.value+"%";
+    $("crop-y-value").textContent=els.panY.value+"%";
+    $("crop-zoom-value").textContent=els.zoom.value+"%";
+  }
+  function stopCompositor() {
+    cancelAnimationFrame(composeRaf);composeRaf=0;lastPaint=0;
+    if(portraitStream) for(const track of portraitStream.getTracks())track.stop();
+    portraitStream=null;compositionActive=false;
+    els.portrait.hidden=true;
+    els.frame.classList.remove("is-composing");
+  }
+  function drawPortraitFrame() {
+    if(!compositionActive||els.live.readyState<2)return;
+    const {width,height}=cameraDimensions();
+    if(!width||!height)return;
+    // Scale to a source crop with an exact 9:16 aspect ratio. This matches
+    // the real MediaRecorder frames: CSS object-fit alone does NOT crop output.
+    const ratio=9/16, zoom=Number(els.zoom.value)/100;
+    const boxWidth=Math.min(width,height*ratio)/zoom;
+    const boxHeight=boxWidth/ratio;
+    const left=(width-boxWidth)*(Number(els.panX.value)/100);
+    const top=(height-boxHeight)*(Number(els.panY.value)/100);
+    const context=els.portrait.getContext("2d",{alpha:false});
+    if(context)context.drawImage(els.live,left,top,boxWidth,boxHeight,
+      0,0,els.portrait.width,els.portrait.height);
+  }
+  function renderPortraitLoop(now) {
+    if(!compositionActive||!stream)return;
+    if(!lastPaint||now-lastPaint>=32){
+      drawPortraitFrame();
+      lastPaint=now;
+    }
+    composeRaf=requestAnimationFrame(renderPortraitLoop);
+  }
+  function configureComposition() {
+    stopCompositor();
+    if(!stream)return;
+    updateFramingLabels();
+    const {width,height}=cameraDimensions();
+    inputWidth=width;inputHeight=height;
+    const verticalNative=width>0&&height>0&&
+      Math.abs(width/height-9/16)<0.001 &&
+      !window.matchMedia("(pointer: fine) and (min-width: 860px)").matches &&
+      Number(els.panX.value)===50&&Number(els.panY.value)===50&&
+      Number(els.zoom.value)===100;
+    compositionActive=!verticalNative;
+    if(compositionActive){
+      if(typeof els.portrait.captureStream!=="function")
+        throw Error("Il browser non supporta il video verticale da canvas. Usa Chrome o Safari aggiornato.");
+      const quality=captureQuality();
+      els.portrait.width=quality;els.portrait.height=Math.round(quality*16/9);
+      els.portrait.hidden=false;
+      els.frame.classList.add("is-composing");
+      els.portrait.classList.toggle("mirrored",facing==="user");
+      drawPortraitFrame();
+      composeRaf=requestAnimationFrame(renderPortraitLoop);
+    }
+    const outWidth=compositionActive?els.portrait.width:width;
+    const outHeight=compositionActive?els.portrait.height:height;
+    recordedDimensions={width:outWidth,height:outHeight};
+    els.format.textContent=outWidth+"×"+outHeight+" · 9:16";
+    els.sourceInfo.textContent=width+"×"+height+
+      (compositionActive?" dalla webcam → "+outWidth+"×"+outHeight+
+        " · crop 9:16. L'anteprima mostra esattamente il ritaglio registrato.":
+        " · registrazione verticale nativa, senza ricodifica del ritaglio.");
+  }
+  async function refreshDeviceChoices() {
+    if(!navigator.mediaDevices?.enumerateDevices)return;
+    let devices;
+    try{devices=await navigator.mediaDevices.enumerateDevices();}catch(_error){return;}
+    const maps=[
+      [els.videoDevice,"videoinput","Fotocamera automatica","Webcam"],
+      [els.audioDevice,"audioinput","Microfono predefinito","Microfono"]
+    ];
+    for(const [select,kind,auto,label] of maps){
+      const chosen=select.value;
+      select.replaceChildren(new Option(auto,""));
+      const options=devices.filter(d=>d.kind===kind);
+      for(const [index,device] of options.entries()){
+        if(!device.deviceId)continue;
+        select.add(new Option(device.label||label+" "+(index+1),device.deviceId));
+      }
+      if([...select.options].some(option=>option.value===chosen))select.value=chosen;
+    }
+  }
+  function stopMeter() {
+    cancelAnimationFrame(meterRaf);meterRaf=0;
+    try{meterSource?.disconnect();}catch(_error){}
+    meterSource=null;audioAnalyser=null;
+    const previous=audioContext;audioContext=null;
+    if(previous)previous.close().catch(()=>{});
+    els.meterFill.style.width="0%";
+    els.meter.setAttribute("aria-valuenow","0");
+    els.meterValue.textContent="—";
+  }
+  function startMeter() {
+    stopMeter();
+    const track=stream?.getAudioTracks()[0];
+    const Context=window.AudioContext||window.webkitAudioContext;
+    if(!track||!Context)return;
+    try{
+      audioContext=new Context();
+      meterSource=audioContext.createMediaStreamSource(new MediaStream([track]));
+      audioAnalyser=audioContext.createAnalyser();
+      audioAnalyser.fftSize=256;
+      meterSource.connect(audioAnalyser); // no output: avoid microphone feedback
+      const samples=new Uint8Array(audioAnalyser.fftSize);
+      const tickMeter=()=>{
+        if(!audioAnalyser||!stream)return;
+        audioAnalyser.getByteTimeDomainData(samples);
+        let power=0;
+        for(const sample of samples)power+=Math.pow((sample-128)/128,2);
+        const rms=Math.sqrt(power/samples.length);
+        const level=Math.min(100,Math.round(rms*350));
+        els.meterFill.style.width=level+"%";
+        els.meter.setAttribute("aria-valuenow",String(level));
+        els.meterValue.textContent=level+"%";
+        meterRaf=requestAnimationFrame(tickMeter);
+      };
+      meterRaf=requestAnimationFrame(tickMeter);
+    }catch(_error){stopMeter();}
+  }
+  function recordingInputStream() {
+    if(!stream)throw Error("Attiva prima la fotocamera.");
+    if(!compositionActive)return stream;
+    drawPortraitFrame();
+    portraitStream=els.portrait.captureStream(30);
+    const track=portraitStream.getVideoTracks()[0];
+    if(!track)throw Error("Il browser non ha creato una traccia video verticale.");
+    return new MediaStream([track,...stream.getAudioTracks()]);
+  }
+
   async function releaseCamera() {
-    if (stream) for (const track of stream.getTracks()) track.stop();
-    stream = null;
+    stopCompositor();stopMeter();
+    if(stream)for(const track of stream.getTracks())track.stop();
+    stream=null;
     els.live.pause();
-    els.live.srcObject = null;
+    els.live.srcObject=null;
+    inputWidth=0;inputHeight=0;
   }
   async function activateCamera() {
-    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+    if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder){
       setMode("error");
-      notice("Questo browser non supporta la registrazione diretta. Usa Safari aggiornato su iPhone o Chrome aggiornato su Android, tramite HTTPS.", true);
+      notice("Questo browser non supporta Capture. Usa Safari o Chrome aggiornato, su localhost oppure HTTPS.",true);
       return;
     }
-    try {
-      els.camera.disabled = true;
-      els.flip.disabled = true;
+    try{
+      els.camera.disabled=true;els.flip.disabled=true;
       await releaseCamera();
-      const candidate = await navigator.mediaDevices.getUserMedia({
-        video: {facingMode: {ideal:facing}, width:{ideal:1080}, height:{ideal:1920},
-          aspectRatio:{ideal:9/16}, frameRate:{ideal:30}},
-        audio: true
-      });
-      stream = candidate;
-      els.live.srcObject = stream;
-      els.live.classList.toggle("mirrored", facing === "user");
+      const desktop=window.matchMedia("(pointer: fine) and (min-width: 860px)").matches;
+      const video=els.videoDevice.value?
+        {deviceId:{exact:els.videoDevice.value},width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30}}:
+        {facingMode:{ideal:facing},width:{ideal:desktop?1920:1080},
+          height:{ideal:desktop?1080:1920},
+          aspectRatio:{ideal:desktop?16/9:9/16},frameRate:{ideal:30}};
+      const audio=els.audioDevice.value?{deviceId:{exact:els.audioDevice.value}}:true;
+      stream=await navigator.mediaDevices.getUserMedia({video,audio});
+      if(!stream.getVideoTracks().length||!stream.getAudioTracks().length)
+        throw Error("Fotocamera o microfono assenti.");
+      els.live.srcObject=stream;
+      els.live.classList.toggle("mirrored",facing==="user");
       await els.live.play();
-      resetScroll();
-      refreshPrompter();
+      configureComposition();
+      await refreshDeviceChoices();
+      startMeter();
+      resetScroll();refreshPrompter();
       setMode("preview");
-      const dimensions = candidate.getVideoTracks()[0]?.getSettings?.() || {};
-      const width = dimensions.width, height = dimensions.height;
-      els.format.textContent = width && height ? width + "×" + height + " · originale" : "Formato automatico";
-      if (width && height && width >= height) {
-        notice("La fotocamera registra in orizzontale (" + width + "×" + height + "). Ruota il telefono in verticale e riattiva la fotocamera prima del take.", true);
-      } else {
-        notice("Controlla l'inquadratura, poi tocca Registra. Il gobbo sarà visibile solo sullo schermo.");
-      }
-    } catch (error) {
-      await releaseCamera();
-      setMode("error");
-      const denied = ["NotAllowedError","PermissionDeniedError","SecurityError"].includes(error?.name);
-      notice(denied ? "Fotocamera o microfono non autorizzati. Abilita entrambi nei permessi del browser e riprova." :
-        "Non riesco ad aprire fotocamera e microfono. Chiudi altre app che li usano e riprova (" + (error?.name || "errore") + ").", true);
-    } finally {
-      els.camera.disabled = false;
-      els.flip.disabled = false;
+      notice("Inquadratura "+els.format.textContent+
+        ". Controlla il microfono e avvia Registra. Il gobbo non sarà nel file.");
+    }catch(error){
+      await releaseCamera();setMode("error");
+      const denied=["NotAllowedError","PermissionDeniedError","SecurityError"].includes(error?.name);
+      notice(denied?"Fotocamera o microfono non autorizzati. Abilita entrambi nei permessi del browser.":
+        "Non riesco ad attivare fotocamera e microfono ("+
+        (error?.message||error?.name||"errore")+"). Chiudi eventuali altre app e riprova.",true);
+    }finally{
+      els.camera.disabled=false;els.flip.disabled=false;
     }
   }
   function cancelCountdown() {
