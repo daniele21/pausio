@@ -464,7 +464,7 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         self.assertEqual(self.get_state()["video_fx"], [])
         self.assertEqual(self.post("/api/visual-fx/suggest", {
             "revision": -1, "preset": "naturale"
-        })[0],400)
+        })[0],409)
         self.assertEqual(self.post("/api/visual-fx/suggest", {
             "revision": 0, "preset": "unknown"
         })[0],400)
