@@ -15,6 +15,7 @@ from pathlib import Path
 
 from pausio.captions import ass_document
 from pausio.domain import Interval
+from pausio.visual_fx import motion_filter, prepare_motion_fx
 
 
 class MediaError(RuntimeError):
@@ -182,6 +183,7 @@ def render(
     caption_config: dict | None = None,
     audio_fx: list[tuple[Path, dict]] | None = None,
     audio_mix: dict | None = None,
+    video_fx: list[dict] | None = None,
 ) -> list[str]:
     """Render ordered intervals in one re-encode; preserve aspect ratio with padding.
 
@@ -219,13 +221,34 @@ def render(
                 "Non basta installare libass separatamente."
             )
 
+    # Process transforms BEFORE concat and captions; this maintains stable
+    # subtitle/safe-zone coordinates and source-time mapping.
+    try:
+        motion_groups = prepare_motion_fx(segments, video_fx)
+    except ValueError as exc:
+        raise MediaError(str(exc)) from exc
     components: list[str] = []
     concat_inputs: list[str] = []
     for i, seg in enumerate(segments):
         start, end = seg.start_ms / 1000, seg.end_ms / 1000
-        components.append(
-            f"[0:v:0]trim=start={start:.3f}:end={end:.3f},setpts=PTS-STARTPTS[v{i}]"
-        )
+        if motion_groups:
+            # Native 30fps vertical source per KEEP. Each zoompan d=1 outputs
+            # exactly one frame for each normalized input frame. A no-FX region
+            # still needs the same pixel format, geometry and timebase.
+            chain = (
+                f"[0:v:0]trim=start={start:.3f}:end={end:.3f},setpts=PTS-STARTPTS,"
+                f"fps=30,scale={size[0]}:{size[1]}:force_original_aspect_ratio=decrease,"
+                f"pad={size[0]}:{size[1]}:(ow-iw)/2:(oh-ih)/2,setsar=1"
+            )
+            effect_filter = motion_filter(
+                motion_groups.get(i, []), seg.start_ms, size
+            )
+            chain += ("," + effect_filter if effect_filter else ",format=yuv420p")
+            components.append(chain + f"[v{i}]")
+        else:
+            components.append(
+                f"[0:v:0]trim=start={start:.3f}:end={end:.3f},setpts=PTS-STARTPTS[v{i}]"
+            )
         concat_inputs.append(f"[v{i}]")
         if has_audio:
             components.append(
