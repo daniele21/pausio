@@ -85,6 +85,7 @@ See [detailed agentic editing execution plan](AGENTIC_EDITING_PLAN.md) for depen
 - [ ] WP0: reconcile pending desktop capture / mobile portrait PR stack (#26–#28) with merged #22; independently prove MCP tool write from ChatGPT and Claude Chat in actually supported accounts/clients.
 - [ ] WP1: command schema v3, validated atomic instruction batches, revision checks, asset manifest and import/export migration.
 - [ ] WP2: text/statistic/code/image/video overlays on source-time timeline and the same deterministic FFmpeg preview/final path.
+- [ ] WP2b Visual Motion FX: manual punch-in/out and keyframed zoom/pan (P0), conservative auto suggestions from cuts/ASR evidence (P1), optional offline face reframe and bounded dissolve/dip transitions (P1), kinetic caption animation (P2); all as replayable typed events. See [visual motion effects plan](VISUAL_MOTION_EFFECTS_PLAN.md).
 - [ ] WP3: real integrated LUFS/LRA/true-peak measurement, configurable two-pass normalization and final AAC verification.
 - [ ] WP4: private music/riser/media library with asset hashes, licensing metadata, audition, gain/ducking/fades and agent-readable search.
 - [ ] WP5: optional transcription dispatch to a private self-hosted GitHub Actions runner using Pausio's existing ASR engine, never agent shell commands.

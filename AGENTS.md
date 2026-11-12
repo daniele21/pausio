@@ -38,6 +38,7 @@ Skills follow the [Agent Skills specification](https://agentskills.io/specificat
 | User journey, step flow, review and helpful empty/error states | `pausio-product-ux` |
 | Tokens, hierarchy, contrast, responsive layouts | `pausio-ui-design-system` |
 | Video preview, scrubbing, jump-cut timeline and keyboard | `pausio-video-interaction-ux` |
+| Animated zoom, punch-in/out, reframing, transitions, cinematic motion or auto visual-effect suggestions | `pausio-visual-motion-effects` |
 | Typed edits, project import/export, replay, schema changes, undo/redo | `pausio-edit-command-schema` |
 | Browser QA, accessibility and regressions | `pausio-ui-quality` |
 
@@ -71,3 +72,7 @@ The existing Playwright, FFmpeg, Python, media hash, autosave and privacy requir
 **Threat priority:** GitHub Pages is static and hosted by GitHub; local Studio/stdio MCP must stay on loopback. No public tunnel of Studio. A future public MCP gateway requires independent authenticated HTTPS, per-user and global quotas, bounded workers/jobs, abuse/incident monitoring and edge-level DDoS mitigation **before** any deployment. Local socket/Host controls do not prevent a distributed flood against public infrastructure. Never attach an untrusted public-repo PR workflow to the user's self-hosted Mac.
 
 All security controls must have adversarial tests; skill documents alone are not defenses. See `docs/SECURITY_THREAT_MODEL.md` for the trust matrix and acceptance gates.
+
+## Motion effects and transitions
+
+When changing any video zoom/crop/keyframe, jump-cut transition, automatic visual rhythm or kinetic caption feature, load `.agents/skills/pausio-visual-motion-effects/SKILL.md` and read `docs/VISUAL_MOTION_EFFECTS_PLAN.md` before implementation. Visual effects are not freeform FFmpeg commands: each effect is a versioned, bounded project event with source-accurate timestamps, preview/export parity, undo/redo and explicit acceptance of automated suggestions. Avoid noisy automatic effects on every cut. Combine with media security and command schema skills.

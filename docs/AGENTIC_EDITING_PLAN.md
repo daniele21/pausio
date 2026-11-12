@@ -73,6 +73,19 @@ Dependencies: WP1 and current timeline/captions.
 
 Acceptance: add '1.379 segreti' at 15–20.5 s, terminal command later, import screenshot, move/resize/trim and undo/redo, export project, restart/reimport and reproduce the same visual edit; verify in 540x960 preview + 1080x1920 final; 320/390 mobile UI usable, keyboard and Playwright screenshot checks.
 
+### WP2b — Camera motion, punch-ins and video transitions [P0/P1; medium/large]
+
+Detailed spec: [VISUAL_MOTION_EFFECTS_PLAN.md](VISUAL_MOTION_EFFECTS_PLAN.md). This is distinct from overlay editing: it changes the underlying footage framing or relationship between adjacent KEEP segments.
+
+- MVP manual: source-segment-anchored punch-in/out and animated zoom/pan with ordered keyframes, explicit crop/face anchor, bounded scale, easing and start/end source ms.
+- Optional transition event at a specific pair of adjacent KEEP segment IDs: start with hard cut and 120–250ms approved dissolve or dip. Enforce trim handles and A/V synchronization; no transition spam after every speech pause.
+- Suggest mode: deterministic, conservative candidate ranking from existing cut boundaries, phrase/word timing, audio emphasis (when available) and optional locally tracked face. Default subtle; show evidence, confidence, proposal preview and individual accept/reject. No generated false prosody for silent reference clips.
+- Composition order: KEEP -> per-clip transforms -> boundary transitions -> caption/overlay placement -> audio mix. Captions must remain stable and cannot drift with the face.
+- All effects typed, versioned, deterministic/replayable/importable and reversible. UI Video FX track, MCP tool parity once permitted, frame-accurate preview/final, no raw FFmpeg filters or arbitrary remote media URLs.
+- Security: bound effect counts, keyframes, render time and imported media complexity; follow local-first, security and runner gates. User-created screen recordings/reference footage never committed to Git.
+
+Acceptance: at least two reference-quality selective punch-ins and one intentional transition across three KEEP clips, passing Python/FFmpeg and Playwright plus real-phone review, no clipped speech or moving subtitles. Initial feature implementation is pending, not shipped.
+
 ### WP3 — Audio loudness, normalizing and mix quality [P0; medium]
 
 Dependencies: existing PR #18 audio mixer and WP1 instructions.
