@@ -1408,7 +1408,11 @@ function initializeDesktopWorkspace(){
     const current=dock.getBoundingClientRect().height;
     applyHeight(event.key==="Home"?285:current+(event.key==="ArrowUp"?20:-20));
   });
-  window.addEventListener("resize",()=>applyHeight(dock.getBoundingClientRect().height,false));
+  window.addEventListener("resize",()=>{
+    applyHeight(dock.getBoundingClientRect().height,false);
+    renderWorkspaceLibraries();
+    syncEditorSelection();
+  });
 }
 
 function tab(name){
