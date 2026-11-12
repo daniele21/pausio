@@ -1610,3 +1610,11 @@ a { color: inherit; text-decoration: none; }
   .timeline-surface.has-visual-fx .timeline-track > .playhead { height: calc(100% + 98px); }
   .timeline-surface.has-visual-fx.has-captions .timeline-track > .playhead { height: calc(100% + 135px); }
 }
+
+/* Custom Video FX proposal controls: compact and accessible. */
+.visual-fx-custom { border: 1px solid #496171; border-radius: 8px; background: #192a39; padding: 12px; min-width: 0; }
+.visual-fx-custom[hidden] { display: none !important; }
+.visual-fx-custom legend { font-size: 11px; font-weight: 700; color: #cdf2e6; padding: 0 4px; }
+.visual-fx-custom .visual-fx-edit-grid { margin: 7px 0 13px; }
+.visual-fx-controls .visual-fx-signal-toggle { display: flex; align-items: start; gap: 8px; font-size: 11px; line-height: 1.5; }
+.visual-fx-signal-toggle input { flex: 0 0 auto; margin-top: 2px; }
