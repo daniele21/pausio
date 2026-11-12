@@ -52,7 +52,7 @@ def ffmpeg_has_filter(name: str) -> bool:
     result = _run([require_binary("ffmpeg"), "-hide_banner", "-filters"], timeout_s=20)
     # FFmpeg prints three capability markers followed by the filter name.
     return any(
-        re.match(r"^\\s*[TSC.]{3}\\s+" + re.escape(name) + r"\\s", line)
+        re.match(r"^\s*[TSC.]{3}\s+" + re.escape(name) + r"\s", line)
         for line in result.stdout.splitlines()
     )
 
