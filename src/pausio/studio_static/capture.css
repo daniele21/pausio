@@ -75,3 +75,10 @@
   .device-settings { padding:17px; }
   .device-settings .settings-head h2 { font-size:19px; }
 }
+
+/* Framing label and range must stay in the same responsive grid cell. */
+.crop-setting { min-width:0; }
+.crop-setting input[type=range] { display:block; width:100%; }
+@media (min-width:851px) and (max-width:1100px) {
+  .device-settings .crop-setting { align-self:end; }
+}
