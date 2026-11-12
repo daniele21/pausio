@@ -93,7 +93,18 @@
     } catch (_) { /* Capture and downloads do not require localStorage. */ }
   }
   function refreshPrompter() {
-    els.text.textContent = els.script.value.trim() || "Scrivi uno script nelle impostazioni.";
+    const nextText=els.script.value.trim()||"Scrivi uno script nelle impostazioni.";
+    // Updating the speed slider must NOT replace the text node and send the
+    // active rehearsal back to the start on some browsers.
+    if(els.text.textContent!==nextText){
+      els.text.textContent=nextText;
+      if(rehearsalState!=="stopped"){
+        els.scroll.scrollTop=0;
+        rehearsalElapsedMs=0;
+        lastFrame=0;
+        els.clock.textContent="00:00";
+      }
+    }
     els.prompter.style.setProperty("--font-size", els.font.value + "px");
     els.prompter.classList.toggle("middle", els.position.value === "middle");
     $("speed-value").textContent = els.speed.value + " parole/min";
