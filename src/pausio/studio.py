@@ -32,6 +32,7 @@ from pausio.media import MediaError, MediaInfo, detect_silences, probe, probe_au
 from pausio.planner import CUT_PRESETS, validate_cut_settings, policy_from_cut_settings, propose_segments
 from pausio.project_commands import ProjectTape, ProjectFormatError, UI_COMMANDS, default_audio_mix
 from pausio.visual_fx_auto import propose_visual_fx
+from pausio.face_reframe import propose_face_anchor, FaceAnalysisUnavailable
 from pausio.studio_persistence import StudioSessionStore, RecoveryError, default_studio_directory
 
 MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024
@@ -49,6 +50,7 @@ ASSETS = {
     "/styles.css": ("styles.css", "text/css; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
     "/visual_fx_ui.js": ("visual_fx_ui.js", "text/javascript; charset=utf-8"),
+    "/face_reframe_ui.js": ("face_reframe_ui.js", "text/javascript; charset=utf-8"),
     "/capture": ("capture.html", "text/html; charset=utf-8"),
     "/capture.html": ("capture.html", "text/html; charset=utf-8"),
     "/capture.css": ("capture.css", "text/css; charset=utf-8"),
@@ -454,6 +456,37 @@ class StudioWorkspace:
             except ValueError as exc:
                 raise StudioError(str(exc)) from exc
 
+    def suggest_face_anchor(self, raw: dict) -> dict:
+        """Opt-in read-only local sample; only a human/agent edit changes framing."""
+        with self.lock:
+            self._ensure_unlocked()
+            if (not isinstance(raw, dict) or set(raw) != {"revision","effect_id"} or
+                    type(raw["revision"]) is not int or
+                    type(raw["effect_id"]) is not str):
+                raise StudioError("Face reframe requires revision and effect_id")
+            if self.tape is None or self.source is None or self.media_sha256 is None:
+                raise StudioError("Import a video before face analysis")
+            if raw["revision"] != self.tape.revision:
+                raise StudioError("Versione del progetto non aggiornata")
+            effect=next((fx for fx in self.tape.view.video_fx
+                         if fx["id"]==raw["effect_id"]),None)
+            if effect is None:
+                raise StudioError("Video FX not found")
+            source,sha,revision=self.source,self.media_sha256,self.tape.revision
+            zoom=effect["end_scale_pct"]
+            start,end=effect["start_ms"],effect["end_ms"]
+        try:
+            outcome=propose_face_anchor(source,start_ms=start,end_ms=end,
+                                        zoom_pct=zoom)
+        except (FaceAnalysisUnavailable,ValueError) as exc:
+            raise StudioError(str(exc)) from exc
+        with self.lock:
+            if (self.tape is None or self.tape.revision != revision or
+                    self.media_sha256 != sha or self.source != source):
+                raise StudioError("The project changed during face analysis")
+        return {**outcome,"effect_id":effect["id"],
+                "base_revision":revision,"media_sha256":sha}
+
     def command(self, raw: dict) -> None:
         """Execute a version-checked typed command requested by the Studio UI."""
         with self.lock:
@@ -831,6 +864,10 @@ class StudioHandler(BaseHTTPRequestHandler):
             if path == "/api/command":
                 self.server.workspace.command(self._read_json())
                 self._json(200, self.server.workspace.snapshot())
+                return
+            if path == "/api/visual-fx/face-anchor":
+                proposal = self.server.workspace.suggest_face_anchor(self._read_json())
+                self._json(200, proposal)
                 return
             if path == "/api/visual-fx/suggest":
                 proposal = self.server.workspace.suggest_visual_fx(self._read_json())
