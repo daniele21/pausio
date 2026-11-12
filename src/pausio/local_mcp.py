@@ -20,7 +20,9 @@ PROTOCOL_VERSION = "2025-03-26"
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 EDIT_TYPES = frozenset({"segment.update", "caption.correct", "caption.configure",
                         "video.transform.add", "video.transform.update",
-                        "video.transform.remove"})
+                        "video.transform.remove",
+                        "video.transition.add", "video.transition.update",
+                        "video.transition.remove"})
 
 TOOLS: list[dict[str, Any]] = [
     {
@@ -57,7 +59,7 @@ TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "pausio_apply_command",
-        "description": "Apply ONE existing, reviewed/typed Pausio edit to the active project at the exact expected revision. MVP allows captions, segment.update and validated video.transform.add/update/remove. All writes use the same Studio reducer; no final export. Invalidates approval/preview. Does NOT authorize final export.",
+        "description": "Apply ONE existing, reviewed/typed Pausio edit to the active project at the exact expected revision. MVP allows captions, segment.update and validated video.transform.add/update/remove and video.transition.add/update/remove. All writes use the same Studio reducer; no final export. Invalidates approval/preview. Does NOT authorize final export.",
         "inputSchema": {
             "type": "object",
             "properties": {
