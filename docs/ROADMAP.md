@@ -93,3 +93,12 @@ See [detailed agentic editing execution plan](AGENTIC_EDITING_PLAN.md) for depen
 - [ ] WP8: end-to-end talking-head pilot: GPT/Claude Chat analyzes video, edits Pausio, reviews preview, corrects, requests approval and delivers editable project + MP4.
 
 **Non-goal:** do not call GPT/Claude inference APIs from Pausio or recreate the creative analysis inside Pausio. Chat clients' file/tool support is an explicit MVP feasibility gate, not an assumed feature.
+
+## Security gate for agentic integration (Nov 2026)
+
+- [x] Add Pausio threat-specific skills: `pausio-network-abuse-defense`, `pausio-mcp-trust-boundary`, `pausio-input-media-defense`, `pausio-actions-runner-security`; route via `AGENTS.md` and validate in CI.
+- [x] Document Pages vs local Studio vs local MCP vs future Internet-facing gateway trust boundaries in `docs/SECURITY_THREAT_MODEL.md`.
+- [x] Limit local HTTP clients, idle time and DNS-rebinding Host, plus negative regression tests (pending PR CI validation).
+- [ ] Before public MCP: independent authenticated HTTPS gateway; OAuth/audience/scope/project authorization; per-user + global quotas, edge DDoS/WAF, safe media sharing, incident response, load/security tests. **Do not tunnel the Studio local server**.
+- [ ] Before GitHub Actions ASR: private dispatch repository, isolated/restricted self-hosted Mac, no PR code execution, bounded jobs and explicit media consent.
+- [ ] Real supported ChatGPT/Claude client interoperability + on-device, manual hardware review.
