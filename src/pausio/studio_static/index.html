@@ -327,6 +327,18 @@
                     <option value="personalizzato">Personalizzato · base Educativo</option>
                   </select>
                 </label>
+                <fieldset id="visual-fx-custom" class="visual-fx-custom" hidden>
+                  <legend>Profilo personalizzato · suggerimenti</legend>
+                  <div class="visual-fx-edit-grid">
+                    <label>Effetti al minuto <input id="visual-fx-max-per-min" type="number" min="1" max="10" step="1" value="6"></label>
+                    <label>Pausa tra effetti (ms) <input id="visual-fx-gap" type="number" min="2500" max="12000" step="100" value="4500"></label>
+                    <label>Punch zoom (%) <input id="visual-fx-punch" type="number" min="105" max="125" step="1" value="118"></label>
+                    <label>Zoom progressivo (%) <input id="visual-fx-push" type="number" min="105" max="120" step="1" value="113"></label>
+                    <label>Durata zoom (ms) <input id="visual-fx-push-ms" type="number" min="1200" max="4000" step="100" value="2200"></label>
+                  </div>
+                  <label class="visual-fx-signal-toggle"><input type="checkbox" id="visual-fx-audio-energy"> Considera aumenti misurati di energia della voce (waveform)</label>
+                  <p class="visual-fx-status">Solo segnali tecnici: nessuna inferenza sul significato del parlato. Le modifiche restano proposte da approvare.</p>
+                </fieldset>
                 <button type="button" class="button button-outline button-full" id="visual-fx-suggest">✦ Suggerisci effetti</button>
                 <p id="visual-fx-suggest-status" class="visual-fx-status" role="status" aria-live="polite"></p>
                 <div id="visual-fx-proposals" class="visual-fx-proposals" aria-label="Proposte FX da approvare"></div>
