@@ -437,7 +437,8 @@ class StudioWorkspace:
             self._ensure_unlocked()
             if self.tape is None or self.info is None or self.media_sha256 is None:
                 raise StudioError("Importa un video prima di suggerire effetti.")
-            if not isinstance(raw, dict) or set(raw) != {"revision", "preset"}:
+            if (not isinstance(raw, dict) or set(raw) not in (
+                    {"revision", "preset"}, {"revision", "preset", "options"})):
                 raise StudioError("Preset FX richiede revision e preset.")
             revision = raw["revision"]
             if type(revision) is not int or revision != self.tape.revision:
@@ -452,6 +453,10 @@ class StudioWorkspace:
                     preset=raw["preset"],
                     media_sha256=self.media_sha256,
                     base_revision=revision,
+                    overrides=raw.get("options"),
+                    waveform=(list(self.waveform) if self.waveform_status=="ready"
+                              and self.waveform else None),
+                    source_duration_ms=self.info.duration_ms,
                 )
             except ValueError as exc:
                 raise StudioError(str(exc)) from exc
