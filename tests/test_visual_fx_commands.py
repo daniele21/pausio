@@ -33,7 +33,7 @@ class VideoFxCommandsTests(unittest.TestCase):
         added = self.tape.append("video.transform.add", {"effect": fx})
         self.assertEqual(added.view.video_fx[0], fx)
         self.assertEqual(added.as_dict()["schema_version"], VERSION)
-        self.assertEqual(VERSION, 3)
+        self.assertEqual(VERSION, 4)
         self.assertFalse(added.view.approved)
         replacement = {**fx, "start_scale_pct": 122, "end_scale_pct": 122,
                        "anchor_x_pct": 54}
@@ -51,7 +51,7 @@ class VideoFxCommandsTests(unittest.TestCase):
         old["schema_version"] = 2
         restored = ProjectTape.from_dict(old)
         self.assertEqual(restored.view.video_fx, ())
-        self.assertEqual(restored.as_dict()["schema_version"], 3)
+        self.assertEqual(restored.as_dict()["schema_version"], 4)
         fx = effect(self.a)
         self.assertEqual(restored.append("video.transform.add", {"effect": fx}).view.video_fx, (fx,))
 
