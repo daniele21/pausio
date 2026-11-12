@@ -809,6 +809,22 @@ function drawTranscript(){
     text.textContent=tr.text||"Non è stato rilevato parlato.";list.append(text);
   }
 }
+
+function captionMoveLimits(cue){
+  const cues=project?.captions||[];
+  const index=cues.findIndex(c=>c.id===cue.id);
+  if(index<0||!project?.media)return null;
+  const previous=cues[index-1],next=cues[index+1];
+  const length=cue.end_ms-cue.start_ms;
+  return {min:previous?.end_ms||0,
+    max:(next?.start_ms||project.media.duration_ms)-length};
+}
+function submitCaptionTiming(cue,startMs,endMs){
+  if(startMs===cue.start_ms&&endMs===cue.end_ms)return Promise.resolve();
+  return edit("caption.retime",{caption_id:cue.id,
+    start_ms:Math.round(startMs),end_ms:Math.round(endMs)});
+}
+
 function drawCaptionEditor(){
   const list=el("caption-edit-list");list.replaceChildren();
   for(const cue of project?.captions||[]){
@@ -825,13 +841,40 @@ function drawCaptionEditor(){
       if(input.value.trim()===cue.text)return;
       await edit("caption.correct",{caption_id:cue.id,text:input.value.trim()});
     }));
+    const timing=document.createElement("div");
+    timing.className="caption-timing-fields";
+    const makeTimeField=(label,value,key)=>{
+      const wrapper=document.createElement("label");
+      wrapper.textContent=label;
+      const field=document.createElement("input");
+      field.type="number";field.step=".001";field.min="0";
+      field.max=String(project.media.duration_ms/1000);
+      field.value=(value/1000).toFixed(3);
+      field.disabled=working();
+      field.className="caption-time-"+key;
+      field.setAttribute("aria-label",label+" sottotitolo "+heading.textContent);
+      wrapper.append(field);timing.append(wrapper);
+      return field;
+    };
+    const timeStart=makeTimeField("Inizio (secondi)",cue.start_ms,"start");
+    const timeEnd=makeTimeField("Fine (secondi)",cue.end_ms,"end");
+    const saveTiming=()=>run(async()=>{
+      if(!timeStart.checkValidity()||!timeEnd.checkValidity())
+        throw Error("Controlla i secondi della frase.");
+      const start=Math.round(Number(timeStart.value)*1000),
+        end=Math.round(Number(timeEnd.value)*1000);
+      await submitCaptionTiming(cue,start,end);
+    });
+    timeStart.addEventListener("change",saveTiming);
+    timeEnd.addEventListener("change",saveTiming);
+
     const choose=document.createElement("button");
     choose.type="button";choose.className="caption-select";
     choose.textContent="Seleziona sulla timeline";
     choose.setAttribute("aria-label","Seleziona sottotitolo da "+msFormat(cue.start_ms,true));
     choose.addEventListener("click",()=>selectEditorItem("caption",cue.id,{seek:true}));
     // Keep Save text first for existing keyboard order and automated flows.
-    card.append(heading,input,save,choose);
+    card.append(heading,input,timing,save,choose);
     list.append(card);
   }
 }
@@ -1156,8 +1199,61 @@ function drawCaptionTimeline(){
     mark.style.left=(cue.start_ms/duration*100).toFixed(4)+"%";
     mark.style.width=((cue.end_ms-cue.start_ms)/duration*100).toFixed(4)+"%";
     mark.textContent=cue.text;
+    let skipNextClick=false;
+    mark.disabled=working();
+    mark.title+=" · Trascina per spostare · ← → ±0,1 s · ⇧ ±0,5 s";
     mark.addEventListener("click",event=>{
-      event.stopPropagation();selectEditorItem("caption",cue.id,{seek:true});
+      event.stopPropagation();
+      if(skipNextClick)return;
+      selectEditorItem("caption",cue.id,{seek:true});
+    });
+    mark.addEventListener("keydown",event=>{
+      if(!["ArrowLeft","ArrowRight"].includes(event.key)||working())return;
+      event.preventDefault();event.stopPropagation();
+      const limits=captionMoveLimits(cue);
+      if(!limits)return;
+      const step=event.shiftKey?500:100;
+      const amount=(event.key==="ArrowRight"?step:-step);
+      const start=Math.max(limits.min,Math.min(limits.max,cue.start_ms+amount));
+      run(()=>submitCaptionTiming(cue,start,start+cue.end_ms-cue.start_ms));
+    });
+    mark.addEventListener("pointerdown",event=>{
+      if(event.button!==0||working())return;
+      const limits=captionMoveLimits(cue);
+      if(!limits)return;
+      const startX=event.clientX;
+      const width=Math.max(1,el("timeline-track").getBoundingClientRect().width);
+      let dragged=false,pending=cue.start_ms;
+      mark.setPointerCapture(event.pointerId);
+      const move=ev=>{
+        const pixels=ev.clientX-startX;
+        if(Math.abs(pixels)<5&&!dragged)return;
+        dragged=true;
+        const delta=Math.round(pixels/width*duration/10)*10;
+        pending=Math.max(limits.min,Math.min(limits.max,cue.start_ms+delta));
+        mark.style.left=(pending/duration*100)+"%";
+      };
+      const clean=ev=>{
+        mark.removeEventListener("pointermove",move);
+        mark.removeEventListener("pointerup",finish);
+        mark.removeEventListener("pointercancel",cancel);
+        if(mark.hasPointerCapture(ev.pointerId))mark.releasePointerCapture(ev.pointerId);
+      };
+      const finish=ev=>{
+        clean(ev);
+        if(dragged){
+          skipNextClick=true;
+          // One pointer gesture becomes ONE portable command.
+          run(()=>submitCaptionTiming(cue,pending,pending+cue.end_ms-cue.start_ms));
+          window.setTimeout(()=>{skipNextClick=false;},0);
+        }
+      };
+      const cancel=ev=>{
+        clean(ev);mark.style.left=(cue.start_ms/duration*100).toFixed(4)+"%";
+      };
+      mark.addEventListener("pointermove",move);
+      mark.addEventListener("pointerup",finish);
+      mark.addEventListener("pointercancel",cancel);
     });
     lane.append(mark);
   }
