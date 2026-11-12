@@ -523,6 +523,7 @@ function update(next){
   drawCaptionTimeline();renderWorkspaceLibraries();syncEditorSelection();
   window.pausioVideoFx?.update(next);
   window.pausioFaceReframe?.update(next);
+  window.pausioVideoTransitions?.update(next);
   updateFxMonitorUI();drawAudioMixer();syncVoicePlayback();syncLiveFx();transport();
   syncDesktopCommands();
   if(has&&next.waveform_status==="ready"&&waveformRequestedFor!==next.media_id){
