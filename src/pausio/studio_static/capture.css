@@ -82,3 +82,47 @@
 @media (min-width:851px) and (max-width:1100px) {
   .device-settings .crop-setting { align-self:end; }
 }
+
+/* CAPTURE REHEARSAL UX V1 — practice and recording are visibly distinct. */
+.rehearsal-action {
+  background:#243445!important;
+  border-color:#607489!important;
+}
+.rehearsal-action[aria-pressed="true"] {
+  border-color:#f2ac79!important;
+  color:#ffceaa!important;
+  background:#2f2a29!important;
+}
+.rehearsal-restart {
+  background:#172430!important;
+  border-color:#42566b!important;
+  white-space:nowrap;
+}
+.rehearsal-hint {
+  display:flex; align-items:center; gap:8px;
+  font-size:11px; line-height:1.45;
+  padding:10px 12px; margin:9px 0 5px;
+  color:#c6d6e3; border:1px solid #3d5366;
+  border-radius:10px; background:#16232f;
+  max-width:560px;
+}
+.rehearsal-hint[hidden]{display:none!important}
+.rehearsal-dot{
+  flex:0 0 auto; width:7px; height:7px;
+  border-radius:50%; background:#f3b385;
+}
+.timer.rehearsal-live .record-dot {
+  background:#f3b385;
+  box-shadow:0 0 0 3px rgba(243,179,133,.15);
+}
+.speed-rehearsal-tip {
+  color:#a8bbca; font-size:11px;
+  line-height:1.5; margin:4px 0 15px;
+}
+.speed-rehearsal-tip strong { color:#e9c19f; }
+.camera.rehearsing:not(.is-composing) { background:#172635; }
+@media(max-width:440px){
+  .transport .rehearsal-action { min-width:150px; }
+  .transport .rehearsal-restart { min-width:120px; }
+  .rehearsal-hint { font-size:10px; padding:9px; }
+}
