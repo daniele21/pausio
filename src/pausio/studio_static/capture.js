@@ -328,7 +328,10 @@
     els.countdown.hidden = true;
     try {
       const mimeType = supportedMime();
-      recorder = new MediaRecorder(stream, mimeType ? {mimeType} : undefined);
+      const input=recordingInputStream();
+      recorder=new MediaRecorder(input,mimeType?{mimeType,
+        videoBitsPerSecond:captureQuality()===1080?6000000:3500000
+      }:{videoBitsPerSecond:captureQuality()===1080?6000000:3500000});
       recordedMime = recorder.mimeType || mimeType || "video/webm";
       chunks = [];
       recorder.ondataavailable = event => { if (event.data && event.data.size) chunks.push(event.data); };
@@ -337,7 +340,8 @@
       recorder.start(1000);
       startedAt = performance.now();
       setMode("recording");
-      notice("Registrazione in corso. Non bloccare lo schermo e non uscire dal browser.");
+      notice("REC verticale "+recordedDimensions.width+"×"+recordedDimensions.height+
+        ". Il gobbo è visibile soltanto sullo schermo. Non chiudere il browser.");
       raf = requestAnimationFrame(tick);
     } catch (error) {
       recorder = null;
@@ -379,13 +383,15 @@
     els.download.href = blobUrl;
     els.download.download = outputName;
     const seconds = Math.round((performance.now() - startedAt) / 1000);
-    els.details.textContent = outputName.split(".").pop().toUpperCase() + " · " +
-      (output.size / (1024 * 1024)).toFixed(1) + " MB · " + seconds + " s · senza gobbo";
+    els.details.textContent=outputName.split(".").pop().toUpperCase()+" · "+
+      (recordedDimensions?.width||"?")+"×"+(recordedDimensions?.height||"?")+" · "+
+      (output.size/(1024*1024)).toFixed(1)+" MB · "+seconds+" s · senza gobbo";
     savedAfterRecording = false;
     const file = new File([output], outputName, {type});
     els.share.hidden = !(navigator.canShare && navigator.canShare({files:[file]}));
     setMode("finished");
-    notice("Take pronto. Tocca Scarica video oppure Condividi / Salva su File. Verifica il file prima di abbandonare la pagina.");
+    notice("Take pronto. Scarica il file e verifica video e audio."+
+      (isLocalStudio?" Puoi anche importarlo direttamente in Pausio Studio.":""));
   }
   async function shareRecording() {
     if (!output || !navigator.share) return;
@@ -398,6 +404,35 @@
     } catch (error) {
       if (error?.name !== "AbortError") notice("Condivisione non disponibile: usa Scarica video oppure apri il file nel browser.", true);
     }
+  }
+  async function importIntoStudio() {
+    if(!isLocalStudio||!output||mode!=="finished")return;
+    const button=els.openStudio;
+    try{
+      button.disabled=true;
+      const stateResponse=await fetch("/api/state");
+      if(!stateResponse.ok)throw Error("Studio locale non disponibile.");
+      const state=await stateResponse.json();
+      if(state.file&&!window.confirm("Studio contiene già un video: importare questo take sostituirà il progetto attuale. Procedere?"))
+        return;
+      if(!savedAfterRecording&&!window.confirm(
+        "Importare il take in Studio lo salva nella sessione locale. Vuoi procedere anche senza una copia nella cartella Download?"))
+        return;
+      notice("Importazione locale in Pausio Studio in corso...");
+      const response=await fetch("/api/import",{
+        method:"POST",
+        headers:{"Content-Type":"application/octet-stream",
+          "X-Pausio-Client":"studio","X-Filename":encodeURIComponent(outputName)},
+        body:output
+      });
+      const result=await response.json();
+      if(!response.ok)throw Error(result?.error||"Importazione non riuscita.");
+      savedAfterRecording=true;
+      window.location.assign("/");
+    }catch(error){
+      notice("Importazione fallita: "+(error?.message||"errore")+
+        ". Scarica il take prima di uscire.",true);
+    }finally{button.disabled=false;}
   }
   async function newTake() {
     if (mode !== "finished") return;
