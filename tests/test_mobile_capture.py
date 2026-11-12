@@ -31,7 +31,7 @@ class MobileCaptureServerTests(unittest.TestCase):
             ("/capture", 'id="download-video"'),
             ("/capture.html", 'id="script-input"'),
             ("/capture.css", ".prompter-scroll"),
-            ("/capture.js", "new MediaRecorder(stream"),
+            ("/capture.js", "new MediaRecorder(recordingStream"),
         ]:
             with self.subTest(path=path):
                 headers, content = self.fetch(path)
@@ -45,6 +45,10 @@ class MobileCaptureServerTests(unittest.TestCase):
         _, script = self.fetch("/capture.js")
         self.assertNotIn('fetch(', script)
         self.assertNotIn("XMLHttpRequest", script)
+        # The recorder must record the portrait canvas video with the original microphone track.
+        self.assertIn("els.canvas.captureStream(COMPOSITE_FPS)", script)
+        self.assertIn("recordingStream = new MediaStream([", script)
+        self.assertIn("...composedVideo.getVideoTracks(), ...stream.getAudioTracks()", script)
         self.assertIn("URL.createObjectURL(output)", script)
         self.assertIn("recorder.start(1000)", script)
         self.assertIn("els.download.download = outputName", script)
