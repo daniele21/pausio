@@ -142,11 +142,14 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertTrue(current["audio_clips"][0]["available"])
         self.assertGreaterEqual(current["audio_clips"][0]["start_ms"], 1000)
         self.assertTrue(self.page.locator("#fx-panel").is_visible())
+        self.assertTrue(self.page.locator("#workspace-audio-library").is_visible())
+        self.assertEqual(self.page.locator(".workspace-audio-item").count(),1)
         self.assertEqual(self.page.locator(".fx-item").count(), 1)
         self.assertEqual(self.page.locator(".fx-item audio").count(), 1)
         selected_revision=self.state()["project_revision"]
         self.page.locator(".fx-select").first.click()
         self.assertTrue(self.page.locator("#selection-inspector").is_visible())
+        self.assertEqual(self.page.locator(".workspace-audio-item.is-selected").count(),1)
         self.assertEqual(self.page.locator("#app").get_attribute("data-workspace"),"audio")
         self.assertEqual(self.page.locator(".fx-clip-mark.is-selected").count(),
                          self.page.locator(".fx-clip-mark").count())
@@ -630,6 +633,13 @@ class StudioPlaywrightAudit(unittest.TestCase):
         selection_revision=updated["project_revision"]
         self.page.locator(".caption-cue-mark").first.click()
         self.assertEqual(self.page.locator("#app").get_attribute("data-workspace"),"captions")
+        self.assertTrue(self.page.locator("#workspace-caption-library").is_visible())
+        self.assertEqual(self.page.locator(".workspace-caption-item").count(),len(updated["captions"]))
+        self.assertEqual(self.page.locator(".workspace-caption-item.is-selected").count(),1)
+        self.page.locator("#workspace-caption-search").fill("Nessuna frase corrispondente")
+        self.assertEqual(self.page.locator(".workspace-caption-item").count(),0)
+        self.page.locator("#workspace-caption-search").fill("")
+        self.assertEqual(self.page.locator(".workspace-caption-item").count(),len(updated["captions"]))
         self.assertEqual(self.page.locator(".caption-edit-card.is-selected").count(),1)
         self.assertEqual(self.page.locator(".caption-cue-mark[aria-pressed='true']").count(),1)
         self.assertEqual(self.state()["project_revision"],selection_revision)
