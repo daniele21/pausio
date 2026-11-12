@@ -7,6 +7,10 @@ description: Use for Pausio punch-in/out, animated zoom, crop/pan keyframes, cam
 
 Load this skill when implementing or modifying video FX, transition timing, reframing, keyframe interpolation, auto-suggested zoom, or kinetic captions. First read [visual motion plan](../../../docs/VISUAL_MOTION_EFFECTS_PLAN.md) and [comparative automation research](../../../docs/VISUAL_FX_AUTOMATION_RESEARCH.md) and the existing project/event contract. Pair with `pausio-edit-command-schema`, `pausio-media-ffmpeg`, `pausio-video-interaction-ux`, `pausio-test-engineering` and `pausio-input-media-defense` where relevant.
 
+## Mandatory feature selection before implementation
+
+Read the [feature adoption matrix](../../../docs/VISUAL_FX_FEATURE_ADOPTION_MATRIX.md) when considering a third-party effect renderer, keyframe editor, automatic zoom selector, tracking library, scene detector or transition pack. Implement the smallest independently testable *Pausio-native* feature slice (S0–S2 first); avoid replacing the canonical command tape or bundling unreviewed model weights. The matrix also defines differences between Naturale/Educativo/Dinamico/Personalizzato. It is a **design decision only**, not evidence features are implemented.
+
 ## Non-negotiable engineering rules
 
 1. Differentiate: **hard cut**, **punch-in** (instant change in crop), **animated zoom/pan** (keyframes), **transition** between adjacent source segments (`xfade`), and **kinetic captions**. Each requires its own precise validated event; never hide it in the rendering filter string or untracked browser-only state.
