@@ -49,6 +49,8 @@ def prepare_motion_fx(
             _integer(entry[key], 100, 130, key)
             for key in ("start_scale_pct", "end_scale_pct")
         ]
+        if entry["kind"] == "ratchet" and b-a < 1200:
+            raise ValueError("Ratchet must last at least 1200ms")
         if entry["kind"] == "punch" and scales[0] != scales[1]:
             raise ValueError("Punch requires a constant scale")
         for key in ("anchor_x_pct", "anchor_y_pct"):
