@@ -1,4 +1,4 @@
-/* Pausio Mobile Capture. No backend, analytics or external services. */
+/* Pausio Capture: mobile/desktop vertical recording, no analytics or cloud services. */
 (() => {
   "use strict";
   const $ = id => document.getElementById(id);
@@ -12,13 +12,22 @@
     countdown: $("countdown"), panel: $("download-panel"), download: $("download-video"),
     share: $("share-video"), details: $("file-details"), script: $("script-input"),
     speed: $("speed"), font: $("font-size"), position: $("prompter-position"),
-    autoplay: $("auto-scroll")
+    autoplay: $("auto-scroll"),
+    portrait: $("portrait-canvas"), videoDevice: $("video-device"), audioDevice: $("audio-device"),
+    quality: $("capture-quality"), panX: $("crop-x"), panY: $("crop-y"), zoom: $("crop-zoom"),
+    resetCrop: $("crop-reset"), meter: $("audio-level"), meterFill: $("audio-level-fill"),
+    meterValue: $("audio-level-value"), sourceInfo: $("capture-tech-info"),
+    openStudio: $("open-in-studio")
   };
   const STORE_KEY = "pausio-mobile-capture-v1";
   let stream = null, recorder = null, chunks = [], output = null, blobUrl = null;
   let outputName = "", mode = "idle", facing = "user", raf = 0, lastFrame = 0;
   let startedAt = 0, pausedScroll = false, countdownId = 0;
   let savedAfterRecording = false, recordedMime = "";
+  let compositionActive = false, composeRaf = 0, lastPaint = 0, portraitStream = null;
+  let meterRaf = 0, audioContext = null, audioAnalyser = null, meterSource = null;
+  let inputWidth = 0, inputHeight = 0, recordedDimensions = null;
+  const isLocalStudio = location.hostname === "127.0.0.1";
 
   function notice(message, error = false) {
     els.status.textContent = message;
@@ -35,15 +44,21 @@
     els.panel.hidden = next !== "finished";
     els.placeholder.hidden = next !== "idle" && next !== "error";
     els.live.hidden = next === "finished" || next === "idle" || next === "error";
+    els.portrait.hidden = !compositionActive ||
+      next === "finished" || next === "idle" || next === "error";
     els.playback.hidden = next !== "finished";
     els.prompter.hidden = next === "finished" || next === "idle" || next === "error";
     els.timer.classList.toggle("live", next === "recording");
     els.state.textContent = {idle:"PRONTO", error:"ERRORE", preview:"CAMERA ATTIVA",
       countdown:"PREPARATI", recording:"REC", stopping:"SALVATAGGIO", finished:"TAKE PRONTO"}[next] || "PRONTO";
     const locked = ["countdown","recording","stopping"].includes(next);
-    for (const el of [els.script,els.speed,els.font,els.position,els.autoplay]) el.disabled = locked;
+    for (const el of [els.script,els.speed,els.font,els.position,els.autoplay,
+      els.videoDevice,els.audioDevice,els.quality,els.panX,els.panY,els.zoom,els.resetCrop])
+      el.disabled = locked;
+    els.flip.hidden = next !== "preview";
     els.pause.textContent = pausedScroll ? "▶" : "Ⅱ";
     els.pause.setAttribute("aria-label", pausedScroll ? "Riprendi scorrimento" : "Pausa scorrimento");
+    els.openStudio.hidden = next !== "finished" || !isLocalStudio;
   }
   function prefs() {
     try {
@@ -54,13 +69,19 @@
       if (Number.isFinite(data.font)) els.font.value = Math.max(20, Math.min(44, data.font));
       if (["top","middle"].includes(data.position)) els.position.value = data.position;
       if (typeof data.autoplay === "boolean") els.autoplay.checked = data.autoplay;
+      if ([540,720,1080].includes(data.quality)) els.quality.value = String(data.quality);
+      for (const [el,key,min,max] of [
+        [els.panX,"panX",0,100],[els.panY,"panY",0,100],[els.zoom,"zoom",100,180]
+      ]) if (Number.isFinite(data[key])) el.value = Math.max(min,Math.min(max,data[key]));
     } catch (_) { /* Storage unavailable in private browsing. */ }
   }
   function remember() {
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify({version:1,
         script:els.script.value.slice(0,15000), speed:+els.speed.value, font:+els.font.value,
-        position:els.position.value, autoplay:els.autoplay.checked}));
+        position:els.position.value, autoplay:els.autoplay.checked,
+        quality:+els.quality.value,panX:+els.panX.value,panY:+els.panY.value,
+        zoom:+els.zoom.value}));
     } catch (_) { /* Capture and downloads do not require localStorage. */ }
   }
   function refreshPrompter() {
