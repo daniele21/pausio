@@ -452,6 +452,68 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         self.assertFalse(new_state["approved"])
         self.assertEqual(len(self.workspace.tape.commands),2)
 
+    def test_visual_fx_readonly_suggestions_then_typed_preview_and_export(self):
+        self.import_clip()
+        initial=self.get_state()
+        denied, _, raw=self.post("/api/visual-fx/suggest", {
+            "revision": initial["project_revision"], "preset": "naturale"
+        })
+        self.assertEqual(denied,200,raw)
+        self.assertEqual(json.loads(raw)["candidates"],[])
+        self.assertEqual(self.get_state()["project_revision"], initial["project_revision"])
+        self.assertEqual(self.get_state()["video_fx"], [])
+        self.assertEqual(self.post("/api/visual-fx/suggest", {
+            "revision": -1, "preset": "naturale"
+        })[0],400)
+        self.assertEqual(self.post("/api/visual-fx/suggest", {
+            "revision": 0, "preset": "unknown"
+        })[0],400)
+        self.post("/api/jobs",{"kind":"analyze"})
+        analyzed=self.await_job("analyze")
+        revision=analyzed["project_revision"]
+        status,_,raw=self.post("/api/visual-fx/suggest",{
+            "revision":revision,"preset":"dinamico"
+        })
+        self.assertEqual(status,200,raw)
+        suggestion=json.loads(raw)
+        self.assertEqual(suggestion["base_revision"],revision)
+        self.assertEqual(suggestion["media_sha256"],self.workspace.media_sha256)
+        self.assertEqual(self.get_state()["project_revision"],revision)
+        seg=analyzed["editor_segments"][0]
+        start=seg["start_ms"]
+        if seg["end_ms"]-start < 350:
+            self.skipTest("fixture KEEP segment shorter than 350 ms")
+        effect={"id":"d"*32,"segment_id":seg["id"],"start_ms":start,
+                "end_ms":min(start+1000,seg["end_ms"]),
+                "kind":"punch","start_scale_pct":116,"end_scale_pct":116,
+                "anchor_x_pct":50,"anchor_y_pct":50}
+        status,_,raw=self.post("/api/command",{
+            "revision":revision,"type":"video.transform.add","payload":{"effect":effect}
+        })
+        self.assertEqual(status,200,raw)
+        changed=json.loads(raw)
+        self.assertEqual(changed["video_fx"],[effect])
+        self.assertFalse(changed["approved"])
+        self.assertEqual(self.post("/api/visual-fx/suggest",{
+            "revision":revision,"preset":"naturale"
+        })[0],409)
+        status,_,_=self.post("/api/jobs",{"kind":"preview"})
+        self.assertEqual(status,202)
+        preview=self.await_job("preview")
+        self.assertTrue(preview["preview_ready"])
+        status,_,content=self.request("GET","/api/preview",headers={"Range":"bytes=0-99"})
+        self.assertEqual(status,206)
+        self.assertEqual(len(content),100)
+        status,_,document=self.request("GET","/api/project/export")
+        self.assertEqual(status,200)
+        self.assertIn("video.transform.add",[e["type"] for e in json.loads(document)["commands"]])
+        self.assertEqual(json.loads(document)["schema_version"],3)
+        status,_,raw=self.post("/api/command",{
+            "revision":changed["project_revision"],"type":"history.undo","payload":{}
+        })
+        self.assertEqual(status,200)
+        self.assertEqual(json.loads(raw)["video_fx"],[])
+
     def test_import_analyze_review_approve_export_download(self):
         original = self.import_clip()
         status, headers, bytes_ = self.request("GET", "/api/media", headers={"Range": "bytes=0-99"})
