@@ -86,3 +86,10 @@
 
 **Boundaries:** this is acquisition, not a timeline edit; adjustable script/scroll settings do not alter exported pixels. Local storage contains only script/preferences; completed take blobs are not durable until downloaded. The full editor's command-led import/replay remains unchanged. Native/mobile MP4 transcoding, background recovery, LAN pairing, voice-follow and persistent take library are separate future ADRs. GitHub Pages availability and real Safari/Galaxy verification are deployment gates.
 
+## ADR 015 — Chat-driven, provider-neutral agentic editor (proposed)
+
+**Decision:** Treat ChatGPT and Claude Chat as external, user-operated creative/video-analysis agents reached through their normal chat products, not through inference API keys embedded in Pausio. Pausio's own responsibilities remain technical observation (real frames, timestamped storyboard, transcript, audio QC) and deterministic application of versioned, validated editing instructions. The browser UI, CLI/import and future MCP tools must invoke the exact same command/reducer and FFmpeg renderer. Agent-initiated operations require scoped access, revision/source/asset validation, local-first data handling and human approval before the final export.
+
+**Transport boundary:** local Studio stays on loopback; an MCP connector may use client-supported local integration or a separately authenticated, scoped remote HTTPS gateway. The available tool/file/video capabilities depend on the actual ChatGPT/Claude product/account and must be verified by a proof-of-connectivity prior to implementation. No silent cloud upload or assumed direct access to chat-hosted generated images. Use GitHub Actions only as an optional preapproved remote executor of Pausio's own ASR, not as a general purpose agent shell.
+
+**Consequences and pending decisions:** project schema v3 / atomic batch design, private content-addressed asset manifest, observation endpoints, runner transport, chat compatibility matrix, exact role of user confirmation. See [detailed plan](AGENTIC_EDITING_PLAN.md). This ADR documents intended direction, not shipped behavior.
