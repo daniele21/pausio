@@ -171,6 +171,25 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertIn("video.transform.update",[row["type"] for row in document["commands"]])
         self.assertFalse(self.errors,self.errors)
 
+    def test_custom_fx_profile_is_real_editable_readonly_proposal_ui(self):
+        initial=self.upload_analyze()
+        self.page.locator('[data-workspace-nav="cuts"]').click()
+        self.page.locator("#visual-fx-preset").select_option("personalizzato")
+        self.assertTrue(self.page.locator("#visual-fx-custom").is_visible())
+        self.page.locator("#visual-fx-max-per-min").fill("8")
+        self.page.locator("#visual-fx-punch").fill("121")
+        self.page.locator("#visual-fx-audio-energy").check()
+        revision=self.state()["project_revision"]
+        self.page.locator("#visual-fx-suggest").click()
+        self.wait_condition(lambda:"proposti" in self.page.locator(
+            "#visual-fx-suggest-status").inner_text())
+        self.assertEqual(self.state()["project_revision"],revision)
+        self.assertEqual(self.state()["video_fx"],[])
+        self.page.locator("#visual-fx-max-per-min").fill("88")
+        self.page.locator("#visual-fx-suggest").click()
+        self.assertEqual(self.state()["project_revision"],revision)
+        self.assertFalse(self.errors,self.errors)
+
     def test_custom_audio_fx_import_in_real_browser(self):
         self.upload_analyze()
         self.page.locator('[data-workspace-nav="audio"]').click()
