@@ -86,6 +86,25 @@ individually movable subtitle cues **are not claimed to exist** in v0.1.0.
 - FFmpeg remaps validated source cue intervals through existing KEEP segments.
   A new command does not introduce a second render-time timeline.
 
+## Caption edge trimming, snapping and transcript review
+
+- The subtitle lane now provides separate draggable/focusable start and end
+  handles. A gesture previews in source time and commits only one validated
+  `caption.retime` event on release; a cancelled gesture commits nothing.
+- Keyboard left/right on an edge handle adjusts only that boundary by 100 ms,
+  or 500 ms with Shift. The cue body continues to move both boundaries.
+- Snap is a local UI preference: when enabled, a dragged edge or moving cue
+  aligns within an 8px-equivalent tolerance to a neighbouring cue boundary or
+  KEEP edit boundary. Hold Alt to temporarily bypass snapping during drag.
+  The actual timestamps always stay in integer source milliseconds.
+- Caption duration has a practical 80 ms UI minimum; the existing replay
+  reducer additionally validates order, collisions and media bounds.
+- Transcript review now displays dense, searchable phrases with keyboard
+  navigation, time-aligned selection, and current-playback highlighting.
+  Transcript browsing is read-only; raw ASR remains private to the session.
+- No new editing command is required: `caption.retime` is reused; zoom, snap
+  setting, transcript query and selection remain presentation state.
+
 ## Next milestones
 
 ### P1 — clip-centric timeline and contextual inspector (partly implemented)

@@ -786,6 +786,51 @@ function highlight(index){
   for(const c of document.querySelectorAll(".segment-card"))
     c.classList.toggle("selected",Number(c.dataset.index)===index);
 }
+/* Fast, read-only transcript browsing: the actual ASR stays in the local
+   session. Search, selection and scrolling never create project commands. */
+let transcriptSelectedIndex=-1,transcriptSourceMedia=null;
+function visibleTranscriptRows(){
+  return [...el("transcript-list").querySelectorAll(".transcript-item")];
+}
+function updateTranscriptActive(){
+  if(!project?.transcript)return;
+  const sourceMs=timelineSourceMs();
+  for(const row of visibleTranscriptRows()){
+    const inTime=sourceMs>=Number(row.dataset.startMs)&&sourceMs<Number(row.dataset.endMs);
+    row.classList.toggle("is-current",inTime);
+    row.classList.toggle("is-selected",Number(row.dataset.index)===transcriptSelectedIndex);
+    row.querySelector(".transcript-seek")?.setAttribute("aria-current",inTime?"true":"false");
+  }
+}
+function selectTranscriptRow(index,{play=false}={}){
+  const segment=project?.transcript?.segments?.[index];
+  if(!segment)return;
+  transcriptSelectedIndex=index;
+  // The transcript always describes the ORIGINAL source, including phrases
+  // removed by a cut. A rendered preview cannot seek into discarded speech.
+  if(mode!=="original"){
+    mode="original";
+    update(project);
+  }
+  v.currentTime=segment.start_ms/1000;
+  updateTranscriptActive();
+  const row=el("transcript-list").querySelector('[data-index="'+index+'"]');
+  row?.scrollIntoView({block:"nearest"});
+  if(play)v.play().catch(()=>{});
+}
+function navigateTranscript(offset){
+  const rows=visibleTranscriptRows();
+  if(!rows.length)return;
+  let current=rows.findIndex(row=>Number(row.dataset.index)===transcriptSelectedIndex);
+  const next=current<0?(offset>0?0:rows.length-1):
+    Math.max(0,Math.min(rows.length-1,current+offset));
+  const chosen=Number(rows[next].dataset.index);
+  selectTranscriptRow(chosen);
+  // Selecting from a rendered preview may rebuild the inspector DOM.
+  // Focus the NEW live row, not a stale node from before the mode switch.
+  el("transcript-list").querySelector('[data-index="'+chosen+'"] .transcript-seek')
+    ?.focus({preventScroll:true});
+}
 function drawTranscript(){
   const list=el("transcript-list");list.replaceChildren();
   const tr=project?.transcript;
@@ -795,19 +840,44 @@ function drawTranscript(){
     tr.word_timestamps_available?
     "Allineamento delle parole disponibile. Premi «Aggiungi sottotitoli» per inserirli nel video.":
     "Allineamento delle parole non disponibile: i sottotitoli useranno gli intervalli delle frasi intere.";
+  el("transcript-review").hidden=!tr;
+  if(project?.media_id!==transcriptSourceMedia){
+    transcriptSourceMedia=project?.media_id;
+    transcriptSelectedIndex=-1;
+    el("transcript-search").value="";
+  }
   if(!tr)return;
-  for(const s of tr.segments||[]){
-    const item=document.createElement("article");item.className="transcript-item";
-    const time=document.createElement("span");time.textContent=msFormat(s.start_ms,true)+" — "+msFormat(s.end_ms,true);
-    const content=document.createElement("p");content.textContent=s.text||"(senza testo)";
-    const seek=document.createElement("button");seek.type="button";seek.textContent="▶ Ascolta";
-    seek.addEventListener("click",()=>{mode="original";update(project);v.currentTime=s.start_ms/1000;v.play().catch(()=>{});});
-    item.append(time,content,seek);list.append(item);
+  const query=el("transcript-search").value.trim().toLocaleLowerCase("it");
+  const segments=tr.segments||[];
+  const matches=segments.map((seg,index)=>({seg,index})).filter(({seg})=>
+    !query||(seg.text||"").toLocaleLowerCase("it").includes(query));
+  el("transcript-match-count").textContent=matches.length+" di "+segments.length+" frasi";
+  el("transcript-previous").disabled=matches.length===0;
+  el("transcript-next").disabled=matches.length===0;
+  for(const {seg,index} of matches){
+    const row=document.createElement("article");row.className="transcript-item";
+    row.dataset.index=String(index);
+    row.dataset.startMs=String(seg.start_ms);
+    row.dataset.endMs=String(seg.end_ms);
+    const seek=document.createElement("button");
+    seek.className="transcript-seek";seek.type="button";
+    seek.setAttribute("aria-label","Vai alla frase "+(index+1)+": "+seg.text);
+    const time=document.createElement("span");time.className="transcript-time";
+    time.textContent=msFormat(seg.start_ms,true);
+    const content=document.createElement("span");content.className="transcript-line";
+    content.textContent=seg.text||"(senza testo)";
+    seek.append(time,content);
+    seek.addEventListener("click",()=>selectTranscriptRow(index));
+    row.append(seek);list.append(row);
   }
-  if(!(tr.segments||[]).length){
-    const text=document.createElement("p");text.className="transcript-note";
-    text.textContent=tr.text||"Non è stato rilevato parlato.";list.append(text);
+  if(!matches.length){
+    const note=document.createElement("p");note.className="transcript-note";
+    note.textContent=segments.length?
+      "Nessuna frase corrisponde alla ricerca.":
+      tr.text||"Non è stato rilevato parlato.";
+    list.append(note);
   }
+  updateTranscriptActive();
 }
 
 function captionMoveLimits(cue){
@@ -1178,6 +1248,36 @@ function drawFx(){
 /* Caption cue timestamps are on the original source ruler. Excluded spans
    remain visible here but will not appear in the rendered output timeline.
    Clicking a cue is a selection/seek only; correction still uses caption.correct. */
+/* Cue interaction lives on SOURCE milliseconds. All drags commit only once
+   on pointerup, via caption.retime; position previews are never project edits. */
+let captionSnapEnabled=true;
+function captionSnapTargets(cue){
+  const others=(project?.captions||[]).filter(c=>c.id!==cue.id);
+  return [
+    ...others.flatMap(c=>[c.start_ms,c.end_ms]),
+    ...segments().flatMap(seg=>[seg.start_ms,seg.end_ms])
+  ];
+}
+function snapCueTime(value,cue,duration,trackWidth,event){
+  if(!captionSnapEnabled||event?.altKey)return {value,snapped:false};
+  const threshold=Math.max(25,Math.min(180,Math.round(8/trackWidth*duration)));
+  const matches=captionSnapTargets(cue)
+    .map(candidate=>({distance:Math.abs(candidate-value),candidate}))
+    .filter(match=>match.distance<=threshold)
+    .sort((a,b)=>a.distance-b.distance);
+  return matches.length?{value:matches[0].candidate,snapped:true}:
+    {value,snapped:false};
+}
+function captionEditBounds(cue,kind){
+  const limits=captionMoveLimits(cue);
+  if(!limits||!project?.media)return null;
+  if(kind==="move")return limits;
+  if(kind==="start")return {min:limits.min,max:cue.end_ms-80};
+  return {min:cue.start_ms+80,max:project.captions.findIndex(c=>c.id===cue.id)<
+    project.captions.length-1?
+    project.captions[project.captions.findIndex(c=>c.id===cue.id)+1].start_ms:
+    project.media.duration_ms};
+}
 function drawCaptionTimeline(){
   const track=el("timeline-caption-track"),lane=el("caption-cue-lane");
   lane.replaceChildren();
@@ -1194,68 +1294,124 @@ function drawCaptionTimeline(){
     mark.setAttribute("aria-pressed","false");
     mark.setAttribute("aria-label","Sottotitolo "+(index+1)+": "+
       cue.text+", da "+msFormat(cue.start_ms,true)+" a "+msFormat(cue.end_ms,true));
-    mark.title=cue.text+" · "+msFormat(cue.start_ms,true)+
-      " – "+msFormat(cue.end_ms,true);
-    mark.style.left=(cue.start_ms/duration*100).toFixed(4)+"%";
-    mark.style.width=((cue.end_ms-cue.start_ms)/duration*100).toFixed(4)+"%";
+    mark.title=cue.text+" · Trascina per spostare; frecce ±0,1 s (⇧ ±0,5 s)";
     mark.textContent=cue.text;
-    let skipNextClick=false;
     mark.disabled=working();
-    mark.title+=" · Trascina per spostare · ← → ±0,1 s · ⇧ ±0,5 s";
-    mark.addEventListener("click",event=>{
-      event.stopPropagation();
-      if(skipNextClick)return;
-      selectEditorItem("caption",cue.id,{seek:true});
-    });
-    mark.addEventListener("keydown",event=>{
-      if(!["ArrowLeft","ArrowRight"].includes(event.key)||working())return;
-      event.preventDefault();event.stopPropagation();
-      const limits=captionMoveLimits(cue);
-      if(!limits)return;
-      const step=event.shiftKey?500:100;
-      const amount=(event.key==="ArrowRight"?step:-step);
-      const start=Math.max(limits.min,Math.min(limits.max,cue.start_ms+amount));
-      run(()=>submitCaptionTiming(cue,start,start+cue.end_ms-cue.start_ms));
-    });
-    mark.addEventListener("pointerdown",event=>{
-      if(event.button!==0||working())return;
-      const limits=captionMoveLimits(cue);
-      if(!limits)return;
-      const startX=event.clientX;
-      const width=Math.max(1,el("timeline-track").getBoundingClientRect().width);
-      let dragged=false,pending=cue.start_ms;
-      mark.setPointerCapture(event.pointerId);
-      const move=ev=>{
-        const pixels=ev.clientX-startX;
-        if(Math.abs(pixels)<5&&!dragged)return;
-        dragged=true;
-        const delta=Math.round(pixels/width*duration/10)*10;
-        pending=Math.max(limits.min,Math.min(limits.max,cue.start_ms+delta));
-        mark.style.left=(pending/duration*100)+"%";
-      };
-      const clean=ev=>{
-        mark.removeEventListener("pointermove",move);
-        mark.removeEventListener("pointerup",finish);
-        mark.removeEventListener("pointercancel",cancel);
-        if(mark.hasPointerCapture(ev.pointerId))mark.releasePointerCapture(ev.pointerId);
-      };
-      const finish=ev=>{
-        clean(ev);
-        if(dragged){
-          skipNextClick=true;
-          // One pointer gesture becomes ONE portable command.
-          run(()=>submitCaptionTiming(cue,pending,pending+cue.end_ms-cue.start_ms));
-          window.setTimeout(()=>{skipNextClick=false;},0);
-        }
-      };
-      const cancel=ev=>{
-        clean(ev);mark.style.left=(cue.start_ms/duration*100).toFixed(4)+"%";
-      };
-      mark.addEventListener("pointermove",move);
-      mark.addEventListener("pointerup",finish);
-      mark.addEventListener("pointercancel",cancel);
-    });
+    let skipNextClick=false;
+    const handles={};
+    function paint(start,end,snapped=false){
+      mark.style.left=(start/duration*100).toFixed(4)+"%";
+      mark.style.width=((end-start)/duration*100).toFixed(4)+"%";
+      mark.classList.toggle("snapped",snapped);
+      if(handles.start)handles.start.style.left=(start/duration*100).toFixed(4)+"%";
+      if(handles.end)handles.end.style.left=(end/duration*100).toFixed(4)+"%";
+    }
+    function submit(start,end){
+      paint(cue.start_ms,cue.end_ms);
+      if(start===cue.start_ms&&end===cue.end_ms)return;
+      run(()=>submitCaptionTiming(cue,start,end));
+    }
+    function bindCueDrag(control,kind){
+      control.addEventListener("click",event=>{
+        event.stopPropagation();
+        if(kind==="move"&&!skipNextClick)
+          selectEditorItem("caption",cue.id,{seek:true});
+      });
+      control.addEventListener("keydown",event=>{
+        if(!["ArrowLeft","ArrowRight"].includes(event.key)||working())return;
+        event.preventDefault();event.stopPropagation();
+        const bounds=captionEditBounds(cue,kind);
+        if(!bounds||bounds.max<bounds.min)return;
+        const delta=(event.key==="ArrowRight"?1:-1)*(event.shiftKey?500:100);
+        const original=kind==="end"?cue.end_ms:cue.start_ms;
+        const value=Math.max(bounds.min,Math.min(bounds.max,original+delta));
+        const start=kind==="start"||kind==="move"?value:cue.start_ms;
+        const end=kind==="end"?value:kind==="move"?
+          value+cue.end_ms-cue.start_ms:cue.end_ms;
+        submit(start,end);
+      });
+      control.addEventListener("pointerdown",event=>{
+        if(event.button!==0||working())return;
+        const bounds=captionEditBounds(cue,kind);
+        if(!bounds||bounds.max<bounds.min)return;
+        event.preventDefault();event.stopPropagation();
+        const startX=event.clientX,original=kind==="end"?cue.end_ms:cue.start_ms;
+        const rect=el("timeline-track").getBoundingClientRect();
+        const width=Math.max(1,rect.width);
+        let moved=false,pendingStart=cue.start_ms,pendingEnd=cue.end_ms;
+        control.setPointerCapture(event.pointerId);
+        control.classList.add("dragging");
+        const move=ev=>{
+          if(Math.abs(ev.clientX-startX)<4&&!moved)return;
+          moved=true;
+          const delta=Math.round((ev.clientX-startX)/width*duration/10)*10;
+          const raw=original+delta;
+          const threshold=Math.max(25,Math.min(180,8/width*duration));
+          let value=Math.max(bounds.min,Math.min(bounds.max,raw));
+          let snapped=false;
+          if(kind==="move"){
+            // Snap whichever moving edge is closest, preserving cue duration.
+            const length=cue.end_ms-cue.start_ms;
+            const candidates=[
+              snapCueTime(value,cue,duration,width,ev),
+              snapCueTime(value+length,cue,duration,width,ev)
+            ].map((result,i)=>({...result,start:result.value-(i?length:0)}))
+              .filter(result=>result.snapped&&result.start>=bounds.min&&result.start<=bounds.max);
+            if(candidates.length){
+              candidates.sort((a,b)=>Math.abs(a.start-value)-Math.abs(b.start-value));
+              value=candidates[0].start;snapped=true;
+            }
+            pendingStart=value;pendingEnd=value+length;
+          }else{
+            const result=snapCueTime(value,cue,duration,width,ev);
+            if(result.snapped&&result.value>=bounds.min&&result.value<=bounds.max){
+              value=result.value;snapped=true;
+            }
+            if(kind==="start")pendingStart=value;
+            else pendingEnd=value;
+          }
+          paint(pendingStart,pendingEnd,snapped);
+          control.title=snapped?"Agganciato a un confine":
+            "Sorgente "+msFormat(kind==="end"?pendingEnd:pendingStart,true);
+        };
+        const cleanup=ev=>{
+          control.removeEventListener("pointermove",move);
+          control.removeEventListener("pointerup",finish);
+          control.removeEventListener("pointercancel",cancel);
+          if(control.hasPointerCapture(ev.pointerId))control.releasePointerCapture(ev.pointerId);
+          control.classList.remove("dragging");
+        };
+        const finish=ev=>{
+          cleanup(ev);
+          if(moved){
+            skipNextClick=true;
+            submit(pendingStart,pendingEnd);
+            window.setTimeout(()=>{skipNextClick=false;},0);
+          }
+        };
+        const cancel=ev=>{cleanup(ev);paint(cue.start_ms,cue.end_ms);};
+        control.addEventListener("pointermove",move);
+        control.addEventListener("pointerup",finish);
+        control.addEventListener("pointercancel",cancel);
+      });
+    }
+    bindCueDrag(mark,"move");
     lane.append(mark);
+    for(const kind of ["start","end"]){
+      const handle=document.createElement("button");
+      handle.type="button";handle.className="caption-edge-handle "+kind;
+      handle.dataset.captionId=cue.id;
+      handle.disabled=working();
+      handle.setAttribute("aria-label",
+        (kind==="start"?"Accorcia o allunga l’inizio":"Accorcia o allunga la fine")+
+        " del sottotitolo "+(index+1));
+      handle.title=(kind==="start"?"Inizio":"Fine")+
+        " · trascina o usa ← → ±100 ms, ⇧ ±500 ms";
+      bindCueDrag(handle,kind);
+      handles[kind]=handle;
+      lane.append(handle);
+    }
+    paint(cue.start_ms,cue.end_ms);
   }
 }
 
@@ -1405,6 +1561,7 @@ function transport(){
   el("play-pause").textContent=v.paused?"▶":"Ⅱ";
   el("play-pause").setAttribute("aria-label",v.paused?"Riproduci":"Pausa");
   el("video-workspace").classList.toggle("playing",!v.paused);
+  updateTranscriptActive();
 }
 
 /* Presentation state for desktop workspace. Video edits still flow only through
@@ -1461,6 +1618,20 @@ function initializeDesktopWorkspace(){
     renderWorkspaceLibraries();syncEditorSelection();
   });
   el("workspace-caption-transcribe").addEventListener("click",()=>setWorkspace("transcript"));
+  el("transcript-search").addEventListener("input",drawTranscript);
+  el("transcript-search").addEventListener("keydown",event=>{
+    if(event.key==="ArrowDown"||event.key==="ArrowUp"){
+      event.preventDefault();navigateTranscript(event.key==="ArrowDown"?1:-1);
+    }
+  });
+  el("transcript-previous").addEventListener("click",()=>navigateTranscript(-1));
+  el("transcript-next").addEventListener("click",()=>navigateTranscript(1));
+  try{captionSnapEnabled=localStorage.getItem("pausio-caption-snap")!=="off";}catch(_error){}
+  el("timeline-snap").checked=captionSnapEnabled;
+  el("timeline-snap").addEventListener("change",event=>{
+    captionSnapEnabled=event.target.checked;
+    try{localStorage.setItem("pausio-caption-snap",captionSnapEnabled?"on":"off");}catch(_error){}
+  });
   el("selection-clear").addEventListener("click",()=>{editorSelection=null;syncEditorSelection();});
   el("selection-goto").addEventListener("click",focusEditorSelection);
   el("desktop-export-action").addEventListener("click",()=>{

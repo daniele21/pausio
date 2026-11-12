@@ -57,6 +57,20 @@ alla posizione corrente. Il righello e gli intervalli KEEP/FX/cue
 usano **tempi del sorgente**: il contatore della preview può invece
 mostrare il tempo del montaggio, per cui le due misure sono distinte.
 
+**Maniglie delle frasi:** sulla traccia sottotitoli trascina la maniglia
+sinistra per correggere l'inizio e quella destra per correggere la fine.
+Usa le frecce dopo aver messo a fuoco una maniglia per ±100 ms
+(Shift ±500 ms). Il checkbox «Snap» aggancia i confini a tagli e
+sottotitoli vicini quando sono entro pochi pixel; Alt durante il drag
+disattiva temporaneamente l'aggancio. Il valore finale è comunque
+validato e viene salvato come un singolo comando strutturato.
+
+**Trascrizione:** cerca una parola nel pannello «Trascrizione» e usa
+le frecce ↑/↓ dei controlli per passare tra le frasi corrispondenti.
+Selezionare una frase porta il video al relativo tempo del sorgente,
+senza modificare il montaggio e senza salvare il testo grezzo nel
+progetto portabile.
+
 Per correggere la sincronizzazione di un singolo sottotitolo usa i
 campi «Inizio (secondi)» e «Fine (secondi)», oppure trascina la frase
 sulla traccia. Frecce ←/→ sulla cue = ±100 ms, Shift = ±500 ms;
