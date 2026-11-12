@@ -18,7 +18,9 @@ from typing import Any, TextIO
 
 PROTOCOL_VERSION = "2025-03-26"
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
-EDIT_TYPES = frozenset({"segment.update", "caption.correct", "caption.configure"})
+EDIT_TYPES = frozenset({"segment.update", "caption.correct", "caption.configure",
+                        "video.transform.add", "video.transform.update",
+                        "video.transform.remove"})
 
 TOOLS: list[dict[str, Any]] = [
     {
@@ -40,8 +42,22 @@ TOOLS: list[dict[str, Any]] = [
         "annotations": {"readOnlyHint": True},
     },
     {
+        "name": "pausio_suggest_visual_fx",
+        "description": "Generate non-mutating, deterministic zoom proposals from real KEEP cut boundaries and available timestamped ASR phrases; never applies, renders or approves changes. Read-only technical candidates, not creative AI analysis.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "revision": {"type": "integer", "minimum": 0},
+                "preset": {"type": "string", "enum": ["naturale","educativo","dinamico","personalizzato"]},
+            },
+            "required": ["revision","preset"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": True},
+    },
+    {
         "name": "pausio_apply_command",
-        "description": "Apply ONE existing, reviewed/typed Pausio edit to the active project at the exact expected revision. MVP allows caption.correct, caption.configure and segment.update only. Invalidates approval/preview. Does NOT authorize final export.",
+        "description": "Apply ONE existing, reviewed/typed Pausio edit to the active project at the exact expected revision. MVP allows captions, segment.update and validated video.transform.add/update/remove. All writes use the same Studio reducer; no final export. Invalidates approval/preview. Does NOT authorize final export.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -83,7 +99,7 @@ class StudioClient:
 
     def request(self, method: str, path: str, payload: dict | None = None) -> dict:
         if method not in {"GET", "POST"} or path not in {
-            "/api/state", "/api/command", "/api/jobs"
+            "/api/state", "/api/command", "/api/jobs", "/api/visual-fx/suggest"
         }:
             raise MCPToolError("Unapproved Studio endpoint")
         if method == "GET" and payload is not None:
@@ -140,6 +156,14 @@ def call_tool(name: str, arguments: dict, studio: StudioClient) -> dict:
         state = studio.request("GET", "/api/state")
         return {"job": state.get("job"), "preview_ready": state.get("preview_ready"),
                 "project_revision": state.get("project_revision")}
+    if name == "pausio_suggest_visual_fx":
+        if set(arguments) != {"revision", "preset"}:
+            raise MCPToolError("Expected revision and visual FX preset")
+        if (type(arguments["revision"]) is not int or arguments["revision"] < 0 or
+            type(arguments["preset"]) is not str or
+            arguments["preset"] not in ("naturale","educativo","dinamico","personalizzato")):
+            raise MCPToolError("Invalid visual FX suggestion settings")
+        return studio.request("POST", "/api/visual-fx/suggest", arguments)
     if name == "pausio_apply_command":
         if set(arguments) != {"revision", "type", "payload"}:
             raise MCPToolError("Expected exactly revision, type and payload")

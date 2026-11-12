@@ -34,7 +34,8 @@ This is the **first proof of tool control**, not a shipped autonomous editor. It
 - `pausio_get_transcript`: request transcript only when needed.
 - `pausio_get_job_status`: read current async job and preview status.
 - `pausio_start_pause_analysis`: start the existing conservative FFmpeg pause proposal, not semantic video understanding.
-- `pausio_apply_command`: only `segment.update`, `caption.correct`, `caption.configure`; must include the current `project_revision` and exact payload.
+- `pausio_apply_command`: allowlisted `segment.update`, `caption.correct`, `caption.configure`, `video.transform.add`, `video.transform.update`, `video.transform.remove`; must include current `project_revision` and an exact typed payload. The Video FX operation is checked by the shared v3 project reducer, and cannot access arbitrary FFmpeg filters.
+- `pausio_suggest_visual_fx`: requires exact `{revision,preset}`; read-only, source-bound technical zoom candidates, no auto-apply. Use `pausio_apply_command` explicitly for an approved candidate.
 - `pausio_render_preview`: start FFmpeg preview, then poll the status tool.
 
 No tool approves the final timeline, overwrites a source, posts to the internet, imports arbitrary files, executes a command, or renders the **final** export. Existing editor still requires human approval and final export. Tool writes are tracked by the same project command tape as UI edits.
