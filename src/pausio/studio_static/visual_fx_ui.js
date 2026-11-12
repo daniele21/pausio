@@ -24,7 +24,7 @@
     return b;
   };
   function title(kind){
-    return kind==="punch"?"Punch-in":"Zoom progressivo";
+    return ({punch:"Punch-in",slow_push:"Zoom progressivo",ease_push:"Zoom morbido",ratchet:"Ratchet · 3 scatti"})[kind]||"Video FX";
   }
   function ignoredKey(preset){
     return "pausio.fx.ignored.v1."+String(current().media_id||"")+"."+preset;
@@ -80,7 +80,7 @@
     const y=field("Centro Y (%)",effect.anchor_y_pct,{min:0,max:100});
     const kind=document.createElement("label");kind.textContent="Movimento";
     const select=document.createElement("select");
-    for(const value of ["punch","slow_push"]){
+    for(const value of ["punch","slow_push","ease_push","ratchet"]){
       const option=document.createElement("option");
       option.value=value;option.textContent=title(value);
       select.append(option);
