@@ -1,7 +1,8 @@
 """Pausio Studio: local-only HTTP workspace for reviewing real edits.
 
-No frontend build, cloud dependency, global data persistence, or shell commands.
-Every imported video remains in this server's temporary workspace until exit.
+No frontend build, cloud dependency, or shell commands.
+Imported videos and local ASR transcripts can be persisted to a private Studio
+workspace for crash recovery; never expose this HTTP listener beyond loopback.
 """
 
 from __future__ import annotations
