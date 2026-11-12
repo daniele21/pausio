@@ -9,7 +9,7 @@ Pausio is local-first. The CLI has no telemetry, API keys or default remote mode
 - Persistent media is kept in the user's private workspace, file permissions 0600 and folder permissions 0700 on POSIX. Project checkpoints are written atomically and one previous checkpoint is retained for rollback. Do not write private media to source control or app logs.
 - A per-workspace OS file lock prevents two Studio instances from modifying the same active autosave concurrently.
 - Session recovery verifies media SHA-256 and edit-plan schema/command history before loading. On failure, leave files intact and expose an actionable recovery error.
-- The portable `.pausio.json` project **never embeds video or transcript**; importing it requires the identical source media hash. ClosedRoom transcripts currently live only in the process memory in Studio and are not recovered after restart.
+- The portable `.pausio.json` project **never embeds the source video or raw ASR transcript**; importing it requires the identical source media hash. The Pausio-owned local ASR transcript is saved in the private local Studio checkpoint for restart recovery; it is not part of the portable project export. Treat that private transcript as sensitive data with the same protections as the video.
 - The user's explicit **Elimina dati locali** action removes cached media and checkpoints. Avoid silent automatic deletion of damaged backups; warn instead.
 
 ## Secure engineering
