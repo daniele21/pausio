@@ -1362,3 +1362,74 @@ a { color: inherit; text-decoration: none; }
   min-height: 32px;
   margin-left: 7px;
 }
+
+/* INSPECTOR ABOVE-THE-FOLD UX — real editable controls ahead of repeated summaries. */
+@media (min-width: 1001px) {
+  .app-shell[data-workspace="cuts"] .inspector-tabs,
+  .app-shell[data-workspace="captions"] .inspector-tabs {
+    display: none;
+  }
+  .app-shell[data-workspace="cuts"] .inspector:has(.selection-inspector:not([hidden])) .summary-strip,
+  .app-shell[data-workspace="cuts"] .inspector:has(.selection-inspector:not([hidden])) .inspector-intro {
+    display: none;
+  }
+  .app-shell[data-workspace="cuts"] .inspector:has(.selection-inspector:not([hidden])) .segment-card:not(.is-selected) {
+    display: none;
+  }
+  .app-shell[data-workspace="cuts"] .inspector:has(.selection-inspector:not([hidden])) .segment-list {
+    margin-top: 8px;
+  }
+  .app-shell[data-workspace="captions"] .inspector .transcript-source,
+  .app-shell[data-workspace="captions"] .inspector .transcript-note,
+  .app-shell[data-workspace="captions"] .inspector .transcript-list,
+  .app-shell[data-workspace="captions"] .inspector .caption-help {
+    display: none;
+  }
+  .app-shell[data-workspace="captions"] .inspector .caption-tools {
+    display: flex;
+    flex-direction: column;
+    padding-top: 7px;
+    border-top: 0;
+    gap: 6px;
+  }
+  .app-shell[data-workspace="captions"] .inspector .caption-tools > .section-heading { order: -3; margin: 0; }
+  .app-shell[data-workspace="captions"] .inspector #caption-active { order: -2; }
+  .app-shell[data-workspace="captions"] .inspector #caption-active:not([hidden]) .caption-summary {
+    margin: 3px 0 7px;
+  }
+  .app-shell[data-workspace="captions"] .inspector:has(.selection-inspector:not([hidden])) .caption-edit-card:not(.is-selected) {
+    display: none;
+  }
+  .app-shell[data-workspace="captions"] .inspector .caption-edit-list {
+    max-height: none;
+    overflow: visible;
+  }
+  .app-shell[data-workspace="audio"] .inspector .fx-header p,
+  .app-shell[data-workspace="audio"] .inspector #fx-hint {
+    display: none;
+  }
+  .app-shell[data-workspace="audio"] .inspector .fx-panel {
+    padding-top: 8px;
+  }
+  .app-shell[data-workspace="audio"] .inspector .fx-header h2 {
+    font-size: 13px;
+  }
+  .app-shell[data-workspace="audio"] .inspector .fx-item {
+    padding: 8px;
+    gap: 7px;
+  }
+  .app-shell[data-workspace="cuts"] .selection-inspector,
+  .app-shell[data-workspace="captions"] .selection-inspector {
+    padding: 8px 10px;
+    margin-top: 8px;
+    margin-bottom: 8px;
+  }
+  .app-shell[data-workspace="cuts"] .selection-inspector p,
+  .app-shell[data-workspace="captions"] .selection-inspector p {
+    margin-bottom: 6px;
+  }
+  .app-shell[data-workspace="cuts"] .selection-inspector .selection-goto,
+  .app-shell[data-workspace="captions"] .selection-inspector .selection-goto {
+    min-height: 30px;
+  }
+}
