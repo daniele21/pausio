@@ -453,7 +453,22 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         self.assertEqual(len(self.workspace.tape.commands),2)
 
     def test_dip_transition_command_preview_export_and_undo(self):
-        self.import_clip()
+        # The standard Studio fixture is only 1.5s; dips require both sides
+        # >=1.2s. Use a separate 4s synthetic clip for this E2E regression.
+        with tempfile.TemporaryDirectory() as directory:
+            source=Path(directory)/"dip-fixture.mp4"
+            subprocess.run([
+                "ffmpeg","-hide_banner","-loglevel","error","-y",
+                "-f","lavfi","-i","testsrc2=size=180x320:rate=30:duration=4",
+                "-f","lavfi","-i","sine=frequency=440:duration=4",
+                "-shortest","-c:v","libx264","-pix_fmt","yuv420p",
+                "-c:a","aac",str(source)
+            ],check=True,timeout=40)
+            status,_,raw=self.request("POST","/api/import",source.read_bytes(),{
+                "Content-Type":"application/octet-stream",
+                "X-Pausio-Client":"studio","X-Filename":"dip-fixture.mp4",
+                "Origin":self.base})
+            self.assertEqual(status,200,raw)
         status,_,raw=self.post("/api/plan",{"segments":[
             {"start_ms":0,"end_ms":1500},{"start_ms":2200,"end_ms":3900}
         ]})
