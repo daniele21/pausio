@@ -1,4 +1,4 @@
-"""Static routing and privacy contract for the standalone mobile recorder."""
+"""Static routing and privacy contract for shared desktop/mobile Capture."""
 from __future__ import annotations
 
 import threading
@@ -31,7 +31,7 @@ class MobileCaptureServerTests(unittest.TestCase):
             ("/capture", 'id="download-video"'),
             ("/capture.html", 'id="script-input"'),
             ("/capture.css", ".prompter-scroll"),
-            ("/capture.js", "new MediaRecorder(stream"),
+            ("/capture.js", "new MediaRecorder(input"),
         ]:
             with self.subTest(path=path):
                 headers, content = self.fetch(path)
@@ -41,13 +41,20 @@ class MobileCaptureServerTests(unittest.TestCase):
                 self.assertIn("frame-ancestors 'none'", headers["Content-Security-Policy"])
         self.assertIn("blob:", self.fetch("/capture")[0]["Content-Security-Policy"])
 
-    def test_capture_is_not_uploaded_or_mutating_studio(self):
+    def test_capture_is_local_only_and_studio_import_requires_explicit_action(self):
         _, script = self.fetch("/capture.js")
-        self.assertNotIn('fetch(', script)
-        self.assertNotIn("XMLHttpRequest", script)
-        self.assertIn("URL.createObjectURL(output)", script)
-        self.assertIn("recorder.start(1000)", script)
-        self.assertIn("els.download.download = outputName", script)
-        headers, index = self.fetch("/")
-        self.assertIn('href="/capture"', index)
-        self.assertIn("no-store", headers["Cache-Control"])
+        self.assertNotIn("XMLHttpRequest",script)
+        self.assertIn("URL.createObjectURL(output)",script)
+        self.assertIn("recorder.start(1000)",script)
+        self.assertIn("els.download.download = outputName",script)
+        self.assertIn('const isLocalStudio = location.hostname === "127.0.0.1"',script)
+        self.assertIn('if(!isLocalStudio||!output||mode!=="finished")return;',script)
+        self.assertIn('els.openStudio.addEventListener("click",importIntoStudio)',script)
+        self.assertIn('fetch("/api/import"',script)
+        self.assertIn('"X-Pausio-Client":"studio"',script)
+        self.assertIn('body:output',script)
+        self.assertNotIn("fetch('https:",script)
+        self.assertNotIn('fetch("https:',script)
+        headers,index=self.fetch("/")
+        self.assertIn('href="/capture"',index)
+        self.assertIn("no-store",headers["Cache-Control"])
