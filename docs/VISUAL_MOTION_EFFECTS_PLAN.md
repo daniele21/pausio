@@ -10,6 +10,16 @@ Let a creator make engaging talking-head shorts without moving to another editor
 
 User-provided 11.23 s screen recording (552x672, H.264, **no audio track**) of a social talking-head video on 2026-11-12. Visual observations: alternating wider and tighter crop, prominent close-up around 5.5 s and 9 s, word-level animated captions and occasional hard edits. Because the screen recording has no audio, **cannot** validate beat/accent-based timing from this reference. Do not commit the original clip or frame extracts to Git.
 
+## Automatic editing: versioned profiles and open-source implementation references
+
+The companion [open-source research and automation design](VISUAL_FX_AUTOMATION_RESEARCH.md) checks actual implementation details from auto-editor, add-zooms, talking-head-jumpcut-zoom, ai-video-reframing, autobroll, PySceneDetect and clipcast. Use this before designing the automatic suggestion engine, rather than assuming any repository can be copied directly.
+
+The four first-class UI choices are **Naturale** (default; max 3 FX/min, min gap 8s, peak 1.16x, hard cuts), **Educativo** (max 6/min, min gap 4.5s, peak 1.22x, contextual dissolve), **Dinamico** (opt-in; max 10/min, min gap 2.8s, peak 1.28x, rare contextual dissolve/dip) and **Personalizzato** (editable copy of Educativo with hard safety bounds). All are maximum budgets, never obligations to fill the timeline.
+
+The future **Suggerisci effetti** action produces a proposal, not an edit; `preview_auto` may render a temporary before/after without authorizing export, and `off` disables suggestion generation. Every accepted effect becomes a specific typed event with exact keyframes and source ID. The config contract is [configs/visual_fx_presets_v1.json](../configs/visual_fx_presets_v1.json), bounded by [JSON Schema v1](../schemas/pausio-visual-fx-presets-v1.schema.json) and [stdlib CI validator](../scripts/validate_visual_fx_presets.py). **These presets are design data; no automatic generator or runtime controls are implemented yet.**
+
+The detection pipeline reuses Pausio's KEEP plan, actual ASR timestamps and optional audio energy, later face/scene observations. It must renormalize weight only over actually available signals (never invent prosody when audio is absent); apply deterministic sorting, cap frequency, enforce spacing/cut guards and protect manual edits/rejections when regenerating suggestions.
+
 ## Effects vocabulary: do not conflate
 
 | Name | Render behavior | When useful | First phase |
