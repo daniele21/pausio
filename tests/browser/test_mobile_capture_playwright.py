@@ -95,6 +95,8 @@ class MobileCapturePlaywrightTests(unittest.TestCase):
         self.assertTrue(page.locator("#camera-placeholder").is_hidden())
         self.assertTrue(page.locator("#rehearsal-hint").is_visible())
         self.assertIn("Nessun video registrato",page.locator("#rehearsal-hint").inner_text())
+        ARTIFACTS.mkdir(parents=True,exist_ok=True)
+        page.screenshot(path=str(ARTIFACTS/"capture-rehearsal-mobile-320.png"),full_page=True)
         page.wait_for_timeout(900)
         self.assertGreater(page.locator("#prompter-scroll").evaluate("(el)=>el.scrollTop"),0)
         self.assertTrue(page.locator("#download-panel").is_hidden())
