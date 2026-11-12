@@ -825,8 +825,12 @@ function navigateTranscript(offset){
   let current=rows.findIndex(row=>Number(row.dataset.index)===transcriptSelectedIndex);
   const next=current<0?(offset>0?0:rows.length-1):
     Math.max(0,Math.min(rows.length-1,current+offset));
-  selectTranscriptRow(Number(rows[next].dataset.index));
-  rows[next].querySelector(".transcript-seek")?.focus({preventScroll:true});
+  const chosen=Number(rows[next].dataset.index);
+  selectTranscriptRow(chosen);
+  // Selecting from a rendered preview may rebuild the inspector DOM.
+  // Focus the NEW live row, not a stale node from before the mode switch.
+  el("transcript-list").querySelector('[data-index="'+chosen+'"] .transcript-seek')
+    ?.focus({preventScroll:true});
 }
 function drawTranscript(){
   const list=el("transcript-list");list.replaceChildren();
