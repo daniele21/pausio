@@ -368,6 +368,38 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertEqual(self.state()["project_revision"],revision)
         self.assertFalse(self.errors,self.errors)
 
+
+    def test_adaptive_source_ruler_and_zoom_anchor(self):
+        self.upload_analyze()
+        self.assertGreater(self.page.locator(".timeline-time-tick").count(),4)
+        self.page.evaluate("document.getElementById('preview-video').currentTime=1.75")
+        self.wait_condition(lambda: not self.page.evaluate(
+            "document.getElementById('preview-video').seeking"))
+        self.page.locator("#timeline-zoom").select_option("2")
+        self.page.locator("#timeline-center-playhead").click()
+        def cursor_x():
+            return self.page.evaluate("""() => {
+              const track=document.getElementById('timeline-track');
+              const surface=document.getElementById('timeline-surface');
+              const bounds=track.getBoundingClientRect(),viewport=surface.getBoundingClientRect();
+              const current=timelineSourceMs();
+              return bounds.left+current/project.media.duration_ms*bounds.width-viewport.left;
+            }""")
+        before=cursor_x()
+        before_count=self.page.locator(".timeline-time-tick").count()
+        self.page.locator("#timeline-zoom-in").click()
+        after=cursor_x()
+        self.assertEqual(self.page.locator("#timeline-zoom").input_value(),"4")
+        self.assertAlmostEqual(before,after,delta=5,
+                               msg="Zoom should preserve the source position under the playhead")
+        self.assertGreater(self.page.locator(".timeline-time-tick").count(),before_count)
+        self.assertIn("Sorgente 00:01",self.page.locator("#timeline-source-clock").inner_text())
+        self.page.locator("#timeline-zoom-out").click()
+        self.assertEqual(self.page.locator("#timeline-zoom").input_value(),"2")
+        self.assertFalse(self.page.locator("#timeline-center-playhead").is_disabled())
+        self.shot("source-ruler-anchored-zoom-1440")
+        self.assertFalse(self.errors,self.errors)
+
     def test_desktop_navigation_and_resizable_timeline(self):
         self.assertTrue(self.page.locator(".studio-navigation").is_visible())
         self.assertTrue(self.page.locator("#analyze-action").is_visible())
