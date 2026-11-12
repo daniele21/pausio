@@ -133,7 +133,7 @@ def propose_visual_fx(
     for item in proposals:
         if len(chosen) >= total_budget:
             break
-        if any(abs(item["source_output_ms"]-prev["source_output_ms"]) < rule["gap_ms"]
+        if any(abs(item["source_output_ms"]-prev["output_time_ms"]) < rule["gap_ms"]
                for prev in chosen):
             continue
         if any(item["segment_id"] == fx.get("segment_id") and
