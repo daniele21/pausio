@@ -365,7 +365,8 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertTrue(self.page.locator(".asr-settings").is_visible())
         self.assertTrue(self.page.locator("#transcript-panel").is_visible())
         self.page.locator('[data-workspace-nav="captions"]').click()
-        self.assertTrue(self.page.locator("#caption-generate").is_visible())
+        self.assertTrue(self.page.locator("#transcript-panel").is_visible())
+        self.assertTrue(self.page.locator("#transcript-empty").is_visible())
         self.page.locator('[data-workspace-nav="media"]').click()
         self.assertTrue(self.page.locator("#import-action").is_visible())
         self.upload_analyze()
@@ -567,6 +568,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
     def test_standalone_asr_ui_transcribes_without_closedroom_server(self):
         from unittest.mock import patch
         self.upload_analyze()
+        self.page.locator('[data-workspace-nav="transcript"]').click()
         self.assertFalse(self.page.locator("#asr-download").is_checked())
         self.assertEqual(self.page.locator("#asr-language").input_value(),"it")
         self.page.locator("#asr-model").select_option(
@@ -592,6 +594,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
     def test_generate_edit_and_preview_social_captions_in_browser(self):
         from unittest.mock import patch
         initial=self.upload_analyze()
+        self.page.locator('[data-workspace-nav="transcript"]').click()
         transcript={
             "provider":"pausio-local","backend":"mlx-whisper",
             "model":"mlx-community/whisper-large-v3-turbo",
