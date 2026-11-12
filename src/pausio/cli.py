@@ -15,6 +15,7 @@ from pausio.domain import EditPlan, Interval
 from pausio.media import MediaError, detect_silences, ffmpeg_has_filter, probe, render
 from pausio.planner import AI_NATURAL, propose_segments
 from pausio.studio import run_studio
+from pausio.local_mcp import serve_stdio
 
 
 def _json(value: object) -> str:
@@ -36,6 +37,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     studio_cmd.add_argument("--no-open", action="store_true")
     studio_cmd.add_argument("--data-dir", type=Path, help="Private local Studio autosave folder")
+
+    mcp_cmd = commands.add_parser("mcp", help="Run local-only MCP stdio bridge to an already running Pausio Studio")
+    mcp_cmd.add_argument("--studio-port", type=int, default=8765, help="Actual Studio loopback port (auto-selected port may differ)")
 
     inspect_cmd = commands.add_parser("inspect", help="Inspect an input video with ffprobe")
     inspect_cmd.add_argument("input", type=Path)
@@ -72,6 +76,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "studio":
             run_studio(port=args.port, open_browser=not args.no_open, data_dir=args.data_dir)
+            return 0
+        if args.command == "mcp":
+            serve_stdio(port=args.studio_port)
             return 0
         if args.command == "doctor":
             found = {name: shutil.which(name) for name in ("ffmpeg", "ffprobe")}
