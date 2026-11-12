@@ -70,6 +70,7 @@ This reproduces a final kept timeline of `[0,2400)` and `[3900,10000)`, with exp
 | `timeline.replace` | complete identified KEEP list | backward-compatible legacy plan replace; discouraged for new UI controls |
 | `caption.set` | `style`, source-time `cues` with stable IDs, text and start/end ms | creates subtitle track from ASR |
 | `caption.correct` | `caption_id`, `text` | corrects one caption without rerunning transcription |
+| `caption.retime` | `caption_id`, `start_ms`, `end_ms` (integer source milliseconds) | changes one subtitle's timing; reducer rejects overlaps, inverted times and out-of-bounds changes; invalidates approval |
 | `caption.style` | `style` = `social`, `minimal` or `boxed` | legacy preset change |
 | `caption.configure` | exact validated `config` with preset, X/Y percentages, font family, font size, RGB colors, outline and background | persists custom or named style consistently for browser preview and FFmpeg output |
 | `caption.clear` | no payload | removes subtitle track |
