@@ -18,6 +18,20 @@ Pausio uses the portable [Agent Skills specification](https://agentskills.io/spe
 
 Tasks may use two relevant skills; avoid loading the entire catalog by default.
 
+## Agentic integration and security skills
+
+These four **Pausio-owned** skills are mandatory for matching security-sensitive changes; they complement rather than replace the existing release/security skill:
+
+| Skill | Load whenever | Primary defense |
+| --- | --- | --- |
+| [pausio-network-abuse-defense](../.agents/skills/pausio-network-abuse-defense/SKILL.md) | Studio HTTP, MCP transport, gateway, traffic limits, DoS/DDoS, DNS rebinding | Request/connection budgets, Host checks, edge DDoS and DoS limits |
+| [pausio-mcp-trust-boundary](../.agents/skills/pausio-mcp-trust-boundary/SKILL.md) | MCP tools, authorization, chat agent permissions, prompt injection and private data | Tool allowlists, scope and approval, prompt injection and credential isolation |
+| [pausio-input-media-defense](../.agents/skills/pausio-input-media-defense/SKILL.md) | untrusted media import, codecs, archives, SVG, paths and upload validation | Asset/media admission, FFmpeg, path, archive/SVG validation |
+| [pausio-actions-runner-security](../.agents/skills/pausio-actions-runner-security/SKILL.md) | GitHub Actions, self-hosted transcription, workflow dispatch and runner secrets | Public CI vs private self-hosted runner, dispatch and secrets |
+
+Review `docs/SECURITY_THREAT_MODEL.md` before implementing a public MCP endpoint. Each skill includes negative-test criteria and reference checklists. Adding skills **does not** deploy WAF/rate limiting/OAuth; those are separate implementation gates.
+
+
 ## Structured editing commands and portable projects
 
 Use [pausio-edit-command-schema](../.agents/skills/pausio-edit-command-schema/SKILL.md) whenever adding an edit tool, changing project import/export, implementing AI prompt edits, undo/redo or external interchange. All output-affecting UI actions must have typed commands with deterministic replay. Undo/Redo use a V2 history cursor and monotonic revision; autosave commits a private local project plus media atomically, with recovery tests. Portable project export remains media-free. See [PROJECT_FORMAT.md](PROJECT_FORMAT.md).
