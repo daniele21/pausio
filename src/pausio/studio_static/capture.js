@@ -518,7 +518,7 @@
     els.download.href = blobUrl;
     els.download.download = outputName;
     const seconds = Math.round((performance.now() - startedAt) / 1000);
-    els.details.textContent=outputName.split(".").pop().toUpperCase()+" · "+
+    els.details.textContent=outputName.split(".").pop().toUpperCase()+" · video verticale · "+
       (recordedDimensions?.width||"?")+"×"+(recordedDimensions?.height||"?")+" · "+
       (output.size/(1024*1024)).toFixed(1)+" MB · "+seconds+" s · senza gobbo";
     savedAfterRecording = false;
@@ -657,6 +657,7 @@
       els.framing.value="social";
   }catch(_error){if(window.matchMedia("(min-width:851px)").matches)els.framing.value="social";}
   refreshPrompter();updateFramingLabels();setMode("idle");
+  notice("Pagina pronta. Attiva fotocamera quando vuoi, oppure prova il gobbo senza registrare.");
   if(window.matchMedia("(max-width:850px)").matches)els.gobboSettings.open=false;
   refreshDeviceChoices().catch(()=>{});
   navigator.mediaDevices?.addEventListener?.("devicechange",()=>{
