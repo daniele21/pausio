@@ -806,14 +806,13 @@ function selectTranscriptRow(index,{play=false}={}){
   const segment=project?.transcript?.segments?.[index];
   if(!segment)return;
   transcriptSelectedIndex=index;
-  if(mode==="rendered"){
-    const destination=outputTime(segment.start_ms);
-    v.currentTime=destination/1000;
-  }else{
-    // A transcript is always aligned to the original source, including cuts.
-    mode="original";update(project);
-    v.currentTime=segment.start_ms/1000;
+  // The transcript always describes the ORIGINAL source, including phrases
+  // removed by a cut. A rendered preview cannot seek into discarded speech.
+  if(mode!=="original"){
+    mode="original";
+    update(project);
   }
+  v.currentTime=segment.start_ms/1000;
   updateTranscriptActive();
   const row=el("transcript-list").querySelector('[data-index="'+index+'"]');
   row?.scrollIntoView({block:"nearest"});
