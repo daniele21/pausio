@@ -240,13 +240,12 @@ def render(
             if compatible_ffmpeg is None:
                 executable = render_ffmpeg
                 raise MediaError(
-                "Il filtro 'ass' non è disponibile in FFmpeg (" + executable + "). "
-                "Per imprimere i sottotitoli serve una build con libass. "
-                "Su macOS: brew install ffmpeg-full; poi "
-                "export PATH=\"$(brew --prefix ffmpeg-full)/bin:$PATH\" "
-                "e riavvia Pausio dal medesimo terminale. "
-                "Verifica: ffmpeg -hide_banner -filters | grep ' ass '. "
-                "Non basta installare libass separatamente."
+                    "Il filtro 'ass' non è disponibile negli eseguibili FFmpeg verificati "
+                    "(primo nel PATH: " + executable + "). "
+                    "Per imprimere sottotitoli serve una build FFmpeg con libass. "
+                    "Su macOS: brew install ffmpeg-full, poi riavvia Pausio. "
+                    "Pausio cerca automaticamente la build Homebrew, anche se "
+                    "non è la prima nel PATH. Non basta installare libass separatamente."
                 )
             render_ffmpeg = compatible_ffmpeg
 
