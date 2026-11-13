@@ -1698,6 +1698,10 @@ async function run(fn){
 }
 async function edit(type, payload={}){
   if(!project?.file)throw Error("Importa prima un video.");
+  // Command replay invalidates and unlinks preview.mp4. Detach the browser
+  // from that resource *before* sending the edit to avoid a stale range fetch
+  // racing the deletion (404 during Undo/Redo of rendered transitions).
+  if(mode==="rendered")changeMode("original");
   update(await post("/api/command", {
     revision:project.project_revision, type, payload
   }));
