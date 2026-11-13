@@ -196,8 +196,14 @@ class AudioObservationHTTPTests(unittest.TestCase):
         with self.assertRaisesRegex(MCPToolError,"fuori"):
             self.client.read_audio(**args(state,"range",2200,1000))
         # A new edit cannot read audio from a now-stale preview.
+        from pausio.scene_templates import TEMPLATES
+        template=TEMPLATES["stat_reveal"]["fields"]
+        scene={"id":"c"*32,"template":"stat_reveal","start_ms":0,
+               "duration_ms":2500,"accent":"mint",
+               "content":{field["key"]:field["default"] for field in template}}
         call_tool("pausio_apply_command",{
-            "revision":state["project_revision"],"type":"caption.clear","payload":{}
+            "revision":state["project_revision"],"type":"scene.template.add",
+            "payload":{"scene":scene}
         },self.client)
         with self.assertRaises(AudioContextError):
             call_tool("pausio_get_audio_context",args(state,"range",700,1000),
