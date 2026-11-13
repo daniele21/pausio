@@ -279,7 +279,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
         exported=self.root/"visual-fx.pausio.json"
         download.value.save_as(exported)
         document=json.loads(exported.read_text())
-        self.assertEqual(document["schema_version"],6)
+        self.assertEqual(document["schema_version"],7)
         self.assertIn("video.transform.update",[row["type"] for row in document["commands"]])
         self.assertFalse(self.errors,self.errors)
 
@@ -760,7 +760,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
             self.page.locator("#project-export").click()
         saved=self.root/"project.pausio.json";download.value.save_as(saved)
         data=json.loads(saved.read_text())
-        self.assertEqual(data["schema_version"],6)
+        self.assertEqual(data["schema_version"],7)
         self.assertIn("segment.update",[c["type"] for c in data["commands"]])
 
         self.page.locator("#preview-action").click()
