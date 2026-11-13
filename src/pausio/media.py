@@ -396,6 +396,50 @@ def render(
     return args
 
 
+
+def extract_preview_range(
+    source: Path, output: Path, *, start_ms: int, duration_ms: int,
+    overwrite: bool = True
+) -> list[str]:
+    """Extract a bounded interval from a CURRENT FFmpeg preview.
+
+    Source is the already-rendered output-timeline MP4. This preserves all
+    captions, B-roll, graphic overlays, fades, audio and video FX exactly as
+    approved by that rendering. It does not recompute the edit graph.
+    The first full preview must exist before using this fast re-review path.
+    """
+    if (type(start_ms) is not int or type(duration_ms) is not int or
+        start_ms < 0 or not 250 <= duration_ms <= 10_000):
+        raise MediaError("Intervallo preview: durata 0,25–10 s e inizio valido.")
+    if source.suffix.lower() != ".mp4" or not source.is_file() or source.is_symlink():
+        raise MediaError("Anteprima FFmpeg corrente assente.")
+    if output.suffix.lower() != ".mp4" or source.resolve() == output.resolve():
+        raise MediaError("Destinazione preview breve non valida.")
+    if output.exists() and not overwrite:
+        raise MediaError("Anteprima breve già presente.")
+    # Input seek is efficient for a pre-rendered local MP4. Re-encoding only
+    # the requested seconds avoids copying from a non-keyframe offset.
+    cmd = [
+        require_binary("ffmpeg"), "-hide_banner", "-nostdin", "-v", "error", "-y",
+        "-ss", f"{start_ms / 1000:.3f}", "-i", str(source),
+        "-t", f"{duration_ms / 1000:.3f}",
+        "-map", "0:v:0", "-map", "0:a:0?",
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "25",
+        "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart",
+    ]
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with TemporaryDirectory(prefix=".pausio-range-", dir=output.parent) as tmp:
+        staged = Path(tmp) / "range.mp4"
+        args = [*cmd, str(staged)]
+        _run(args, timeout_s=180)
+        if not staged.exists() or not staged.stat().st_size:
+            raise MediaError("Il clip della preview è vuoto.")
+        if output.exists() and not overwrite:
+            raise MediaError("L'anteprima breve è cambiata durante il render.")
+        staged.replace(output)
+    return [*cmd, str(output)]
+
+
 def waveform_envelope(
     source: Path,
     duration_ms: int,

@@ -400,7 +400,7 @@ async function refresh(){
   update(await res.json());
 }
 function busyLabel(kind){
-  return ({analyze:"Analisi delle pause in corso…",preview:"Rendering anteprima FFmpeg…",render:"Creazione MP4 in corso…",
+  return ({analyze:"Analisi delle pause in corso…",preview:"Rendering anteprima FFmpeg…",preview_range:"Preparazione clip di 5 secondi…",render:"Creazione MP4 in corso…",
     transcribe:"Pausio sta trascrivendo localmente con MLX Whisper…"})[kind]||"Elaborazione…";
 }
 function update(next){
@@ -471,6 +471,7 @@ function update(next){
   el("restore-suggested").disabled=!next.suggested_plan||busy;
   el("restore-all").disabled=!plan||busy;el("add-segment").disabled=!plan||busy;
   el("preview-action").disabled=!plan||busy;
+  el("quick-preview-action").disabled=!next.preview_ready||busy;
   el("preview-action").textContent=next.preview_ready?"Rigenera preview":"Genera preview";
   if(mode==="rendered"&&!next.preview_ready){
     // Editing invalidated the cached FFmpeg preview: return to original safely.
@@ -587,16 +588,18 @@ function update(next){
     didNotifyRecovery = true;
     toast("Sessione recuperata automaticamente. Puoi continuare a modificare.");
   }
+  if(next.job?.status==="running")lastJobNotice="";
   if(["failed","completed"].includes(next.job?.status)){
     const signature=[next.media_id,next.job.kind,next.job.status,next.job.error].join("|");
     if(signature!==lastJobNotice){
       lastJobNotice=signature;
       if(next.job.status==="failed")toast(next.job.error||"Elaborazione fallita.","error");
       else{
-        toast(({analyze:"Analisi completata. Rivedi i tagli.",preview:"Anteprima FFmpeg pronta. Ascolta gli stacchi prima di confermare.",render:"MP4 pronto da scaricare.",
+        toast(({analyze:"Analisi completata. Rivedi i tagli.",preview:"Anteprima FFmpeg pronta. Ascolta gli stacchi prima di confermare.",preview_range:"Clip pronta per la revisione.",render:"MP4 pronto da scaricare.",
           transcribe:"Trascrizione disponibile nel pannello Testo."})[next.job.kind]||"Operazione completata.");
         if(next.job.kind==="transcribe")tab("transcript");
         if(next.job.kind==="preview")changeMode("rendered");
+        if(next.job.kind==="preview_range"&&next.preview_range_ready)openQuickPreview(next);
       }
     }
   }
@@ -2076,6 +2079,37 @@ el("caption-clear").addEventListener("click",()=>run(async()=>{
 }));
 el("export-action").addEventListener("click",()=>run(()=>startJob("render")));
 el("preview-action").addEventListener("click",()=>run(()=>startJob("preview")));
+function openQuickPreview(snapshot){
+  const dialog=el("quick-preview-dialog"),player=el("quick-preview-video");
+  if(!snapshot.preview_range_ready||!snapshot.preview_range_window)return;
+  v.pause();pauseLiveFx();
+  const range=snapshot.preview_range_window;
+  const url="/api/preview/range?rev="+snapshot.project_revision+
+            "&start="+range.start_ms+"&length="+range.duration_ms;
+  if(player.getAttribute("src")!==url){player.src=url;player.load();}
+  el("quick-preview-description").textContent=
+    "Timeline montata: da "+msFormat(range.start_ms)+" per "+
+    (range.duration_ms/1000).toFixed(2).replace(".",",")+" s. "+
+    "Audio, testo ed effetti provengono dalla preview FFmpeg originale.";
+  if(!dialog.open)dialog.showModal();
+}
+el("quick-preview-close").addEventListener("click",()=>el("quick-preview-dialog").close());
+el("quick-preview-dialog").addEventListener("close",()=>{
+  const player=el("quick-preview-video");player.pause();
+  player.removeAttribute("src");player.load();
+});
+el("quick-preview-action").addEventListener("click",()=>run(async()=>{
+  if(!project?.preview_ready||!project.plan)
+    throw Error("Genera prima una preview FFmpeg aggiornata.");
+  const total=editedDuration();
+  const duration=Math.min(5000,total);
+  if(duration<250)throw Error("La parte mantenuta è troppo breve.");
+  const time=mode==="rendered"?Math.round((v.currentTime||0)*1000):
+    outputTime(Math.round((v.currentTime||0)*1000));
+  const start=Math.max(0,Math.min(total-duration,Math.round(time)-1000));
+  update(await post("/api/jobs",{kind:"preview_range",
+    range_start_ms:start,range_duration_ms:duration}));
+}));
 el("approve-action").addEventListener("click",()=>run(approve));
 el("undo-action").addEventListener("click",()=>run(()=>moveHistory("history.undo")));
 el("redo-action").addEventListener("click",()=>run(()=>moveHistory("history.redo")));
