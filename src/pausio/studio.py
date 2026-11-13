@@ -961,11 +961,13 @@ class StudioHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/jobs":
                 request = self._read_json()
-                if set(request) - {"kind", "settings", "asr"}:
+                if set(request) - {"kind", "settings", "asr", "range_start_ms", "range_duration_ms"}:
                     raise StudioError("Parametri job sconosciuti.")
                 self.server.workspace.start_job(
                     request.get("kind", ""), settings=request.get("settings"),
-                    asr=request.get("asr")
+                    asr=request.get("asr"),
+                    range_start_ms=request.get("range_start_ms"),
+                    range_duration_ms=request.get("range_duration_ms")
                 )
                 self._json(202, self.server.workspace.snapshot())
                 return
@@ -1098,6 +1100,9 @@ class StudioHandler(BaseHTTPRequestHandler):
         if path == "/api/export":
             self._media(True, False)
             return
+        if path == "/api/preview/range":
+            self._media(False, False, preview_range=True)
+            return
         if path == "/api/preview":
             self._media(False, False, preview=True)
             return
@@ -1113,14 +1118,17 @@ class StudioHandler(BaseHTTPRequestHandler):
             return
         if path.startswith("/api/audio/"):
             self._media(False, True, audio_sha=path.removeprefix("/api/audio/"))
-        elif path in {"/api/media", "/api/export", "/api/preview"}:
-            self._media(path == "/api/export", True, preview=path == "/api/preview")
+        elif path in {"/api/media", "/api/export", "/api/preview", "/api/preview/range"}:
+            self._media(path == "/api/export", True,
+                        preview=path == "/api/preview",
+                        preview_range=path == "/api/preview/range")
         else:
             self._failed(404, "Risorsa non trovata.")
 
     def _media(
         self, exported: bool, headers_only: bool, *,
-        preview: bool = False, audio_sha: str | None = None
+        preview: bool = False, preview_range: bool = False,
+        audio_sha: str | None = None
     ) -> None:
         audio_mime = None
         with self.server.workspace.lock:
@@ -1141,13 +1149,14 @@ class StudioHandler(BaseHTTPRequestHandler):
                 }.get(Path(clip["filename"]).suffix.lower(), "application/octet-stream")
             else:
                 path = (
-                    self.server.workspace.directory / "preview.mp4" if preview
+                    self.server.workspace.directory / "preview-range.mp4" if preview_range
+                    else self.server.workspace.directory / "preview.mp4" if preview
                     else self.server.workspace.directory / "export.mp4" if exported
                     else self.server.workspace.source
                 )
             if audio_sha is None and ((exported and not self.server.workspace.export_ready) or (
                 preview and not self.server.workspace.preview_ready
-            )):
+            ) or (preview_range and not self.server.workspace.preview_range_ready)):
                 path = None
             if path is None or path.is_symlink() or not path.is_file():
                 self._failed(404, "Video non disponibile.")
@@ -1178,7 +1187,7 @@ class StudioHandler(BaseHTTPRequestHandler):
                 return
             end = min(end, total - 1)
         size = end - begin + 1
-        mime = audio_mime or ("video/mp4" if preview or exported or path.suffix.lower() in {".mp4", ".m4v", ".mov"} else "video/webm")
+        mime = audio_mime or ("video/mp4" if preview or preview_range or exported or path.suffix.lower() in {".mp4", ".m4v", ".mov"} else "video/webm")
         self._headers(206 if requested else 200, size, mime)
         self.send_header("Accept-Ranges", "bytes")
         if requested:
