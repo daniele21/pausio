@@ -85,7 +85,10 @@ class SplitDashboardTests(unittest.TestCase):
         self.assertNotIn("http",graph)
         ass=compose_scene_events([dashboard()],4000)
         self.assertIn("Avanzamento",ass)
-        self.assertIn("Budget",ass)
+        # Budget is intentionally shown later, not at 2.8 seconds.
+        self.assertNotIn("Budget: sotto controllo", ass)
+        long_ass=compose_scene_events([dashboard(duration=6500)],7000)
+        self.assertIn("Budget: sotto controllo",long_ass)
         self.assertIn("✓",ass)
         self.assertIn("Dialogue:",ass)
 

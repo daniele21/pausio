@@ -299,7 +299,7 @@ class ProjectReplayTests(unittest.TestCase):
         tape = analyze(ProjectTape(media()))
         d = tape.as_dict()
         mutated = copy.deepcopy(d)
-        mutated["schema_version"] = 9
+        mutated["schema_version"] = 10
         with self.assertRaises(ProjectFormatError):
             ProjectTape.from_dict(mutated)
         mutated = copy.deepcopy(d)
