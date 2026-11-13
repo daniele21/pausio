@@ -38,6 +38,32 @@ def analyze(tape, items=None):
 
 
 class ProjectReplayTests(unittest.TestCase):
+    def test_word_timestamps_are_portable_and_invalidated_by_corrections(self):
+        from pausio.project_commands import ProjectTape, ProjectFormatError
+        media={"filename":"clip.mp4","sha256":"a"*64,
+               "duration_ms":3000,"has_audio":True}
+        cue={"id":"b"*32,"start_ms":0,"end_ms":2100,"text":"Due parole",
+             "words":[{"text":"Due","start_ms":0,"end_ms":450},
+                      {"text":"parole","start_ms":700,"end_ms":1300}]}
+        start=ProjectTape(media).append("timeline.keep_all",{})
+        with_alignment=start.append("caption.set",{"cues":[cue],"style":"word_focus"})
+        self.assertEqual(with_alignment.as_dict()["schema_version"],6)
+        restored=ProjectTape.from_dict(with_alignment.as_dict())
+        self.assertEqual(restored.view.captions[0]["words"],cue["words"])
+        self.assertEqual(restored.undo().view.captions,())
+        corrected=restored.append("caption.correct",{"caption_id":cue["id"],
+                                                     "text":"Due parole corrette"})
+        self.assertNotIn("words",corrected.view.captions[0])
+        retimed=restored.append("caption.retime",{"caption_id":cue["id"],
+                                "start_ms":100,"end_ms":2200})
+        self.assertNotIn("words",retimed.view.captions[0])
+        for bad in ({"start_ms":1500,"end_ms":1800,"text":"parole"},
+                    {"start_ms":0,"end_ms":700,"text":"altro"},
+                    {"start_ms":True,"end_ms":450,"text":"Due"}):
+            with self.subTest(bad=bad),self.assertRaises(ProjectFormatError):
+                start.append("caption.set",{"cues":[{**cue,"words":[bad]}],
+                                            "style":"word_focus"})
+
     def test_cut_settings_roundtrip_undo_and_strict_validation(self):
         from pausio.planner import CUT_PRESETS, validate_cut_settings
         natural=validate_cut_settings()
