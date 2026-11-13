@@ -73,6 +73,11 @@ class TestGraphicOverlayCards(unittest.TestCase):
                                "animation":"pop","text":r"settings.local.json {\blur10}"}]
         document = compose_graphics_ass([], cards)
         self.assertIn("Style: Graphic,Arial", document)
+        self.assertIn("Style: GraphicStat,Impact", document)
+        self.assertIn("Style: GraphicCode,Courier New", document)
+        self.assertIn("Style: GraphicTip,Avenir Next", document)
+        self.assertIn("GraphicStat,,0,0,0", document)
+        self.assertIn("GraphicCode,,0,0,0", document)
         self.assertIn(r"\move(", document)
         self.assertIn(r"\fscx85\fscy85", document)
         self.assertNotIn(r"\blur10", document)
