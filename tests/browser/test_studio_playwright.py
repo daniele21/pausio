@@ -257,7 +257,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertEqual(len(self.state()["image_overlays"]),1)
         item=self.page.locator("[data-pip-id]").first
         item.locator('input[aria-label="Larghezza (%) immagine PIP"]').fill("60")
-        item.get_by_role("button",name="Salva posizione").click()
+        item.get_by_role("button",name="Salva modifiche").click()
         revised=self.wait_state("revision",added["project_revision"]+1)
         self.assertEqual(revised["image_overlays"][0]["width_pct"],60)
         self.assertEqual(revised["image_overlays"][0]["asset_sha256"],
