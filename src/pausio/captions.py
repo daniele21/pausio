@@ -11,7 +11,7 @@ from typing import Any
 
 from pausio.domain import Interval
 
-CAPTION_STYLES = ("social", "minimal", "boxed")
+CAPTION_STYLES = ("social", "minimal", "boxed", "kinetic")
 # Explicit allowlist is shared by the Studio UI and ASS renderer. Model/ASR
 # cannot inject arbitrary ASS font-name delimiters or escape sequences.
 # FFmpeg/libass resolves these families from fonts installed on the device.
@@ -33,6 +33,10 @@ CAPTION_PRESETS = {
               "font_family": DEFAULT_CAPTION_FONT,
               "text_color": "#FFFFFF", "outline_color": "#000000",
               "outline_size": 3, "background": True, "background_color": "#161616"},
+    "kinetic": {"preset": "kinetic", "x_pct": 50, "y_pct": 78, "font_size": 72,
+                "font_family": DEFAULT_CAPTION_FONT,
+                "text_color": "#FFFFFF", "outline_color": "#000000",
+                "outline_size": 4, "background": False, "background_color": "#000000"},
 }
 CAPTION_CONFIG_FIELDS = frozenset(CAPTION_PRESETS["social"])
 CAPTION_CONFIG_RANGES = {
@@ -264,8 +268,17 @@ def ass_document(
             continue
         value = _ass_text(cue["text"])
         if value:
+            # This is a phrase entrance, not synthesized per-word alignment.
+            # Source times remain authoritative and ASS tags are allowlisted.
+            if config["preset"] == "kinetic":
+                up = min(180, max(50, (end - start) // 3))
+                down = min(110, max(30, (end - start) // 5))
+                motion = (f"\\fscx86\\fscy86\\fad({up},{down})"
+                          f"\\t(0,{up},\\fscx100\\fscy100)")
+            else:
+                motion = ""
             events.append(
                 f"Dialogue: 0,{_ass_time(start)},{_ass_time(end)},"
-                f"Caption,,0,0,0,,{{\\an5\\pos({x},{y})}}{value}\n"
+                f"Caption,,0,0,0,,{{\\an5\\pos({x},{y}){motion}}}{value}\n"
             )
     return header + "".join(events)
