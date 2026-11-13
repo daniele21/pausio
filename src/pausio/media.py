@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import hashlib
 import sys
 from array import array
 import re
@@ -16,6 +17,7 @@ from pathlib import Path
 
 from pausio.captions import ass_document
 from pausio.graphic_overlays import compose_graphics_ass
+from pausio.image_overlays import validate_image_overlays
 from pausio.domain import Interval
 from pausio.visual_fx import motion_filter, prepare_motion_fx
 from pausio.visual_transitions import compile_dips
@@ -254,6 +256,7 @@ def render(
     video_fx: list[dict] | None = None,
     video_transitions: list[dict] | None = None,
     graphic_overlays: list[dict] | None = None,
+    image_overlays: list[tuple[Path, dict]] | None = None,
 ) -> list[str]:
     """Render ordered intervals in one re-encode; preserve aspect ratio with padding.
 
@@ -278,6 +281,20 @@ def render(
         raise MediaError("captions must be a list or None")
     if graphic_overlays is not None and not isinstance(graphic_overlays, list):
         raise MediaError("graphic_overlays must be a list or None")
+    images = image_overlays or []
+    output_ms = sum(s.end_ms - s.start_ms for s in segments)
+    try:
+        validate_image_overlays([clip for _, clip in images], output_ms)
+    except ValueError as exc:
+        raise MediaError(str(exc)) from exc
+    for asset, clip in images:
+        if asset.is_symlink() or not asset.is_file():
+            raise MediaError("Immagine B-roll mancante o non sicura.")
+        probe_image(asset)
+        with asset.open("rb") as data:
+            digest = hashlib.file_digest(data, "sha256").hexdigest()
+        if digest != clip["asset_sha256"]:
+            raise MediaError("Hash dell'immagine B-roll differente; reimporta l'asset.")
     has_text = bool(captions) or bool(graphic_overlays)
     # Validate subtitle text/style for both preview and final output.
     render_ffmpeg = require_binary("ffmpeg")
@@ -340,11 +357,43 @@ def render(
         f"{''.join(concat_inputs)}concat=n={len(segments)}:v=1:a={1 if has_audio else 0}"
         + ("[joinedv][joineda]" if has_audio else "[joinedv]")
     )
+    # B-roll is composed AFTER zoom/crop, but BEFORE subtitles and textual
+    # graphics, which remain readable over the PIP. Each image is referenced
+    # exclusively by its validated local hash and numeric presentation fields.
     components.append(
         f"[joinedv]fps=30,scale={size[0]}:{size[1]}:force_original_aspect_ratio=decrease,"
         f"pad={size[0]}:{size[1]}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p"
-        + ("[basev]" if has_text else "[outv]")
+        + ("[pipbase]" if images else "[basev]" if has_text else "[outv]")
     )
+    if images:
+        last = "[pipbase]"
+        for i, (_, clip) in enumerate(images):
+            # Input order: original video, sound FX, then image assets.
+            input_index = 1 + len(audio_fx or []) + i
+            width = max(2, round(size[0]*clip["width_pct"]/100)//2*2)
+            height = max(2, round(size[1]*0.58)//2*2)
+            start = clip["start_ms"]/1000
+            end = (clip["start_ms"]+clip["duration_ms"])/1000
+            x = clip["x_pct"]/100
+            y = clip["y_pct"]/100
+            components.append(
+                f"[{input_index}:v:0]scale={width}:{height}:"
+                "force_original_aspect_ratio=decrease,format=rgba"
+                f"[pipimage{i}]"
+            )
+            target = "[basev]" if has_text and i==len(images)-1 else (
+                "[outv]" if i==len(images)-1 else f"[pipstage{i}]"
+            )
+            components.append(
+                f"{last}[pipimage{i}]overlay="
+                f"x='(main_w-overlay_w)*{x:.3f}':"
+                f"y='(main_h-overlay_h)*{y:.3f}':"
+                f"enable='between(t\\,{start:.3f}\\,{end:.3f})':shortest=1,"
+                "format=auto"
+                + (",format=yuv420p" if i==len(images)-1 else "")
+                + target
+            )
+            last = target
     def make_args(destination: Path, subtitle_file: Path | None = None) -> list[str]:
         filters = list(components)
         if has_text:
@@ -395,6 +444,8 @@ def render(
                 "-i", str(source)]
         for path, _ in effects:
             args.extend(["-i", str(path)])
+        for path, _ in images:
+            args.extend(["-loop", "1", "-framerate", "30", "-i", str(path)])
         args.extend(["-filter_complex", ";".join(filters), "-map", "[outv]"])
         if has_audio or effects:
             args.extend(["-map", "[outa]" if mixing else "[joineda]",
