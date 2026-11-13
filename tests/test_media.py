@@ -82,6 +82,45 @@ Filters:
             self.assertEqual(run.call_args.args[0][0], "/tmp/ffmpeg")
             self.assertIn("-filters", run.call_args.args[0])
 
+    def test_ffmpeg_has_filter_recognizes_macos_blank_capability_marker(self):
+        """Regression: Homebrew ffmpeg-full prints ' .. ass', not ' ... ass'."""
+        from subprocess import CompletedProcess
+        listing = """Filters:
+  T.. = Timeline support
+  .S. = Slice threading
+  ..C = Command support
+ .. ass               V->V       Render ASS subtitles onto input video using the libass library.
+ .. subtitles         V->V       Render text subtitles
+"""
+        with (
+            patch("pausio.media.require_binary",
+                  return_value="/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg"),
+            patch("pausio.media._run",
+                  return_value=CompletedProcess([], 0, listing, "")) as ffmpeg,
+        ):
+            self.assertTrue(ffmpeg_has_filter("ass"))
+            self.assertTrue(ffmpeg_has_filter("subtitles"))
+            self.assertFalse(ffmpeg_has_filter("overlay"))
+            self.assertEqual(
+                ffmpeg.call_args_list[0].args[0][0],
+                "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg",
+            )
+
+    def test_ffmpeg_has_filter_ignores_names_in_descriptions_and_legends(self):
+        """Matching the filter name in prose is not enough."""
+        from subprocess import CompletedProcess
+        listing = """Filters:
+ T.. = Timeline support
+ ... other V->V This description mentions ass V->V but it is not installed
+ .. subtitles V->V Render ASS subtitles onto input video using libass
+"""
+        with patch("pausio.media._run",
+                   return_value=CompletedProcess([], 0, listing, "")):
+            self.assertFalse(ffmpeg_has_filter("ass", executable="/tmp/ffmpeg"))
+            self.assertTrue(ffmpeg_has_filter("subtitles", executable="/tmp/ffmpeg"))
+        with self.assertRaises(ValueError):
+            ffmpeg_has_filter("ass; -i malicious", executable="/tmp/ffmpeg")
+
     def test_select_ffmpeg_full_if_path_binary_lacks_ass(self):
         """Keg-only Homebrew ffmpeg-full works even if plain ffmpeg wins PATH."""
         from subprocess import CompletedProcess
@@ -90,7 +129,7 @@ Filters:
 
         def fake_filters(args, timeout_s=120):
             invoked.append(args[0])
-            filters = " ... ass               V->V       Render ASS subtitles\n" if (
+            filters = " .. ass               V->V       Render ASS subtitles\n" if (
                 args[0] == "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg") else (
                 " ... scale             V->V       Scale video\n")
             return CompletedProcess(args, 0, filters, "")
