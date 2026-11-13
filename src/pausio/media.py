@@ -388,8 +388,7 @@ def render(
                 f"{last}[pipimage{i}]overlay="
                 f"x='(main_w-overlay_w)*{x:.3f}':"
                 f"y='(main_h-overlay_h)*{y:.3f}':"
-                f"enable='between(t\\,{start:.3f}\\,{end:.3f})':shortest=1,"
-                "format=auto"
+                f"enable='between(t\\,{start:.3f}\\,{end:.3f})':shortest=1:format=auto"
                 + (",format=yuv420p" if i==len(images)-1 else "")
                 + target
             )
