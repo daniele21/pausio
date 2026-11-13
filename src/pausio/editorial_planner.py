@@ -24,7 +24,7 @@ RULES = {
                        "zoom_profile": "dinamico"},
 }
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")
-_NUMBER = re.compile(r"(?<![A-Za-z0-9])\d{1,3}(?:[.,]\d{3})+(?:\s*%)?|\b\d+(?:[.,]\d+)?\s*(?:%|€|euro|milioni|mila)\b", re.I)
+_NUMBER = re.compile(r"(?<![A-Za-z0-9])(?:\d{1,3}(?:[.,]\d{3})+|\d+(?:[.,]\d+)?\s*(?:%|€|euro\b|milioni\b|mila\b))", re.I)
 _CODE = re.compile(r"(?<![A-Za-z0-9])(?:[A-Za-z0-9_-]{1,30}\.){1,4}(?:json|yaml|yml|toml|py|env)\b")
 _TIP = re.compile(r"^\s*(?:controlla|verifica|evita|non autorizzare|ricorda|prima|seconda|terza|check)\b", re.I)
 
