@@ -144,12 +144,12 @@ class SceneTemplateContractTests(unittest.TestCase):
                 "-shortest","-c:v","mpeg4","-c:a","aac",str(src)
             ],timeout=55,check=True)
             args=render(src,dst,(Interval(0,2800),),has_audio=True,
-                        size=(360,640),scene_templates=[scene("stat_reveal",0)])
+                        size=(540,960),scene_templates=[scene("stat_reveal",0)])
             self.assertIn("-filter_complex",args)
             self.assertIn("ass=filename=",args[args.index("-filter_complex")+1])
             info=probe(dst)
             self.assertTrue(info.has_audio)
-            self.assertEqual((info.width,info.height),(360,640))
+            self.assertEqual((info.width,info.height),(540,960))
             self.assertGreater(dst.stat().st_size,1000)
             # A white source should be dark where the full-frame scene covers it.
             grab=subprocess.run([

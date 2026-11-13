@@ -18,6 +18,7 @@ EDIT_TYPES = frozenset({
     "audio.update", "audio.remove", "audio.mixer.configure", "audio.clip.mix",
     "image.overlay.update", "image.overlay.remove",
     "graphic.overlay.add", "graphic.overlay.update", "graphic.overlay.remove",
+    "scene.template.add", "scene.template.update", "scene.template.remove",
     "video.transform.add", "video.transform.update", "video.transform.remove",
     "video.transition.add", "video.transition.update", "video.transition.remove",
 })
@@ -29,7 +30,7 @@ PROJECT_FIELDS = frozenset({
     "editor_segments", "plan", "suggested_plan", "detected_silences",
     "analysis_settings", "captions", "caption_config", "audio_clips",
     "audio_mix", "video_fx", "video_transitions", "graphic_overlays",
-    "image_overlays", "can_undo", "can_redo", "job", "preview_ready",
+    "image_overlays", "scene_templates", "can_undo", "can_redo", "job", "preview_ready",
     "preview_range_ready", "preview_range_window", "export_ready",
 })
 
@@ -114,6 +115,11 @@ TOOLS: list[dict[str, Any]] = [
               "gain_db":{"type":"integer","minimum":-36,"maximum":12}},
            "required":["revision","source_clip_id","output_start_ms","gain_db"],
            "additionalProperties":False}, read_only=False),
+    _tool("pausio_get_scene_templates",
+          "Discover bounded, editable full-screen scene templates for statistic "
+          "reveal, simulated permission dialog and highlighted code. "
+          "Return exact fields and defaults. Apply with scene.template.* "
+          "commands through pausio_apply_command."),
     _tool("pausio_get_project",
           "Read the current Studio project: source SHA, revision, cuts, captions, "
           "video FX, graphic/image overlays, audio mix, approval and jobs. "
