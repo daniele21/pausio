@@ -35,6 +35,10 @@ Il pulsante **Suggerisci effetti** utilizza quattro stili (Naturale, Educativo, 
 
 Nel pannello **Schede grafiche animate** puoi aggiungere al cursore titoli, dati, righe di codice e suggerimenti, con animazioni **pop, slide o fade**. Le schede sono eventi sorgente con ID, posizione, durata, font e colore validati: possono essere modificate, annullate, esportate in `.pausio.json` v5 e reimportate con lo stesso video. Il render FFmpeg le compone dopo gli zoom, in coordinate verticali stabili. Sono elementi informativi, non B-roll o screenshot importati. Guida: [Schede grafiche](docs/GRAPHIC_OVERLAYS.md).
 
+### Camera Motion — Pulse e Sweep (sviluppo)
+
+Due movimenti avanzati, configurabili e realmente renderizzati tramite FFmpeg: **Pulse** (zoom in, breve mantenimento, rientro a 1x) e **Sweep** (zoom con pan morbido verso il centro X/Y impostato nell'editor). Imposta i valori nella sezione Video FX, usa **Genera preview** e rivedi il filmato. Entrambi sono istruzioni tipizzate esportabili/importabili nel progetto v5; richiedono rispettivamente 900 e 1300 ms di video mantenuto. Nessun movimento viene applicato automaticamente senza approvazione.
+
 ### Video FX avanzati (su `main`, non inclusi nel wheel v0.1.0)
 
 Il nuovo editor Video FX supporta **Zoom morbido (ease)** e **Ratchet a tre scatti**, entrambi applicati dal renderer FFmpeg e salvati in eventi tipizzati importabili/esportabili. **Personalizzato** consente di modificare realmente frequenza, intervallo minimo, intensità e durata delle proposte; può utilizzare aumenti di energia misurati nella waveform originale, senza dichiarare di capire semanticamente il video. Le proposte richiedono sempre conferma.
