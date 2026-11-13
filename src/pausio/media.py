@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from array import array
 import re
@@ -43,20 +44,42 @@ def require_binary(name: str) -> str:
     return exe
 
 
-def ffmpeg_has_filter(name: str) -> bool:
-    """Check the actual FFmpeg binary used by Pausio, not an installed library.
-
-    In particular, libass installed separately does not add the 'ass'
-    filter to an FFmpeg executable that was built without --enable-libass.
-    """
+def ffmpeg_has_filter(name: str, *, executable: str | None = None) -> bool:
+    """Inspect one concrete FFmpeg binary; standalone libass is insufficient."""
     if not re.fullmatch(r"[a-z][a-z0-9_]{0,39}", name):
         raise ValueError("Invalid FFmpeg filter name")
-    result = _run([require_binary("ffmpeg"), "-hide_banner", "-filters"], timeout_s=20)
+    result = _run([executable or require_binary("ffmpeg"), "-hide_banner", "-filters"], timeout_s=20)
     # FFmpeg prints three capability markers followed by the filter name.
     return any(
         re.match(r"^\s*[TSC.]{3}\s+" + re.escape(name) + r"\s", line)
         for line in result.stdout.splitlines()
     )
+
+
+
+def select_ffmpeg_for_filter(name: str) -> str | None:
+    """Prefer the user's PATH then known Homebrew ffmpeg-full installations.
+
+    ffmpeg-full is keg-only: a plain ffmpeg may win on PATH although its
+    libass-capable sibling exists. Never change PATH or search untrusted dirs.
+    """
+    primary = shutil.which("ffmpeg")
+    candidates = [primary] if primary else []
+    if sys.platform == "darwin":
+        for prefix in ("/opt/homebrew", "/usr/local"):
+            candidate = Path(prefix) / "opt" / "ffmpeg-full" / "bin" / "ffmpeg"
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                path = str(candidate)
+                if path not in candidates:
+                    candidates.append(path)
+    for executable in candidates:
+        try:
+            if ffmpeg_has_filter(name, executable=executable):
+                return executable
+        except MediaError:
+            # A broken first candidate must not suppress a working fallback.
+            continue
+    return None
 
 
 def _run(args: list[str], timeout_s: int = 120) -> subprocess.CompletedProcess[str]:
@@ -209,19 +232,22 @@ def render(
     if captions is not None and not isinstance(captions, list):
         raise MediaError("captions must be a list or None")
     # Validate subtitle text/style for both preview and final output.
+    render_ffmpeg = require_binary("ffmpeg")
     if captions:
         ass_document(captions, style=caption_style, settings=caption_config)
-        if not dry_run and not ffmpeg_has_filter("ass"):
-            executable = require_binary("ffmpeg")
-            raise MediaError(
-                "Il filtro 'ass' non è disponibile in FFmpeg (" + executable + "). "
-                "Per imprimere i sottotitoli serve una build con libass. "
-                "Su macOS: brew install ffmpeg-full; poi "
-                "export PATH=\"$(brew --prefix ffmpeg-full)/bin:$PATH\" "
-                "e riavvia Pausio dal medesimo terminale. "
-                "Verifica: ffmpeg -hide_banner -filters | grep ' ass '. "
-                "Non basta installare libass separatamente."
-            )
+        if not dry_run:
+            compatible_ffmpeg = select_ffmpeg_for_filter("ass")
+            if compatible_ffmpeg is None:
+                executable = render_ffmpeg
+                raise MediaError(
+                    "Il filtro 'ass' non è disponibile negli eseguibili FFmpeg verificati "
+                    "(primo nel PATH: " + executable + "). "
+                    "Per imprimere sottotitoli serve una build FFmpeg con libass. "
+                    "Su macOS: brew install ffmpeg-full, poi riavvia Pausio. "
+                    "Pausio cerca automaticamente la build Homebrew, anche se "
+                    "non è la prima nel PATH. Non basta installare libass separatamente."
+                )
+            render_ffmpeg = compatible_ffmpeg
 
     # Process transforms BEFORE concat and captions; this maintains stable
     # subtitle/safe-zone coordinates and source-time mapping.
@@ -316,7 +342,7 @@ def render(
                 )
             else:
                 filters.append("[voice]alimiter=limit=0.95[outa]")
-        args = [require_binary("ffmpeg"), "-hide_banner", "-nostdin", "-y",
+        args = [render_ffmpeg, "-hide_banner", "-nostdin", "-y",
                 "-i", str(source)]
         for path, _ in effects:
             args.extend(["-i", str(path)])

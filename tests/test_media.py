@@ -7,7 +7,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from pausio.domain import Interval
-from pausio.media import MediaError, ffmpeg_has_filter, parse_silences, render, waveform_envelope
+from pausio.media import MediaError, ffmpeg_has_filter, parse_silences, render, select_ffmpeg_for_filter, waveform_envelope
 
 
 class TestMedia(unittest.TestCase):
@@ -82,13 +82,92 @@ Filters:
             self.assertEqual(run.call_args.args[0][0], "/tmp/ffmpeg")
             self.assertIn("-filters", run.call_args.args[0])
 
+    def test_select_ffmpeg_full_if_path_binary_lacks_ass(self):
+        """Keg-only Homebrew ffmpeg-full works even if plain ffmpeg wins PATH."""
+        from subprocess import CompletedProcess
+
+        invoked = []
+
+        def fake_filters(args, timeout_s=120):
+            invoked.append(args[0])
+            filters = " ... ass               V->V       Render ASS subtitles\n" if (
+                args[0] == "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg") else (
+                " ... scale             V->V       Scale video\n")
+            return CompletedProcess(args, 0, filters, "")
+
+        with (
+            patch("pausio.media.sys.platform", "darwin"),
+            patch("pausio.media.shutil.which", return_value="/opt/homebrew/bin/ffmpeg"),
+            patch("pausio.media.Path.is_file", return_value=True),
+            patch("pausio.media.os.access", return_value=True),
+            patch("pausio.media._run", side_effect=fake_filters),
+        ):
+            self.assertEqual(select_ffmpeg_for_filter("ass"),
+                             "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg")
+        self.assertEqual(invoked, ["/opt/homebrew/bin/ffmpeg",
+                                   "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg"])
+
+    def test_select_ffmpeg_prefers_capable_path(self):
+        from subprocess import CompletedProcess
+        with (
+            patch("pausio.media.sys.platform", "darwin"),
+            patch("pausio.media.shutil.which", return_value="/custom/bin/ffmpeg"),
+            patch("pausio.media.Path.is_file", return_value=True),
+            patch("pausio.media.os.access", return_value=True),
+            patch("pausio.media._run",
+                  return_value=CompletedProcess([], 0,
+                      " ... ass               V->V       Render ASS subtitles\n", "")) as runner,
+        ):
+            self.assertEqual(select_ffmpeg_for_filter("ass"), "/custom/bin/ffmpeg")
+            self.assertEqual(runner.call_count, 1)
+
+    def test_select_ffmpeg_rejects_binaries_without_filter(self):
+        from subprocess import CompletedProcess
+        with (
+            patch("pausio.media.sys.platform", "darwin"),
+            patch("pausio.media.shutil.which", return_value="/opt/homebrew/bin/ffmpeg"),
+            patch("pausio.media.Path.is_file", return_value=True),
+            patch("pausio.media.os.access", return_value=True),
+            patch("pausio.media._run",
+                  return_value=CompletedProcess([], 0,
+                      " ... scale             V->V       Scale video\n", "")),
+        ):
+            self.assertIsNone(select_ffmpeg_for_filter("ass"))
+
+    def test_render_uses_selected_ffmpeg_instead_of_unrelated_path(self):
+        from subprocess import CompletedProcess
+
+        def render_synthetic(args, timeout_s=120):
+            # Selection and decoding may use a different FFmpeg. The encoder
+            # must be precisely the executable that passed libass preflight.
+            Path(args[-1]).write_bytes(b"synthetic-output")
+            return CompletedProcess(args, 0, "", "")
+
+        with TemporaryDirectory() as d:
+            root=Path(d)
+            source=root/"source.mov"
+            source.write_bytes(b"original")
+            output=root/"rendered.mp4"
+            captions=[{"id":"a"*32,"start_ms":100,"end_ms":850,"text":"TEST"}]
+            with (
+                patch("pausio.media.require_binary", return_value="/opt/homebrew/bin/ffmpeg"),
+                patch("pausio.media.select_ffmpeg_for_filter",
+                      return_value="/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg"),
+                patch("pausio.media._run", side_effect=render_synthetic),
+            ):
+                args=render(source,output,(Interval(0,1000),),has_audio=True,
+                            captions=captions)
+            self.assertEqual(args[0], "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg")
+            self.assertEqual(output.read_bytes(), b"synthetic-output")
+            self.assertEqual(source.read_bytes(), b"original")
+
     def test_render_captions_fails_early_without_libass(self):
         with TemporaryDirectory() as d:
             source=Path(d)/"input.mov"
             source.touch()
             cues=[{"id":"a"*32,"start_ms":200,"end_ms":900,"text":"CIAO"}]
             with (
-                patch("pausio.media.ffmpeg_has_filter", return_value=False),
+                patch("pausio.media.select_ffmpeg_for_filter", return_value=None),
                 patch("pausio.media.require_binary", return_value="/opt/homebrew/bin/ffmpeg"),
             ):
                 with self.assertRaisesRegex(MediaError, "ffmpeg-full"):
