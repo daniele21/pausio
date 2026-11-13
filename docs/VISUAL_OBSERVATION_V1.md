@@ -89,3 +89,5 @@ large asset transfer or a general `pausio_get_audio_context` implementation.
 The authenticated tunnel/plugin must be rediscovered after restarting the
 locally updated `pausio mcp` process. A real ChatGPT tunnel smoke test is
 still needed to verify the host displays MCP image blocks as intended.
+
+**Audio is authorized independently:** see [Audio observation v1](AUDIO_OBSERVATION_V1.md). The separate checkbox grants bounded WAV excerpts only; enabling still frames never grants voice/audio access.

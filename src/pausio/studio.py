@@ -31,6 +31,7 @@ from pausio.captions import (
 )
 from pausio.media import MediaError, MediaInfo, detect_silences, probe, probe_audio, probe_image, render, waveform_envelope, extract_preview_range
 from pausio.media_observation import ObservationError, frame_jpeg
+from pausio.audio_observation import audio_wav
 from pausio.graphic_overlays import remap_graphics
 from pausio.scene_templates import catalog as scene_template_catalog
 from pausio.image_overlays import MAX_IMAGE_BYTES, IMAGE_EXTENSIONS
@@ -108,6 +109,9 @@ class StudioWorkspace:
         # Volatile opt-in: not in the portable project or recovery checkpoint.
         # Never silently re-enable when Studio/preview/source changes.
         self.visual_sharing_enabled = False
+        self.audio_sharing_enabled = False
+        self._audio_observation_times: list[float] = []
+        self._audio_observation_slot = threading.BoundedSemaphore(1)
         self._observation_times: list[float] = []
         self._observation_slot = threading.BoundedSemaphore(1)
         self.waveform: list[int] | None = None
@@ -205,6 +209,7 @@ class StudioWorkspace:
                 "export_ready": self.export_ready,
                 "preview_ready": self.preview_ready,
                 "visual_sharing_enabled": self.visual_sharing_enabled,
+                "audio_sharing_enabled": self.audio_sharing_enabled,
                 "preview_range_ready": self.preview_range_ready,
                 "preview_range_window": dict(self.preview_range_window) if self.preview_range_ready and self.preview_range_window else None,
                 "waveform_status": self.waveform_status,
@@ -369,6 +374,8 @@ class StudioWorkspace:
                 self.filename = label
                 self.media_id = uuid.uuid4().hex
                 self.visual_sharing_enabled = False
+                self.audio_sharing_enabled = False
+                self._audio_observation_times.clear()
                 self._observation_times.clear()
                 self.media_sha256 = sha256
                 self.info = info
@@ -440,6 +447,8 @@ class StudioWorkspace:
                 if image.is_file() or image.is_symlink():
                     image.unlink(missing_ok=True)
             self.visual_sharing_enabled = False
+            self.audio_sharing_enabled = False
+            self._audio_observation_times.clear()
             self._observation_times.clear()
             self.source = None
             self.filename = None
@@ -505,6 +514,79 @@ class StudioWorkspace:
             self.visual_sharing_enabled = enabled
             if not enabled:
                 self._observation_times.clear()
+
+    def set_audio_consent(self, enabled: bool) -> None:
+        """The local Studio UI must explicitly opt in to sharing speech/audio."""
+        if type(enabled) is not bool:
+            raise StudioError("Consenso audio non valido.")
+        with self.lock:
+            if self.source is None or self.media_id is None:
+                raise StudioError("Importa un video per gestire la condivisione.")
+            self.audio_sharing_enabled = enabled
+            if not enabled:
+                self._audio_observation_times.clear()
+
+    def observe_audio(self, *, scope: str, start_ms: int, duration_ms: int,
+                      revision: int, media_id: str) -> bytes:
+        """Extract a bounded real audio sample, with independent opt-in."""
+        if (scope not in ("source","preview","range") or
+            type(start_ms) is not int or type(duration_ms) is not int or
+            type(revision) is not int or type(media_id) is not str or
+            not 500 <= duration_ms <= 6000):
+            raise StudioError("Richiesta audio non valida.")
+        if not self._audio_observation_slot.acquire(blocking=False):
+            raise StudioError("Un'altra osservazione audio è in corso.")
+        try:
+            with self.lock:
+                if not self.audio_sharing_enabled:
+                    raise VisualConsentRequired(
+                        "Attiva «Condividi brevi audio con ChatGPT» in Video FX.")
+                self._ensure_unlocked()
+                if (self.tape is None or self.source is None or
+                    self.media_id != media_id or self.tape.revision != revision):
+                    raise StudioError("Media o revisione superati: aggiorna il progetto.")
+                if scope == "source":
+                    path=self.source
+                    total=self.info.duration_ms if self.info else 0
+                    relative=start_ms
+                else:
+                    if self.plan is None:
+                        raise StudioError("Prepara prima il montaggio.")
+                    total=sum(x.end_ms-x.start_ms for x in self.plan.segments)
+                    if scope == "preview":
+                        if not self.preview_ready:
+                            raise StudioError("Genera una preview FFmpeg aggiornata.")
+                        path=self.directory/"preview.mp4"
+                        relative=start_ms
+                    else:
+                        window=self.preview_range_window
+                        if not self.preview_range_ready or window is None:
+                            raise StudioError("Genera una clip FFmpeg aggiornata.")
+                        begin=window["start_ms"]
+                        if not begin <= start_ms or start_ms+duration_ms > begin+window["duration_ms"]:
+                            raise StudioError("Audio fuori dall'intervallo della clip.")
+                        path=self.directory/"preview-range.mp4"
+                        relative=start_ms-begin
+                if (not 0 <= start_ms or start_ms+duration_ms > total or
+                    path.is_symlink() or not path.is_file()):
+                    raise StudioError("Audio fuori dal video o media non disponibile.")
+                now=time.monotonic()
+                self._audio_observation_times=[
+                    t for t in self._audio_observation_times if now-t < 60]
+                if len(self._audio_observation_times)>=4:
+                    raise StudioError("Limite di 4 estratti audio al minuto raggiunto.")
+                self._audio_observation_times.append(now)
+            data=audio_wav(path,relative,duration_ms)
+            with self.lock:
+                if (not self.audio_sharing_enabled or self.media_id != media_id
+                    or self.tape is None or self.tape.revision != revision
+                    or (scope=="preview" and not self.preview_ready)
+                    or (scope=="range" and (not self.preview_range_ready
+                        or self.preview_range_window != window))):
+                    raise StudioError("Consenso o progetto modificato durante l'estrazione.")
+            return data
+        finally:
+            self._audio_observation_slot.release()
 
     def observe_frame(self, *, scope: str, at_ms: int, revision: int,
                       media_id: str) -> bytes:
@@ -1153,6 +1235,15 @@ class StudioHandler(BaseHTTPRequestHandler):
                 self.server.workspace.set_visual_consent(body["enabled"])
                 self._json(200, self.server.workspace.snapshot())
                 return
+            if path == "/api/observation/audio-consent":
+                if self.headers.get("Origin") != "http://" + self.headers["Host"]:
+                    raise StudioError("Condivisione consentita solo dalla UI locale.")
+                body = self._read_json()
+                if set(body) != {"enabled"} or type(body["enabled"]) is not bool:
+                    raise StudioError("Parametro consenso non valido.")
+                self.server.workspace.set_audio_consent(body["enabled"])
+                self._json(200, self.server.workspace.snapshot())
+                return
             if path == "/api/plan":
                 self.server.workspace.save_plan(self._read_json().get("segments"))
                 self._json(200, self.server.workspace.snapshot())
@@ -1328,6 +1419,27 @@ class StudioHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/state":
             self._json(200, self.server.workspace.snapshot())
+            return
+        if path == "/api/observation/audio":
+            if self.headers.get("X-Pausio-Client") != "studio":
+                self._failed(403, "Endpoint audio non autorizzato.")
+                return
+            try:
+                raw=parse_qs(urlsplit(self.path).query,strict_parsing=True)
+                if (set(raw)!={"scope","start_ms","duration_ms","revision","media_id"}
+                    or any(len(v)!=1 for v in raw.values())
+                    or len(urlsplit(self.path).query)>240):
+                    raise ValueError("Invalid audio query")
+                data=self.server.workspace.observe_audio(
+                    scope=raw["scope"][0],start_ms=int(raw["start_ms"][0]),
+                    duration_ms=int(raw["duration_ms"][0]),
+                    revision=int(raw["revision"][0]),media_id=raw["media_id"][0])
+                self._send_bytes(200,data,"audio/wav")
+            except VisualConsentRequired as exc:
+                self._failed(403,str(exc))
+            except (ValueError,ObservationError,MediaError) as exc:
+                self._failed(409,str(exc)[:200] if isinstance(exc,StudioError)
+                             else "Audio non disponibile.")
             return
         if path == "/api/observation/frame":
             if self.headers.get("X-Pausio-Client") != "studio":

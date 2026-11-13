@@ -30,7 +30,8 @@ PROJECT_FIELDS = frozenset({
     "editor_segments", "plan", "suggested_plan", "detected_silences",
     "analysis_settings", "captions", "caption_config", "audio_clips",
     "audio_mix", "video_fx", "video_transitions", "graphic_overlays",
-    "image_overlays", "scene_templates", "visual_sharing_enabled", "can_undo", "can_redo", "job", "preview_ready",
+    "image_overlays", "scene_templates", "visual_sharing_enabled",
+    "audio_sharing_enabled", "can_undo", "can_redo", "job", "preview_ready",
     "preview_range_ready", "preview_range_window", "export_ready",
 })
 
@@ -130,6 +131,22 @@ TOOLS: list[dict[str, Any]] = [
                           "items":{"type":"integer","minimum":0}}},
            "required":["revision","media_id","scope","times_ms"],
            "additionalProperties":False}),
+    _tool("pausio_get_audio_context",
+          "Read one genuine 0.5–6 s 16 kHz mono WAV excerpt of the current "
+          "source (SOURCE time) or a completed FFmpeg preview/range "
+          "(EDITED OUTPUT time), after creator separately enables AUDIO "
+          "sharing in local Studio. The agent cannot enable consent. "
+          "One excerpt/call, max four calls/minute; includes real RMS "
+          "and sample peak dBFS (not LUFS). This may share private speech "
+          "with the chat provider.",
+          {"type":"object","properties":{
+              "revision":{"type":"integer","minimum":0},
+              "media_id":{"type":"string","pattern":"^[0-9a-f]{32}$"},
+              "scope":{"type":"string","enum":["source","preview","range"]},
+              "start_ms":{"type":"integer","minimum":0},
+              "duration_ms":{"type":"integer","minimum":500,"maximum":6000}},
+           "required":["revision","media_id","scope","start_ms","duration_ms"],
+           "additionalProperties":False}),
     _tool("pausio_get_scene_templates",
           "Discover bounded, editable full-screen scene templates for statistic "
           "reveal, simulated permission dialog and highlighted code. "
@@ -225,13 +242,17 @@ def capabilities_report() -> dict[str, Any]:
                               "only after the creator opts in in Studio. "
                               "Max 4 frames/call and 12/min, 540x960; "
                               "does not include audio.",
+        "audio_observation": "Actual 0.5–6s mono 16kHz WAV samples via "
+                             "pausio_get_audio_context for source/real FFmpeg "
+                             "preview. Opt in separately in Studio; 4/min; "
+                             "RMS and peak dBFS (not integrated LUFS).",
         "final_render": "Requires a separate manual timeline approval inside Studio; "
                         "output stays on Mac",
         "transcription": "Local cached MLX Whisper only; no implicit model downloads",
         "unsupported": [
             "video B-roll files",
             "automatic B-roll asset selection",
-            "whole-video/audio transfer or automatic frame sharing without local user opt-in",
+            "whole-video/audio transfer or automatic sharing without separate user opt-in",
             "automatic retrieval of ChatGPT-generated file bytes or arbitrary URLs",
             "large (>512 KiB) MCP file import and remote media libraries",
             "unattended final approval",
