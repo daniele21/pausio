@@ -1600,6 +1600,7 @@ const WORKSPACE_LABELS = {
   cuts: ["Tagli AI","Scegli il ritmo, analizza le pause e rivedi gli intervalli.","Revisione tagli"],
   transcript: ["Trascrizione","Trascrivi localmente e rivedi le parole riconosciute.","Trascrizione"],
   captions: ["Sottotitoli","Genera, correggi e posiziona i sottotitoli nella preview.","Sottotitoli"],
+  visual: ["Video FX","Zoom, movimenti e transizioni. Gli effetti diventano visibili nel video dopo una preview FFmpeg.","Effetti visivi"],
   audio: ["Audio e riser","Importa effetti, spostali sulla timeline e regola il volume.","Effetti audio"],
   settings: ["Progetto e impostazioni","Gestisci autosalvataggio, cronologia e file di progetto.","Revisione tagli"]
 };
