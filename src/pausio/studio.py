@@ -34,6 +34,7 @@ from pausio.image_overlays import MAX_IMAGE_BYTES, IMAGE_EXTENSIONS
 from pausio.planner import CUT_PRESETS, validate_cut_settings, policy_from_cut_settings, propose_segments
 from pausio.project_commands import ProjectTape, ProjectFormatError, UI_COMMANDS, default_audio_mix
 from pausio.visual_fx_auto import propose_visual_fx
+from pausio.editorial_planner import propose_editorial_plan
 from pausio.face_reframe import propose_face_anchor, FaceAnalysisUnavailable
 from pausio.studio_persistence import StudioSessionStore, RecoveryError, default_studio_directory
 
@@ -55,6 +56,7 @@ ASSETS = {
     "/face_reframe_ui.js": ("face_reframe_ui.js", "text/javascript; charset=utf-8"),
     "/visual_transition_ui.js": ("visual_transition_ui.js", "text/javascript; charset=utf-8"),
     "/graphic_overlay_ui.js": ("graphic_overlay_ui.js", "text/javascript; charset=utf-8"),
+    "/editorial_ui.js": ("editorial_ui.js", "text/javascript; charset=utf-8"),
     "/image_overlay_ui.js": ("image_overlay_ui.js", "text/javascript; charset=utf-8"),
     "/capture": ("capture.html", "text/html; charset=utf-8"),
     "/capture.html": ("capture.html", "text/html; charset=utf-8"),
@@ -554,6 +556,31 @@ class StudioWorkspace:
             except ValueError as exc:
                 raise StudioError(str(exc)) from exc
 
+    def suggest_editorial_plan(self, raw: dict) -> dict:
+        """Read-only, source-cited plan; no background AI or automatic edits."""
+        with self.lock:
+            self._ensure_unlocked()
+            if self.tape is None or self.info is None or self.media_sha256 is None:
+                raise StudioError("Importa e analizza un video per proporre la regia.")
+            if not isinstance(raw, dict) or set(raw) != {"revision", "preset"}:
+                raise StudioError("La regia richiede revision e preset.")
+            revision = raw["revision"]
+            if type(revision) is not int or revision != self.tape.revision:
+                raise StudioError("Versione progetto non aggiornata. Ricalcola la regia.")
+            try:
+                return propose_editorial_plan(
+                    segments=[dict(s) for s in self.tape.view.segments],
+                    captions=[dict(cue) for cue in self.tape.view.captions],
+                    existing_graphics=[dict(g) for g in self.tape.view.graphic_overlays],
+                    existing_fx=[dict(fx) for fx in self.tape.view.video_fx],
+                    transcript=self.transcript,
+                    preset=raw["preset"],media_sha256=self.media_sha256,
+                    base_revision=revision,
+                    source_duration_ms=self.info.duration_ms,
+                )
+            except ValueError as exc:
+                raise StudioError(str(exc)) from exc
+
     def suggest_face_anchor(self, raw: dict) -> dict:
         """Opt-in read-only local sample; only a human/agent edit changes framing."""
         with self.lock:
@@ -1026,6 +1053,10 @@ class StudioHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/visual-fx/suggest":
                 proposal = self.server.workspace.suggest_visual_fx(self._read_json())
+                self._json(200, proposal)
+                return
+            if path == "/api/editorial/suggest":
+                proposal = self.server.workspace.suggest_editorial_plan(self._read_json())
                 self._json(200, proposal)
                 return
             if path == "/api/captions/generate":
