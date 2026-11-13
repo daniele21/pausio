@@ -324,6 +324,30 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertEqual(empty["graphic_overlays"],[])
         self.assertFalse(self.errors,self.errors)
 
+    def test_visual_frame_sharing_requires_explicit_user_toggle_and_resets_on_import(self):
+        initial=self.upload_analyze()
+        self.page.locator('[data-workspace-nav="visual"]').click()
+        toggle=self.page.locator("#visual-sharing-enabled")
+        self.assertTrue(toggle.is_visible())
+        self.assertFalse(toggle.is_checked())
+        self.assertFalse(initial["visual_sharing_enabled"])
+        toggle.check()
+        self.wait_condition(lambda:self.state()["visual_sharing_enabled"] is True)
+        self.assertIn("questa sessione",
+                      self.page.locator("#visual-sharing-status").inner_text())
+        self.page.reload(wait_until="networkidle")
+        self.assertTrue(self.page.locator("#visual-sharing-enabled").is_checked())
+        self.page.locator("#visual-sharing-enabled").uncheck()
+        self.wait_condition(lambda:self.state()["visual_sharing_enabled"] is False)
+        self.page.locator("#visual-sharing-enabled").check()
+        self.wait_condition(lambda:self.state()["visual_sharing_enabled"] is True)
+        # Reimporting media must revoke access even if the old checkbox was on.
+        self.page.locator("#file-input").set_input_files(str(sample_video(self.root)))
+        self.wait_condition(lambda:self.state()["media_id"]!=initial["media_id"])
+        self.assertFalse(self.state()["visual_sharing_enabled"])
+        self.assertFalse(self.page.locator("#visual-sharing-enabled").is_checked())
+        self.assertFalse(self.errors,self.errors)
+
     def test_fullscreen_scene_template_is_editable_and_previewed_with_ffmpeg(self):
         initial=self.upload_analyze()
         self.page.locator('[data-workspace-nav="visual"]').click()

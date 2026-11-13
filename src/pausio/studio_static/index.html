@@ -19,6 +19,7 @@
   <script src="/editorial_ui.js" defer></script>
   <script src="/image_overlay_ui.js" defer></script>
   <script src="/scene_template_ui.js" defer></script>
+  <script src="/visual_observation_ui.js" defer></script>
 </head>
 <body>
   <div class="app-shell" id="app">
@@ -332,6 +333,19 @@
               <button type="button" class="text-button" id="restore-suggested">Ripristina suggerimenti</button>
               <button type="button" class="text-button" id="restore-all">Mantieni tutto</button>
             </div>
+            <section class="visual-fx-panel" id="visual-observation-panel" aria-labelledby="visual-observation-heading">
+              <header class="visual-fx-heading">
+                <h3 id="visual-observation-heading">Fotogrammi per ChatGPT · consenso</h3>
+                <p>Solo se lo autorizzi, ChatGPT può vedere fino a 4 singoli frame originali o montati per chiamata. Non viene inviato automaticamente il video né l'audio. I frame possono contenere informazioni private.</p>
+              </header>
+              <div class="visual-fx-controls">
+                <label for="visual-sharing-enabled">
+                  <input type="checkbox" id="visual-sharing-enabled" disabled>
+                  Condividi fotogrammi con ChatGPT (questa sessione)
+                </label>
+                <p id="visual-sharing-status" class="visual-fx-status" role="status" aria-live="polite">Condivisione disattivata.</p>
+              </div>
+            </section>
             <section class="visual-fx-panel" id="editorial-plan-panel" aria-labelledby="editorial-plan-heading">
               <header class="visual-fx-heading">
                 <h3 id="editorial-plan-heading">Regia assistita · proposte da verificare</h3>

@@ -30,7 +30,7 @@ PROJECT_FIELDS = frozenset({
     "editor_segments", "plan", "suggested_plan", "detected_silences",
     "analysis_settings", "captions", "caption_config", "audio_clips",
     "audio_mix", "video_fx", "video_transitions", "graphic_overlays",
-    "image_overlays", "scene_templates", "can_undo", "can_redo", "job", "preview_ready",
+    "image_overlays", "scene_templates", "visual_sharing_enabled", "can_undo", "can_redo", "job", "preview_ready",
     "preview_range_ready", "preview_range_window", "export_ready",
 })
 
@@ -115,6 +115,21 @@ TOOLS: list[dict[str, Any]] = [
               "gain_db":{"type":"integer","minimum":-36,"maximum":12}},
            "required":["revision","source_clip_id","output_start_ms","gain_db"],
            "additionalProperties":False}, read_only=False),
+    _tool("pausio_get_visual_context",
+          "Return 1–4 actual bounded JPEG frames from the current source "
+          "(source time), full FFmpeg preview (edited OUTPUT time), or short "
+          "range preview (edited OUTPUT time). The creator MUST first enable "
+          "visual sharing in local Pausio Studio; the agent cannot grant "
+          "access. Requires current revision and media_id. Shares only "
+          "selected stills, never full video or audio.",
+          {"type":"object","properties":{
+              "revision":{"type":"integer","minimum":0},
+              "media_id":{"type":"string","pattern":"^[0-9a-f]{32}$"},
+              "scope":{"type":"string","enum":["source","preview","range"]},
+              "times_ms":{"type":"array","minItems":1,"maxItems":4,
+                          "items":{"type":"integer","minimum":0}}},
+           "required":["revision","media_id","scope","times_ms"],
+           "additionalProperties":False}),
     _tool("pausio_get_scene_templates",
           "Discover bounded, editable full-screen scene templates for statistic "
           "reveal, simulated permission dialog and highlighted code. "
@@ -205,13 +220,18 @@ def capabilities_report() -> dict[str, Any]:
                  "time, mixed or muted. Small licensed/owned/generated audio "
                  "may be imported through bounded base64; large files use Studio UI.",
         "preview": "Whole preview or short OUTPUT-timeline range",
+        "visual_observation": "Bounded JPEG frames (source or exact rendered "
+                              "preview/range) through pausio_get_visual_context, "
+                              "only after the creator opts in in Studio. "
+                              "Max 4 frames/call and 12/min, 540x960; "
+                              "does not include audio.",
         "final_render": "Requires a separate manual timeline approval inside Studio; "
                         "output stays on Mac",
         "transcription": "Local cached MLX Whisper only; no implicit model downloads",
         "unsupported": [
             "video B-roll files",
             "automatic B-roll asset selection",
-            "direct raw-video/frame transfer from this connector to ChatGPT",
+            "whole-video/audio transfer or automatic frame sharing without local user opt-in",
             "automatic retrieval of ChatGPT-generated file bytes or arbitrary URLs",
             "large (>512 KiB) MCP file import and remote media libraries",
             "unattended final approval",

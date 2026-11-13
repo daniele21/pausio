@@ -86,3 +86,5 @@ When changing any video zoom/crop/keyframe, jump-cut transition, automatic visua
 ### Rule for auto visual-effects profiles
 
 `configs/visual_fx_presets_v1.json` and `schemas/pausio-visual-fx-presets-v1.schema.json` are currently **configuration designs**, not working editing features. Read `docs/VISUAL_FX_AUTOMATION_RESEARCH.md` and use `pausio-visual-motion-effects` before adding/modifying profile fields or the suggestion engine; run `python scripts/validate_visual_fx_presets.py`. Default Naturale; preserve manual edits; no silent effect application, permission escalation, raw FFmpeg expression or remote model API. Stage candidate generation and review separately from project mutation and output export.
+
+- **Frame-observation consent (v1):** before exposing video pixels via MCP, require a user-clicked, volatile Studio checkbox; bind requests to exact media ID and revision, enforce source/edited timebase and per-minute budgets, return real bounded JPEG image blocks (not guessed captions). Do not add general file/URL read, remote provider inferencing, implicit consent, or automatic full media sharing. See `docs/VISUAL_OBSERVATION_V1.md`.

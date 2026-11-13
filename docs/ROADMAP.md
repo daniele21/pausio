@@ -109,3 +109,5 @@ See [detailed agentic editing execution plan](AGENTIC_EDITING_PLAN.md) for depen
 - [ ] Before public MCP: independent authenticated HTTPS gateway; OAuth/audience/scope/project authorization; per-user + global quotas, edge DDoS/WAF, safe media sharing, incident response, load/security tests. **Do not tunnel the Studio local server**.
 - [ ] Before GitHub Actions ASR: private dispatch repository, isolated/restricted self-hosted Mac, no PR code execution, bounded jobs and explicit media consent.
 - [ ] Real supported ChatGPT/Claude client interoperability + on-device, manual hardware review.
+
+- [x] **OBS-01 (scoped):** FFmpeg still frames from imported source and current preview (full/range), explicit volatile Studio opt-in, 12/min and 4/call, MCP image output with revision and media binding. [Usage & security](VISUAL_OBSERVATION_V1.md). Audio observation and automatic semantic perception are not yet implemented.

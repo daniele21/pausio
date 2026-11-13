@@ -60,6 +60,7 @@ ASSETS = {
     "/visual_transition_ui.js": ("visual_transition_ui.js", "text/javascript; charset=utf-8"),
     "/graphic_overlay_ui.js": ("graphic_overlay_ui.js", "text/javascript; charset=utf-8"),
     "/scene_template_ui.js": ("scene_template_ui.js", "text/javascript; charset=utf-8"),
+    "/visual_observation_ui.js": ("visual_observation_ui.js", "text/javascript; charset=utf-8"),
     "/scene_template_ui.css": ("scene_template_ui.css", "text/css; charset=utf-8"),
     "/editorial_ui.js": ("editorial_ui.js", "text/javascript; charset=utf-8"),
     "/image_overlay_ui.js": ("image_overlay_ui.js", "text/javascript; charset=utf-8"),
