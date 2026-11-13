@@ -4,6 +4,7 @@ Pausio is a local-first, reviewable editor for natural talking-head videos. Read
 
 ## Non-negotiable product contracts
 
+- **Social composition implementation:** follow `docs/SOCIAL_COMPOSITION_COMPONENTS.md` for component ownership, timebase, render ordering and first thin-slice tickets. Maintain one FFmpeg compiler and typed commands, avoid huge new files or a second editor. Components in this document are PROPOSED until implemented and tested.
 - **B-roll UX follows one timeline:** images are stored in output milliseconds but source ruler marks must project over KEEP segments without duplicating the command. Use the focused `studio_static/image_overlay_ui.js` + `image_overlay_ui.css`; never simulate a rendered image falsely or create a second renderer.
 - **Asset MCP is an opt-in and bounded write:** use `mcp_assets.py` for <=512 KiB base64 media only and the validated Studio importer. For existing files resolve SHA/ID from the active project, never accept local paths or arbitrary URLs. License provenance is a declaration, not verification. See `docs/SOCIAL_EDITOR_RESEARCH.md`; avoid another renderer.
 - **MCP parity is explicit, never assumed:** update `src/pausio/mcp_tool_catalog.py`, `docs/CHATGPT_EDITOR_TRIAL.md` and `tests/test_local_mcp.py` when exposing an existing feature. No ChatGPT client can directly reach the Studio loopback port; never silently approve/export or grant arbitrary file access. Studio remains canonical. Read `pausio-mcp-trust-boundary` and `pausio-network-abuse-defense` skills.

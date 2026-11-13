@@ -80,7 +80,7 @@ These are proposed acceptance criteria, not measured product performance.
 
 ## Phase 4 — Agent-ready Studio (planned; subscription-based chat, no Pausio LLM)
 
-See [detailed agentic editing execution plan](AGENTIC_EDITING_PLAN.md) for dependencies, work packages, UX/API contracts, acceptance criteria and risk gates.
+See [detailed agentic editing execution plan](AGENTIC_EDITING_PLAN.md) for dependencies, work packages, UX/API contracts, acceptance criteria and risk gates. **Current executable component blueprint:** [Social Composition Engine](SOCIAL_COMPOSITION_COMPONENTS.md) (OBS/TIME/LAY/VID/UI/AUD/TMP/TXN/MCP/QA slices; proposed, not yet shipping).
 
 - [ ] WP0: reconcile pending desktop capture / mobile portrait PR stack (#26–#28) with merged #22; independently prove MCP tool write from ChatGPT and Claude Chat in actually supported accounts/clients.
 - [ ] WP1: command schema v3, validated atomic instruction batches, revision checks, asset manifest and import/export migration.
