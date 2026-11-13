@@ -1,6 +1,6 @@
 # Pausio — Agent-ready Studio: execution plan
 
-Status: PROPOSED / 12 November 2026. Product plan, not a claim that the capabilities below are shipped. **Updated implementation scope, as of 13 November:** [Social Composition Engine — components and first tickets](SOCIAL_COMPOSITION_COMPONENTS.md). The older work-package statuses below reflect their original drafting date; inspect the code/current roadmap rather than treating them as current.
+Status: PROPOSED / 12 November 2026. Product plan, not a claim that the capabilities below are shipped. **Updated implementation scope, as of 13 November:** [Social Composition Engine — components and first tickets](SOCIAL_COMPOSITION_COMPONENTS.md). First dedicated screen-composition slice: [three scene templates](SCENE_TEMPLATES_V1.md), not a general scene graph. The older work-package statuses below reflect their original drafting date; inspect the code/current roadmap rather than treating them as current.
 Owner: Pausio. Canonical implementation tracker for overlay editing, audio loudness, local media library, self-hosted transcription and ChatGPT/Claude Chat interoperability.
 
 ## Product contract / non-goals

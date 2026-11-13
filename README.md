@@ -214,3 +214,7 @@ Il bridge `pausio mcp --studio-port 8765` espone un insieme verificabile di stru
 **[Guida pratica, tool disponibili e prova del collegamento](docs/CHATGPT_EDITOR_TRIAL.md)**. Per ChatGPT in cloud serve una connessione MCP autorizzata, ad esempio Secure MCP Tunnel quando disponibile, con requisiti di account e autenticazione separati dalla sottoscrizione ChatGPT.
 
 **[Riferimenti di montaggio social e priorità architetturali](docs/SOCIAL_EDITOR_RESEARCH.md)** — ArtCraft/EffectCraft, AutoBroll e MakeMyClip.
+
+### Scene grafiche controllabili da ChatGPT
+
+In **Video FX → Scene grafiche a schermo intero** ora puoi aggiungere una statistica animata, un popup di autorizzazione chiaramente illustrativo o una scheda codice con riga evidenziata. La voce originale prosegue sotto la scena e la preview/export usano lo stesso FFmpeg/libass. Le istruzioni `scene.template.add/update/remove` sono versionate (progetto v8), esportabili e accessibili anche via MCP dopo `pausio_get_scene_templates`. [Guida e limiti](docs/SCENE_TEMPLATES_V1.md).

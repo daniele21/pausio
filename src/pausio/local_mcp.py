@@ -19,6 +19,7 @@ from typing import Any, TextIO
 
 from pausio.mcp_tool_catalog import (EDIT_TYPES, TOOLS, capabilities_report,
                                       project_projection)
+from pausio.scene_templates import catalog as scene_template_catalog
 from pausio.mcp_assets import (AssetToolError, MAX_AGENT_BYTES, inventory,
                                import_media, duplicate_media)
 
@@ -121,13 +122,17 @@ class StudioClient:
 def call_tool(name: str, arguments: dict, studio: StudioClient) -> dict:
     if not isinstance(arguments, dict):
         raise MCPToolError("Tool arguments must be an object")
-    if name in {"pausio_list_assets", "pausio_get_capabilities", "pausio_get_project",
+    if name in {"pausio_get_scene_templates", "pausio_list_assets", "pausio_get_capabilities", "pausio_get_project",
                 "pausio_get_transcript", "pausio_get_job_status",
                 "pausio_start_pause_analysis", "pausio_start_transcription",
                 "pausio_render_preview", "pausio_render_approved_video"} and arguments:
         raise MCPToolError("This tool does not accept arguments")
     if name == "pausio_get_capabilities":
         return capabilities_report()
+    if name == "pausio_get_scene_templates":
+        return {"templates": scene_template_catalog(), "timebase": "output",
+                "min_duration_ms": 2500, "max_duration_ms": 12000,
+                "max_scenes": 9, "audio": "Original voice and existing mix remain."}
     if name == "pausio_list_assets":
         return inventory(studio.request("GET", "/api/state"))
     if name == "pausio_import_image":

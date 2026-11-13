@@ -4,6 +4,7 @@ Pausio is a local-first, reviewable editor for natural talking-head videos. Read
 
 ## Non-negotiable product contracts
 
+- **Scene-template v8 discipline:** for full-screen explanatory cards use `scene_templates.py` and canonical `scene.template.add/update/remove` commands; keep output timestamps explicit, validate strict template fields, preserve narration, and use the same ASS path in preview/export. When editing the registry also update the Studio form, MCP tool catalog and `schemas/pausio-project-v8.schema.json`; read `docs/SCENE_TEMPLATES_V1.md`.
 - **Social composition implementation:** follow `docs/SOCIAL_COMPOSITION_COMPONENTS.md` for component ownership, timebase, render ordering and first thin-slice tickets. Maintain one FFmpeg compiler and typed commands, avoid huge new files or a second editor. Components in this document are PROPOSED until implemented and tested.
 - **B-roll UX follows one timeline:** images are stored in output milliseconds but source ruler marks must project over KEEP segments without duplicating the command. Use the focused `studio_static/image_overlay_ui.js` + `image_overlay_ui.css`; never simulate a rendered image falsely or create a second renderer.
 - **Asset MCP is an opt-in and bounded write:** use `mcp_assets.py` for <=512 KiB base64 media only and the validated Studio importer. For existing files resolve SHA/ID from the active project, never accept local paths or arbitrary URLs. License provenance is a declaration, not verification. See `docs/SOCIAL_EDITOR_RESEARCH.md`; avoid another renderer.

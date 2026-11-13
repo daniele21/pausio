@@ -324,6 +324,39 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertEqual(empty["graphic_overlays"],[])
         self.assertFalse(self.errors,self.errors)
 
+    def test_fullscreen_scene_template_is_editable_and_previewed_with_ffmpeg(self):
+        initial=self.upload_analyze()
+        self.page.locator('[data-workspace-nav="visual"]').click()
+        self.wait_condition(lambda:self.page.locator("#scene-template-kind").locator("option").count()==3)
+        self.page.locator("#scene-template-kind").select_option("stat_reveal")
+        self.page.locator("#scene-template-duration").fill("2500")
+        self.page.locator("#scene-template-fields").locator('[data-scene-field="number"]').fill("1.379")
+        self.page.locator("#scene-template-add").click()
+        added=self.wait_state("revision",initial["project_revision"]+1)
+        self.assertEqual(len(added["scene_templates"]),1)
+        self.assertEqual(added["scene_templates"][0]["content"]["number"],"1.379")
+        self.assertEqual(added["scene_templates"][0]["start_ms"],0)
+        item=self.page.locator(".scene-card").first
+        item.locator("details summary").click()
+        item.locator('[data-scene-field="number"]').fill("1.380")
+        item.get_by_role("button",name="Salva modifiche").click()
+        updated=self.wait_state("revision",added["project_revision"]+1)
+        self.assertEqual(updated["scene_templates"][0]["content"]["number"],"1.380")
+        item=self.page.locator(".scene-card").first
+        item.get_by_role("button",name="Guarda 5 s").click()
+        clip=self.wait_state("preview_range","completed",timeout=120000)
+        self.assertTrue(clip["preview_range_ready"],clip["job"])
+        self.wait_condition(lambda:self.page.locator("#quick-preview-dialog").is_visible())
+        self.shot("scene-template-real-ffmpeg")
+        self.page.locator("#quick-preview-close").click()
+        self.page.keyboard.press("Control+z")
+        undone=self.wait_state("revision",updated["project_revision"]+1)
+        self.assertEqual(undone["scene_templates"][0]["content"]["number"],"1.379")
+        self.page.keyboard.press("Control+z")
+        removed=self.wait_state("revision",undone["project_revision"]+1)
+        self.assertEqual(removed["scene_templates"],[])
+        self.assertFalse(self.errors,self.errors)
+
     def test_pulse_and_sweep_can_be_added_and_rendered_in_video_fx_workspace(self):
         initial=self.upload_analyze()
         self.page.locator("#restore-all").click()
@@ -396,7 +429,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
         exported=self.root/"visual-fx.pausio.json"
         download.value.save_as(exported)
         document=json.loads(exported.read_text())
-        self.assertEqual(document["schema_version"],7)
+        self.assertEqual(document["schema_version"],8)
         self.assertIn("video.transform.update",[row["type"] for row in document["commands"]])
         self.assertFalse(self.errors,self.errors)
 
@@ -877,7 +910,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
             self.page.locator("#project-export").click()
         saved=self.root/"project.pausio.json";download.value.save_as(saved)
         data=json.loads(saved.read_text())
-        self.assertEqual(data["schema_version"],7)
+        self.assertEqual(data["schema_version"],8)
         self.assertIn("segment.update",[c["type"] for c in data["commands"]])
 
         self.page.locator("#preview-action").click()

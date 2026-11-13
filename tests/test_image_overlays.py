@@ -25,7 +25,7 @@ class ImageOverlayTests(unittest.TestCase):
 
     def test_event_replay_portability_and_undo_redo(self):
         tape=self.start.append("image.overlay.add",{"image":self.image})
-        self.assertEqual(tape.as_dict()["schema_version"],7)
+        self.assertEqual(tape.as_dict()["schema_version"],8)
         self.assertEqual(tape.view.image_overlays,(self.image,))
         self.assertEqual(ProjectTape.from_dict(tape.as_dict()).view.image_overlays,
                          tape.view.image_overlays)

@@ -10,6 +10,7 @@ from typing import Any
 
 from pausio.domain import Interval
 from pausio.captions import ass_document, _ass_time, _ass_text, _ass_color
+from pausio.scene_templates import compose_scene_events
 
 MAX_GRAPHICS = 12
 KINDS = frozenset({"headline", "stat", "code", "tip"})
@@ -83,13 +84,21 @@ def remap_graphics(graphics: tuple[dict, ...] | list[dict],
 
 
 def compose_graphics_ass(cues: list[dict], graphics: list[dict], *,
-                         style: str = "social", settings: dict | None = None) -> str:
+                         style: str = "social", settings: dict | None = None,
+                         scenes: list[dict] | None = None,
+                         output_ms: int | None = None) -> str:
     """Compose captions and overlays in one libass pass after zoom/crop.
 
     Pixel coordinates use the same ASS PlayRes 1080x1920 for preview and export.
     No user-controlled ASS override text is evaluated.
     """
     base = ass_document(cues, style=style, settings=settings)
+    scene_rows = scenes or []
+    if scene_rows:
+        if type(output_ms) is not int or output_ms <= 0:
+            raise ValueError("La durata del montaggio è necessaria per le scene.")
+        # Captions remain on top of full-screen scene backgrounds and labels.
+        base = base.replace("Dialogue: 0,", "Dialogue: 10,")
     # Distinct native libass card styles; no user-provided fonts or filters.
     def style_line(name: str, font: str, border: int, outline: int,
                    back_color: str) -> str:
@@ -105,6 +114,8 @@ def compose_graphics_ass(cues: list[dict], graphics: list[dict], *,
         + style_line("GraphicCode", "Courier New", 3, 12, "&H50131520")
         + style_line("GraphicTip", "Avenir Next", 3, 9, "&H5533291C")
     )
+    if scene_rows:
+        overlay_style += style_line("Scene", "Arial", 1, 0, "&H00000000")
     result = base.replace("[Events]\n", overlay_style+"[Events]\n", 1)
     events = []
     for g in graphics:
@@ -140,4 +151,6 @@ def compose_graphics_ass(cues: list[dict], graphics: list[dict], *,
             f"Dialogue: 1,{_ass_time(g['start_ms'])},{_ass_time(g['end_ms'])},"
             f"{style_name},,0,0,0,,{{{overrides}}}{line}\n"
         )
-    return result + "".join(events)
+    scene_events = (compose_scene_events(scene_rows, output_ms)
+                    if scene_rows else "")
+    return result + "".join(events) + scene_events

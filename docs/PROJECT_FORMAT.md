@@ -183,3 +183,9 @@ The deterministic ASS composer maps source times through KEEP cuts and applies f
 ## Local image PIP/B-roll — portable v7
 
 Native events `image.overlay.add`, `image.overlay.update`, `image.overlay.remove` keep SHA-256 (not image bytes, paths or remote URLs), safe filename, unique ID, output-time `start_ms/duration_ms` (400–12,000ms), `x_pct/y_pct` (0–100) and `width_pct` (20–70). Maximum four simultaneous project image events, all validated against output duration. The local Studio upload accepts only PNG/JPG/WebP files up to 12MB and 12MP, restricted codecs validated by FFprobe; copied to a private hashed workspace path with mode 0600. Reimport the *identical bytes* on a new device to resolve a missing asset. Undo/Redo and the same FFmpeg composite are used for preview/final export; screenshots appear after zoom/crop but under captions and animated text. A future milestone adds video B-roll, animation/keyframe envelopes, thumbnail library and direct asset relinking UI. V1–V6 projects remain readable; exporting writes v7.
+
+## Scene grafiche a schermo intero — progetto v8
+
+Le istruzioni `scene.template.add/update/remove` salvano un `scene` con `id`, `template` (`stat_reveal`/`permission_dialog`/`code_highlight`), `start_ms` **del video montato**, `duration_ms` 2500..12000, `accent` (mint/orange) e un `content` strettamente validato. Un massimo di nove scene non sovrapposte. La rimozione usa `scene_id`. Le scene coprono visivamente il footage, ma mantengono la voce e il mix audio; i sottotitoli sono sul livello superiore. Nessun input di script, HTML o filtro FFmpeg.
+
+Il progetto portabile passa a v8; v1–v7 sono importabili senza riscrivere gli eventi storici. Ogni modifica invalida l'approvazione e la preview; trasporti/import media e asset restano separati da questo documento. Implementazione e MCP [SCENE_TEMPLATES_V1.md](SCENE_TEMPLATES_V1.md).

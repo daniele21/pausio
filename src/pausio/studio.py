@@ -30,6 +30,7 @@ from pausio.captions import (
 )
 from pausio.media import MediaError, MediaInfo, detect_silences, probe, probe_audio, probe_image, render, waveform_envelope, extract_preview_range
 from pausio.graphic_overlays import remap_graphics
+from pausio.scene_templates import catalog as scene_template_catalog
 from pausio.image_overlays import MAX_IMAGE_BYTES, IMAGE_EXTENSIONS
 from pausio.planner import CUT_PRESETS, validate_cut_settings, policy_from_cut_settings, propose_segments
 from pausio.project_commands import ProjectTape, ProjectFormatError, UI_COMMANDS, default_audio_mix
@@ -58,6 +59,8 @@ ASSETS = {
     "/face_reframe_ui.js": ("face_reframe_ui.js", "text/javascript; charset=utf-8"),
     "/visual_transition_ui.js": ("visual_transition_ui.js", "text/javascript; charset=utf-8"),
     "/graphic_overlay_ui.js": ("graphic_overlay_ui.js", "text/javascript; charset=utf-8"),
+    "/scene_template_ui.js": ("scene_template_ui.js", "text/javascript; charset=utf-8"),
+    "/scene_template_ui.css": ("scene_template_ui.css", "text/css; charset=utf-8"),
     "/editorial_ui.js": ("editorial_ui.js", "text/javascript; charset=utf-8"),
     "/image_overlay_ui.js": ("image_overlay_ui.js", "text/javascript; charset=utf-8"),
     "/capture": ("capture.html", "text/html; charset=utf-8"),
@@ -172,6 +175,8 @@ class StudioWorkspace:
                 "video_fx": [dict(fx) for fx in self.tape.view.video_fx] if self.tape else [],
                 "video_transitions": [dict(t) for t in self.tape.view.video_transitions] if self.tape else [],
                 "graphic_overlays": [dict(g) for g in self.tape.view.graphic_overlays] if self.tape else [],
+                "scene_templates": [dict(g) for g in self.tape.view.scene_templates] if self.tape else [],
+                "scene_template_catalog": scene_template_catalog(),
                 "image_overlays": [
                     {**dict(item), "available": self._image_path(
                         item["asset_sha256"], item["filename"]).is_file() and
@@ -872,6 +877,7 @@ class StudioWorkspace:
                         captions=mapped, caption_style=current_style,
                         caption_config=current_config,
                         graphic_overlays=graphics,
+                        scene_templates=[dict(x) for x in self.tape.view.scene_templates],
                         image_overlays=active_images,
                         audio_fx=active_fx, audio_mix=current_audio_mix,
                         video_fx=current_visual_fx,
