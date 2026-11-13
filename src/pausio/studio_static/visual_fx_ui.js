@@ -24,7 +24,7 @@
     return b;
   };
   function title(kind){
-    return kind==="punch"?"Punch-in":"Zoom progressivo";
+    return ({punch:"Punch-in",slow_push:"Zoom progressivo",ease_push:"Zoom morbido",ratchet:"Ratchet · 3 scatti"})[kind]||"Video FX";
   }
   function ignoredKey(preset){
     return "pausio.fx.ignored.v1."+String(current().media_id||"")+"."+preset;
@@ -80,7 +80,7 @@
     const y=field("Centro Y (%)",effect.anchor_y_pct,{min:0,max:100});
     const kind=document.createElement("label");kind.textContent="Movimento";
     const select=document.createElement("select");
-    for(const value of ["punch","slow_push"]){
+    for(const value of ["punch","slow_push","ease_push","ratchet"]){
       const option=document.createElement("option");
       option.value=value;option.textContent=title(value);
       select.append(option);
@@ -120,8 +120,11 @@
     head.textContent=title(effect.kind)+" · "+
       (effect.end_scale_pct/100).toFixed(2)+"×";
     const desc=document.createElement("p");
-    const reason=candidate.evidence?.kind==="cut_boundary"?
-      "Dopo un taglio reale":"Inizio frase con timestamp ASR";
+    const reason=({
+      cut_boundary:"Dopo un taglio reale",
+      asr_phrase_boundary:"Inizio frase con timestamp ASR",
+      measured_waveform_rise:"Aumento misurato della waveform audio"
+    })[candidate.evidence?.kind]||"Segnale tecnico verificato";
     desc.textContent=formatMs(effect.start_ms)+" – "+
       formatMs(effect.end_ms)+" · "+reason+
       " · punteggio tecnico "+candidate.score_0_100+"/100";
@@ -145,6 +148,7 @@
     loadIgnored();
     const has=!!current().media && !!current().plan;
     const busy=working();
+    e("visual-fx-custom").hidden=e("visual-fx-preset").value!=="personalizzato";
     for(const id of ["visual-fx-add","visual-fx-suggest","visual-fx-preview"])
       e(id).disabled=!has||busy;
     for(const id of ["visual-fx-preset","visual-fx-kind","visual-fx-scale"])
@@ -209,9 +213,28 @@
   async function suggest(){
     if(!current().plan)throw Error("Crea prima il montaggio.");
     const preset=e("visual-fx-preset").value;
+    let options;
+    if(preset==="personalizzato"){
+      const spec=[
+        ["max_per_min","visual-fx-max-per-min"],
+        ["gap_ms","visual-fx-gap"],
+        ["punch_pct","visual-fx-punch"],
+        ["push_pct","visual-fx-push"],
+        ["push_ms","visual-fx-push-ms"]
+      ];
+      options={};
+      for(const [key,id] of spec){
+        const input=e(id);
+        if(!input.checkValidity())throw Error("Il parametro "+key+" non rientra nei limiti.");
+        options[key]=Number(input.value);
+      }
+      options.use_audio_energy=e("visual-fx-audio-energy").checked;
+      if(options.gap_ms<options.push_ms)
+        throw Error("La pausa tra effetti non può essere più corta dello zoom.");
+    }
     const requestedMediaId=current().media_id;
     const response=await post("/api/visual-fx/suggest",{
-      revision:current().project_revision,preset
+      revision:current().project_revision,preset,...(options?{options}:{})
     });
     if(requestedMediaId!==current().media_id){
       // Studio returns media_id as SHA-256; changing media while a promise
@@ -223,7 +246,7 @@
     proposal=response;
     proposalForMediaId=requestedMediaId;
     const missing=response.missing_signals?.includes("asr_phrases")?
-      " Senza frasi ASR sono disponibili solo i cambi su tagli reali.":"";
+      " Senza frasi ASR verranno usati solo gli altri segnali disponibili.":"";
     status(response.candidates.length+" effetti proposti · nessuno è stato applicato."+missing);
     draw();
   }
@@ -254,6 +277,12 @@
     selectedFxId=effect.id;draw();
   }
   e("visual-fx-suggest").addEventListener("click",()=>run(suggest));
+  const customIds=["visual-fx-max-per-min","visual-fx-gap","visual-fx-punch",
+                   "visual-fx-push","visual-fx-push-ms","visual-fx-audio-energy"];
+  for(const id of customIds)e(id).addEventListener("change",()=>{
+    proposal=null;proposalStatus="Parametri cambiati. Ricalcola i suggerimenti.";
+    draw();
+  });
   e("visual-fx-preset").addEventListener("change",()=>{
     proposal=null;proposalStatus="Scegli «Suggerisci effetti» per ricalcolare.";
     ignoredContext="";draw();

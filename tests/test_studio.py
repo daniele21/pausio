@@ -452,6 +452,113 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         self.assertFalse(new_state["approved"])
         self.assertEqual(len(self.workspace.tape.commands),2)
 
+    def test_face_reframing_is_readonly_until_typed_approval(self):
+        from unittest.mock import patch
+        self.import_clip()
+        status,_,raw=self.post("/api/plan",{"segments":[
+            {"start_ms":0,"end_ms":1400}
+        ]})
+        self.assertEqual(status,200,raw)
+        state=json.loads(raw)
+        seg=state["editor_segments"][0]
+        effect={"id":"a"*32,"segment_id":seg["id"],
+                "start_ms":200,"end_ms":1100,"kind":"slow_push",
+                "start_scale_pct":100,"end_scale_pct":116,
+                "anchor_x_pct":50,"anchor_y_pct":50}
+        status,_,raw=self.post("/api/command",{
+            "revision":state["project_revision"],"type":"video.transform.add",
+            "payload":{"effect":effect}})
+        self.assertEqual(status,200,raw)
+        edited=json.loads(raw)
+        with patch("pausio.studio.propose_face_anchor",return_value={
+            "status":"ready","anchor_x_pct":78,"anchor_y_pct":44,
+            "samples":5,"method":"local-haar-stable-crop-v1"
+        }):
+            status,_,raw=self.post("/api/visual-fx/face-anchor",{
+                "revision":edited["project_revision"],"effect_id":effect["id"]})
+        self.assertEqual(status,200,raw)
+        suggestion=json.loads(raw)
+        self.assertEqual(suggestion["status"],"ready")
+        self.assertEqual(suggestion["media_sha256"],self.workspace.media_sha256)
+        self.assertEqual(self.get_state()["video_fx"],[effect])
+        self.assertEqual(self.get_state()["project_revision"],edited["project_revision"])
+        self.assertEqual(self.post("/api/visual-fx/face-anchor",{
+            "revision":-1,"effect_id":effect["id"]})[0],409)
+        approved={**effect,"anchor_x_pct":78,"anchor_y_pct":44}
+        status,_,raw=self.post("/api/command",{
+            "revision":edited["project_revision"],"type":"video.transform.update",
+            "payload":{"effect":approved}})
+        self.assertEqual(status,200,raw)
+        self.assertEqual(json.loads(raw)["video_fx"],[approved])
+
+    def test_custom_fx_profile_api_remains_read_only_and_rejects_unsafe_values(self):
+        self.import_clip()
+        state=self.get_state()
+        options={"max_per_min":5,"gap_ms":5500,"punch_pct":118,
+                 "push_pct":110,"push_ms":2000,"use_audio_energy":True}
+        req={"revision":state["project_revision"],"preset":"personalizzato",
+             "options":options}
+        status,_,raw=self.post("/api/visual-fx/suggest",req)
+        self.assertEqual(status,200,raw)
+        result=json.loads(raw)
+        self.assertEqual(result["effective_profile"]["max_per_min"],5)
+        self.assertEqual(self.get_state()["project_revision"],state["project_revision"])
+        for bad in ({**req,"options":{**options,"punch_pct":500}},
+                    {**req,"options":{**options,"use_audio_energy":1}},
+                    {**req,"executable":"ffmpeg raw"},
+                    {**req,"preset":"naturale"}):
+            self.assertEqual(self.post("/api/visual-fx/suggest",bad)[0],400)
+
+    def test_dip_transition_command_preview_export_and_undo(self):
+        # The standard Studio fixture is only 1.5s; dips require both sides
+        # >=1.2s. Use a separate 4s synthetic clip for this E2E regression.
+        with tempfile.TemporaryDirectory() as directory:
+            source=Path(directory)/"dip-fixture.mp4"
+            subprocess.run([
+                "ffmpeg","-hide_banner","-loglevel","error","-y",
+                "-f","lavfi","-i","testsrc2=size=180x320:rate=30:duration=4",
+                "-f","lavfi","-i","sine=frequency=440:duration=4",
+                "-shortest","-c:v","libx264","-pix_fmt","yuv420p",
+                "-c:a","aac",str(source)
+            ],check=True,timeout=40)
+            status,_,raw=self.request("POST","/api/import",source.read_bytes(),{
+                "Content-Type":"application/octet-stream",
+                "X-Pausio-Client":"studio","X-Filename":"dip-fixture.mp4",
+                "Origin":self.base})
+            self.assertEqual(status,200,raw)
+        status,_,raw=self.post("/api/plan",{"segments":[
+            {"start_ms":0,"end_ms":1500},{"start_ms":2200,"end_ms":3900}
+        ]})
+        self.assertEqual(status,200,raw)
+        current=json.loads(raw)
+        left,right=current["editor_segments"]
+        trans={"id":"f"*32,"left_segment_id":left["id"],
+               "right_segment_id":right["id"],"kind":"dip_black","duration_ms":300}
+        before=current["project_revision"]
+        status,_,raw=self.post("/api/command",{
+            "revision":before,"type":"video.transition.add",
+            "payload":{"transition":trans}
+        })
+        self.assertEqual(status,200,raw)
+        changed=json.loads(raw)
+        self.assertEqual(changed["video_transitions"],[trans])
+        self.assertFalse(changed["approved"])
+        self.assertEqual(self.post("/api/command",{
+            "revision":before,"type":"video.transition.add","payload":{"transition":trans}
+        })[0],409)
+        status,_,_=self.post("/api/jobs",{"kind":"preview"})
+        self.assertEqual(status,202)
+        ready=self.await_job("preview")
+        self.assertTrue(ready["preview_ready"])
+        status,_,raw=self.request("GET","/api/project/export")
+        self.assertEqual(status,200)
+        self.assertIn("video.transition.add",[e["type"] for e in json.loads(raw)["commands"]])
+        status,_,raw=self.post("/api/command",{
+            "revision":changed["project_revision"],"type":"history.undo","payload":{}
+        })
+        self.assertEqual(status,200,raw)
+        self.assertEqual(json.loads(raw)["video_transitions"],[])
+
     def test_visual_fx_readonly_suggestions_then_typed_preview_and_export(self):
         self.import_clip()
         initial=self.get_state()
@@ -507,7 +614,7 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         status,_,document=self.request("GET","/api/project/export")
         self.assertEqual(status,200)
         self.assertIn("video.transform.add",[e["type"] for e in json.loads(document)["commands"]])
-        self.assertEqual(json.loads(document)["schema_version"],3)
+        self.assertEqual(json.loads(document)["schema_version"],4)
         status,_,raw=self.post("/api/command",{
             "revision":changed["project_revision"],"type":"history.undo","payload":{}
         })
@@ -655,7 +762,7 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         self.assertEqual(status, 200)
         self.assertIn(".pausio.json", headers["Content-Disposition"])
         document = json.loads(serialized)
-        self.assertEqual(document["schema_version"], 3)
+        self.assertEqual(document["schema_version"], 4)
         self.assertEqual(
             [item["type"] for item in document["commands"]],
             ["analysis.propose", "segment.update", "timeline.approve"],
@@ -681,7 +788,7 @@ class StudioMediaWorkflowTests(StudioHttpTests):
 
         wrong = json.loads(json.dumps(document))
         wrong["media"]["sha256"] = "f" * 64
-        for bad in (wrong, {**document, "schema_version": 4},
+        for bad in (wrong, {**document, "schema_version": 5},
                     {**document, "commands": [{"id": "0" * 32,
                                               "type": "execute.code", "payload": {}}]}):
             status, _, _ = self.post("/api/project/import", bad)
@@ -717,7 +824,7 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         self.assertTrue(undone["can_redo"])
 
         portable = json.loads(self.request("GET", "/api/project/export")[2])
-        self.assertEqual(portable["schema_version"], 3)
+        self.assertEqual(portable["schema_version"], 4)
         self.assertEqual(portable["history_cursor"], 1)
         self.assertEqual(len(portable["commands"]), 2)
         self.assertEqual(portable["revision"], 3)

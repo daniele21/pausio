@@ -16,6 +16,7 @@ from pathlib import Path
 from pausio.captions import ass_document
 from pausio.domain import Interval
 from pausio.visual_fx import motion_filter, prepare_motion_fx
+from pausio.visual_transitions import compile_dips
 
 
 class MediaError(RuntimeError):
@@ -184,6 +185,7 @@ def render(
     audio_fx: list[tuple[Path, dict]] | None = None,
     audio_mix: dict | None = None,
     video_fx: list[dict] | None = None,
+    video_transitions: list[dict] | None = None,
 ) -> list[str]:
     """Render ordered intervals in one re-encode; preserve aspect ratio with padding.
 
@@ -225,6 +227,7 @@ def render(
     # subtitle/safe-zone coordinates and source-time mapping.
     try:
         motion_groups = prepare_motion_fx(segments, video_fx)
+        transition_fades = compile_dips(segments, video_transitions)
     except ValueError as exc:
         raise MediaError(str(exc)) from exc
     components: list[str] = []
@@ -244,11 +247,14 @@ def render(
                 motion_groups.get(i, []), seg.start_ms, size
             )
             chain += ("," + effect_filter if effect_filter else ",format=yuv420p")
+            chain += "".join("," + part for part in transition_fades.get(i, []))
             components.append(chain + f"[v{i}]")
         else:
-            components.append(
-                f"[0:v:0]trim=start={start:.3f}:end={end:.3f},setpts=PTS-STARTPTS[v{i}]"
-            )
+            chain=f"[0:v:0]trim=start={start:.3f}:end={end:.3f},setpts=PTS-STARTPTS"
+            if transition_fades:
+                chain+=",format=yuv420p"
+                chain+="".join(","+part for part in transition_fades.get(i,[]))
+            components.append(chain+f"[v{i}]")
         concat_inputs.append(f"[v{i}]")
         if has_audio:
             components.append(

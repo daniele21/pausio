@@ -167,8 +167,81 @@ class StudioPlaywrightAudit(unittest.TestCase):
         exported=self.root/"visual-fx.pausio.json"
         download.value.save_as(exported)
         document=json.loads(exported.read_text())
-        self.assertEqual(document["schema_version"],3)
+        self.assertEqual(document["schema_version"],4)
         self.assertIn("video.transform.update",[row["type"] for row in document["commands"]])
+        self.assertFalse(self.errors,self.errors)
+
+    def test_face_anchor_optional_ui_requires_reviewed_typed_edit(self):
+        from unittest.mock import patch
+        state=self.upload_analyze()
+        self.page.locator('[data-workspace-nav="cuts"]').click()
+        self.page.evaluate("() => document.getElementById('preview-video').currentTime=2.65")
+        before=self.state()["project_revision"]
+        self.page.locator("#visual-fx-add").click()
+        added=self.wait_state("revision",before+1)
+        self.assertEqual(len(added["video_fx"]),1)
+        effect=added["video_fx"][0]
+        self.assertTrue(self.page.locator("#face-analyze").is_visible())
+        with patch("pausio.studio.propose_face_anchor",return_value={
+            "status":"ready","anchor_x_pct":77,"anchor_y_pct":49,
+            "samples":5,"method":"local-haar-stable-crop-v1"
+        }):
+            self.page.locator("#face-analyze").click()
+            self.wait_condition(lambda:self.page.locator("#face-accept").is_visible())
+        # Suggestions never alter the stored event until explicit acceptance.
+        self.assertEqual(self.state()["project_revision"],added["project_revision"])
+        self.assertEqual(self.state()["video_fx"][0],effect)
+        self.page.locator("#face-accept").click()
+        changed=self.wait_state("revision",added["project_revision"]+1)
+        self.assertEqual(changed["video_fx"][0]["anchor_x_pct"],77)
+        self.assertEqual(changed["video_fx"][0]["anchor_y_pct"],49)
+        self.assertFalse(self.errors,self.errors)
+
+    def test_custom_fx_profile_is_real_editable_readonly_proposal_ui(self):
+        initial=self.upload_analyze()
+        self.page.locator('[data-workspace-nav="cuts"]').click()
+        self.page.locator("#visual-fx-preset").select_option("personalizzato")
+        self.assertTrue(self.page.locator("#visual-fx-custom").is_visible())
+        self.page.locator("#visual-fx-max-per-min").fill("8")
+        self.page.locator("#visual-fx-punch").fill("121")
+        self.page.locator("#visual-fx-audio-energy").check()
+        revision=self.state()["project_revision"]
+        self.page.locator("#visual-fx-suggest").click()
+        self.wait_condition(lambda:"proposti" in self.page.locator(
+            "#visual-fx-suggest-status").inner_text())
+        self.assertEqual(self.state()["project_revision"],revision)
+        self.assertEqual(self.state()["video_fx"],[])
+        self.page.locator("#visual-fx-max-per-min").fill("88")
+        self.page.locator("#visual-fx-suggest").click()
+        self.assertEqual(self.state()["project_revision"],revision)
+        self.assertFalse(self.errors,self.errors)
+
+    def test_dip_transition_visual_ui_preview_and_undo(self):
+        self.upload_analyze()
+        self.page.locator('[data-workspace-nav="cuts"]').click()
+        url=f"http://127.0.0.1:{self.server.server_port}/api/plan"
+        response=self.page.request.post(url,data=json.dumps({
+            "segments":[{"start_ms":0,"end_ms":1450},
+                        {"start_ms":2400,"end_ms":3850}]
+        }),headers={"Content-Type":"application/json","X-Pausio-Client":"studio",
+                   "Origin":f"http://127.0.0.1:{self.server.server_port}"})
+        self.assertEqual(response.status,200,response.text())
+        self.page.evaluate("refresh()")
+        self.wait_condition(lambda:self.page.locator("#transition-boundary option").count()==1)
+        before=self.state()["project_revision"]
+        self.page.locator("#transition-duration").select_option("400")
+        self.page.locator("#transition-add").click()
+        changed=self.wait_state("revision",before+1)
+        self.assertEqual(len(changed["video_transitions"]),1)
+        self.assertEqual(changed["video_transitions"][0]["duration_ms"],400)
+        self.wait_condition(lambda:self.page.locator(".transition-mark").count()==1)
+        self.page.locator("#preview-action").click()
+        preview=self.wait_state("preview","completed",timeout=120000)
+        self.assertTrue(preview["preview_ready"])
+        self.shot("transition-dip-preview")
+        self.page.keyboard.press("Control+z")
+        undone=self.wait_state("revision",changed["project_revision"]+1)
+        self.assertEqual(undone["video_transitions"],[])
         self.assertFalse(self.errors,self.errors)
 
     def test_custom_audio_fx_import_in_real_browser(self):
@@ -569,7 +642,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
             self.page.locator("#project-export").click()
         saved=self.root/"project.pausio.json";download.value.save_as(saved)
         data=json.loads(saved.read_text())
-        self.assertEqual(data["schema_version"],3)
+        self.assertEqual(data["schema_version"],4)
         self.assertIn("segment.update",[c["type"] for c in data["commands"]])
 
         self.page.locator("#preview-action").click()

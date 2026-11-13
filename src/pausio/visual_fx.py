@@ -43,12 +43,14 @@ def prepare_motion_fx(
         if not (segment.start_ms <= a < b <= segment.end_ms and
                 250 <= b - a <= 60000):
             raise ValueError("Video FX outside source KEEP or invalid duration")
-        if type(entry["kind"]) is not str or entry["kind"] not in ("punch", "slow_push"):
+        if type(entry["kind"]) is not str or entry["kind"] not in ("punch", "slow_push", "ease_push", "ratchet"):
             raise ValueError("Unsupported video FX operation")
         scales = [
             _integer(entry[key], 100, 130, key)
             for key in ("start_scale_pct", "end_scale_pct")
         ]
+        if entry["kind"] == "ratchet" and b-a < 1200:
+            raise ValueError("Ratchet must last at least 1200ms")
         if entry["kind"] == "punch" and scales[0] != scales[1]:
             raise ValueError("Punch requires a constant scale")
         for key in ("anchor_x_pct", "anchor_y_pct"):
@@ -97,7 +99,18 @@ def motion_filter(
             zoom=f"{initial:.3f}"
         else:
             frames=max(1,end-start-1)
-            zoom=f"({initial:.3f}+({final-initial:.3f})*min(1\\,max(0\\,(on-{start})/{frames})))"
+            fraction=f"min(1\\,max(0\\,(on-{start})/{frames}))"
+            if fx["kind"]=="ease_push":
+                # Smoothstep: C1-continuous bounded acceleration. No overshoot.
+                phase=f"({fraction})"
+                progress=f"({phase}*{phase}*(3-2*{phase}))"
+            elif fx["kind"]=="ratchet":
+                # Three deliberate discrete steps. No strobing or repeated
+                # fast flashes. Each step is held >= 83ms (250ms minimum).
+                progress=f"(floor(3*({fraction}))/3)"
+            else:
+                progress=fraction
+            zoom=f"({initial:.3f}+({final-initial:.3f})*({progress}))"
         in_window=f"between(on\\,{start}\\,{end-1})"
         z=f"if({in_window}\\,{zoom}\\,{z})"
         anchor_x=f"if({in_window}\\,{fx['anchor_x_pct']/100:.3f}\\,{anchor_x})"

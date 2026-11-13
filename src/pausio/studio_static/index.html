@@ -10,6 +10,8 @@
   <link rel="stylesheet" href="/styles.css">
   <script src="/app.js" defer></script>
   <script src="/visual_fx_ui.js" defer></script>
+  <script src="/face_reframe_ui.js" defer></script>
+  <script src="/visual_transition_ui.js" defer></script>
 </head>
 <body>
   <div class="app-shell" id="app">
@@ -326,6 +328,18 @@
                     <option value="personalizzato">Personalizzato · base Educativo</option>
                   </select>
                 </label>
+                <fieldset id="visual-fx-custom" class="visual-fx-custom" hidden>
+                  <legend>Profilo personalizzato · suggerimenti</legend>
+                  <div class="visual-fx-edit-grid">
+                    <label>Effetti al minuto <input id="visual-fx-max-per-min" type="number" min="1" max="10" step="1" value="6"></label>
+                    <label>Pausa tra effetti (ms) <input id="visual-fx-gap" type="number" min="2500" max="12000" step="100" value="4500"></label>
+                    <label>Punch zoom (%) <input id="visual-fx-punch" type="number" min="105" max="125" step="1" value="118"></label>
+                    <label>Zoom progressivo (%) <input id="visual-fx-push" type="number" min="105" max="120" step="1" value="113"></label>
+                    <label>Durata zoom (ms) <input id="visual-fx-push-ms" type="number" min="1200" max="4000" step="100" value="2200"></label>
+                  </div>
+                  <label class="visual-fx-signal-toggle"><input type="checkbox" id="visual-fx-audio-energy"> Considera aumenti misurati di energia della voce (waveform)</label>
+                  <p class="visual-fx-status">Solo segnali tecnici: nessuna inferenza sul significato del parlato. Le modifiche restano proposte da approvare.</p>
+                </fieldset>
                 <button type="button" class="button button-outline button-full" id="visual-fx-suggest">✦ Suggerisci effetti</button>
                 <p id="visual-fx-suggest-status" class="visual-fx-status" role="status" aria-live="polite"></p>
                 <div id="visual-fx-proposals" class="visual-fx-proposals" aria-label="Proposte FX da approvare"></div>
@@ -335,6 +349,8 @@
                     <select id="visual-fx-kind">
                       <option value="punch">Punch-in</option>
                       <option value="slow_push">Zoom progressivo</option>
+                      <option value="ease_push">Zoom morbido (ease)</option>
+                      <option value="ratchet">Ratchet · 3 scatti</option>
                     </select>
                   </label>
                   <label for="visual-fx-scale">Zoom finale <output id="visual-fx-scale-output">1,16×</output>
@@ -344,6 +360,28 @@
                 </div>
                 <div id="visual-fx-list" class="visual-fx-list" aria-label="Effetti visivi applicati"></div>
                 <button type="button" class="button button-ghost button-full" id="visual-fx-preview">Genera preview con effetti</button>
+              </div>
+            </section>
+            <section id="visual-transition-panel" class="visual-fx-panel" aria-labelledby="transition-heading">
+              <header class="visual-fx-heading">
+                <h3 id="transition-heading">Transizioni tra tagli</h3>
+                <p>Dip to black: sfumatura visiva senza sovrapporre fotogrammi né alterare l'audio originale. I tagli normali restano invariati.</p>
+              </header>
+              <div class="visual-fx-controls">
+                <label for="transition-boundary">Taglio tra due intervalli
+                  <select id="transition-boundary"></select>
+                </label>
+                <label for="transition-duration">Durata totale (ms)
+                  <select id="transition-duration">
+                    <option value="200">200 · molto rapida</option>
+                    <option value="300" selected>300 · breve</option>
+                    <option value="400">400 · delicata</option>
+                    <option value="600">600 · lenta</option>
+                  </select>
+                </label>
+                <button type="button" class="button button-outline button-full" id="transition-add">+ Aggiungi dip</button>
+                <p id="transition-status" class="visual-fx-status" role="status" aria-live="polite"></p>
+                <div id="transition-list" class="visual-fx-list" aria-label="Transizioni applicate"></div>
               </div>
             </section>
           </div>

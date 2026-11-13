@@ -32,6 +32,7 @@ from pausio.media import MediaError, MediaInfo, detect_silences, probe, probe_au
 from pausio.planner import CUT_PRESETS, validate_cut_settings, policy_from_cut_settings, propose_segments
 from pausio.project_commands import ProjectTape, ProjectFormatError, UI_COMMANDS, default_audio_mix
 from pausio.visual_fx_auto import propose_visual_fx
+from pausio.face_reframe import propose_face_anchor, FaceAnalysisUnavailable
 from pausio.studio_persistence import StudioSessionStore, RecoveryError, default_studio_directory
 
 MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024
@@ -49,6 +50,8 @@ ASSETS = {
     "/styles.css": ("styles.css", "text/css; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
     "/visual_fx_ui.js": ("visual_fx_ui.js", "text/javascript; charset=utf-8"),
+    "/face_reframe_ui.js": ("face_reframe_ui.js", "text/javascript; charset=utf-8"),
+    "/visual_transition_ui.js": ("visual_transition_ui.js", "text/javascript; charset=utf-8"),
     "/capture": ("capture.html", "text/html; charset=utf-8"),
     "/capture.html": ("capture.html", "text/html; charset=utf-8"),
     "/capture.css": ("capture.css", "text/css; charset=utf-8"),
@@ -157,6 +160,7 @@ class StudioWorkspace:
                 "audio_clips": [{**dict(c), "available": (self._audio_path(c["asset_sha256"]).is_file() and not self._audio_path(c["asset_sha256"]).is_symlink())} for c in self.tape.view.audio_clips] if self.tape else [],
                 "audio_mix": dict(self.tape.view.audio_mix) if self.tape else default_audio_mix(),
                 "video_fx": [dict(fx) for fx in self.tape.view.video_fx] if self.tape else [],
+                "video_transitions": [dict(t) for t in self.tape.view.video_transitions] if self.tape else [],
                 "caption_style": self.tape.view.caption_style if self.tape else "social",
                 "caption_config": self.tape.view.caption_config if self.tape else CAPTION_PRESETS["social"],
                 "caption_presets": CAPTION_PRESETS,
@@ -435,7 +439,8 @@ class StudioWorkspace:
             self._ensure_unlocked()
             if self.tape is None or self.info is None or self.media_sha256 is None:
                 raise StudioError("Importa un video prima di suggerire effetti.")
-            if not isinstance(raw, dict) or set(raw) != {"revision", "preset"}:
+            if (not isinstance(raw, dict) or set(raw) not in (
+                    {"revision", "preset"}, {"revision", "preset", "options"})):
                 raise StudioError("Preset FX richiede revision e preset.")
             revision = raw["revision"]
             if type(revision) is not int or revision != self.tape.revision:
@@ -450,9 +455,44 @@ class StudioWorkspace:
                     preset=raw["preset"],
                     media_sha256=self.media_sha256,
                     base_revision=revision,
+                    overrides=raw.get("options"),
+                    waveform=(list(self.waveform) if self.waveform_status=="ready"
+                              and self.waveform else None),
+                    source_duration_ms=self.info.duration_ms,
                 )
             except ValueError as exc:
                 raise StudioError(str(exc)) from exc
+
+    def suggest_face_anchor(self, raw: dict) -> dict:
+        """Opt-in read-only local sample; only a human/agent edit changes framing."""
+        with self.lock:
+            self._ensure_unlocked()
+            if (not isinstance(raw, dict) or set(raw) != {"revision","effect_id"} or
+                    type(raw["revision"]) is not int or
+                    type(raw["effect_id"]) is not str):
+                raise StudioError("Face reframe requires revision and effect_id")
+            if self.tape is None or self.source is None or self.media_sha256 is None:
+                raise StudioError("Import a video before face analysis")
+            if raw["revision"] != self.tape.revision:
+                raise StudioError("Versione del progetto non aggiornata")
+            effect=next((fx for fx in self.tape.view.video_fx
+                         if fx["id"]==raw["effect_id"]),None)
+            if effect is None:
+                raise StudioError("Video FX not found")
+            source,sha,revision=self.source,self.media_sha256,self.tape.revision
+            zoom=effect["end_scale_pct"]
+            start,end=effect["start_ms"],effect["end_ms"]
+        try:
+            outcome=propose_face_anchor(source,start_ms=start,end_ms=end,
+                                        zoom_pct=zoom)
+        except (FaceAnalysisUnavailable,ValueError) as exc:
+            raise StudioError(str(exc)) from exc
+        with self.lock:
+            if (self.tape is None or self.tape.revision != revision or
+                    self.media_sha256 != sha or self.source != source):
+                raise StudioError("The project changed during face analysis")
+        return {**outcome,"effect_id":effect["id"],
+                "base_revision":revision,"media_sha256":sha}
 
     def command(self, raw: dict) -> None:
         """Execute a version-checked typed command requested by the Studio UI."""
@@ -650,6 +690,11 @@ class StudioWorkspace:
                                 if key not in {"id","segment_id"}}}
                             for fx in self.tape.view.video_fx
                         ]
+                        current_transitions = [
+                            {"boundary_index":indexed[t["left_segment_id"]],
+                             "kind":t["kind"],"duration_ms":t["duration_ms"]}
+                            for t in self.tape.view.video_transitions
+                        ]
                     mapped = remap_captions(current_captions, plan.segments)
                     render(
                         source, self.directory / ("preview.mp4" if kind == "preview" else "export.mp4"),
@@ -659,6 +704,7 @@ class StudioWorkspace:
                         caption_config=current_config,
                         audio_fx=active_fx, audio_mix=current_audio_mix,
                         video_fx=current_visual_fx,
+                        video_transitions=current_transitions,
                     )
                     with self.lock:
                         if kind == "preview":
@@ -831,6 +877,10 @@ class StudioHandler(BaseHTTPRequestHandler):
             if path == "/api/command":
                 self.server.workspace.command(self._read_json())
                 self._json(200, self.server.workspace.snapshot())
+                return
+            if path == "/api/visual-fx/face-anchor":
+                proposal = self.server.workspace.suggest_face_anchor(self._read_json())
+                self._json(200, proposal)
                 return
             if path == "/api/visual-fx/suggest":
                 proposal = self.server.workspace.suggest_visual_fx(self._read_json())

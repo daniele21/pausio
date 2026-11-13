@@ -18,11 +18,13 @@ from pausio.captions import (
     default_caption_config, validate_caption_config
 )
 from pausio.domain import EditPlan, Interval
+from pausio.visual_transitions import compile_dips, MAX_TRANSITIONS
 from pausio.planner import CUT_PRESETS, validate_cut_settings
 
 FORMAT = "pausio.project"
-VERSION = 3
-PREVIOUS_VERSION = 2
+VERSION = 4
+PREVIOUS_VERSION = 3
+MIGRATION_VERSION = 2
 LEGACY_VERSION = 1
 MAX_COMMANDS = 2000
 MAX_REVISION = 2_147_483_647
@@ -53,6 +55,9 @@ _TYPES = frozenset({
     "video.transform.add",
     "video.transform.update",
     "video.transform.remove",
+    "video.transition.add",
+    "video.transition.update",
+    "video.transition.remove",
 })
 UI_COMMANDS = frozenset(_TYPES - {"analysis.propose", "timeline.replace"})
 
@@ -233,12 +238,14 @@ def _video_transform(raw: Any, segments: list[dict], duration_ms: int) -> dict:
         raise ProjectFormatError("Video FX must be inside its source KEEP segment")
     if end - start < 250 or end - start > 60_000:
         raise ProjectFormatError("Video FX must last between 250ms and 60 seconds")
-    if fx["kind"] not in ("punch", "slow_push") or not isinstance(fx["kind"], str):
+    if type(fx["kind"]) is not str or fx["kind"] not in ("punch", "slow_push", "ease_push", "ratchet"):
         raise ProjectFormatError("Unsupported video FX kind")
     for key in ("start_scale_pct", "end_scale_pct"):
         value = _integer(fx[key], key)
         if not 100 <= value <= 130:
             raise ProjectFormatError("Video zoom limited to 1.00x-1.30x")
+    if fx["kind"] == "ratchet" and end-start < 1200:
+        raise ProjectFormatError("Ratchet needs at least 1.2s for three stable steps")
     if fx["kind"] == "punch" and fx["start_scale_pct"] != fx["end_scale_pct"]:
         raise ProjectFormatError("Punch must have a constant zoom")
     for key in ("anchor_x_pct", "anchor_y_pct"):
@@ -265,6 +272,46 @@ def _validate_video_fx(items: list[dict], segments: list[dict], duration_ms: int
                 raise ProjectFormatError("Overlapping video FX must be resolved before applying")
 
 
+def _video_transition(raw: Any, segments: list[dict]) -> dict:
+    """A dip on a specific ADJACENT original KEEP pair, no A/V overlap."""
+    trans = _object(raw, {"id","left_segment_id","right_segment_id",
+                          "kind","duration_ms"}, "video transition")
+    _id(trans["id"], "transition.id")
+    left = _id(trans["left_segment_id"], "transition.left")
+    right = _id(trans["right_segment_id"], "transition.right")
+    if trans["kind"] != "dip_black" or type(trans["kind"]) is not str:
+        raise ProjectFormatError("Unsupported video cut transition")
+    duration=_integer(trans["duration_ms"],"transition.duration_ms")
+    if not 200<=duration<=600:
+        raise ProjectFormatError("Transition must last 200..600 ms")
+    pair=next((i for i in range(len(segments)-1)
+               if segments[i]["id"]==left and segments[i+1]["id"]==right),None)
+    if pair is None:
+        raise ProjectFormatError("Transition requires two adjacent KEEP segments")
+    return dict(trans)
+
+
+def _validate_video_transitions(items: list[dict], segments: list[dict]) -> None:
+    if len(items)>MAX_TRANSITIONS:
+        raise ProjectFormatError("Too many video transitions")
+    ids=set()
+    pairs=[]
+    for item in items:
+        row=_video_transition(item,segments)
+        if row["id"] in ids:
+            raise ProjectFormatError("Duplicate visual transition ID")
+        ids.add(row["id"])
+        pair=next(i for i in range(len(segments)-1)
+                  if segments[i]["id"]==row["left_segment_id"] and
+                     segments[i+1]["id"]==row["right_segment_id"])
+        pairs.append({"boundary_index":pair,"kind":row["kind"],
+                      "duration_ms":row["duration_ms"]})
+    try:
+        compile_dips(tuple(Interval(s["start_ms"],s["end_ms"]) for s in segments),pairs)
+    except ValueError as exc:
+        raise ProjectFormatError(str(exc)) from exc
+
+
 @dataclass(frozen=True)
 class ProjectView:
     segments: tuple[dict, ...] = ()
@@ -278,6 +325,7 @@ class ProjectView:
     audio_clips: tuple[dict, ...] = ()
     audio_mix: dict | None = None
     video_fx: tuple[dict, ...] = ()
+    video_transitions: tuple[dict, ...] = ()
 
 
 def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
@@ -293,6 +341,7 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
     audio_clips: list[dict] = []
     audio_mix = default_audio_mix()
     video_fx: list[dict] = []
+    video_transitions: list[dict] = []
     used_events: set[str] = set()
 
     for command in commands:
@@ -472,6 +521,28 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
                 if item["id"] == target else item for item in audio_clips
             ]
             approved = False
+        elif kind == "video.transition.add":
+            _object(payload, {"transition"}, kind)
+            row=_video_transition(payload["transition"],current)
+            video_transitions=[*video_transitions,row]
+            _validate_video_transitions(video_transitions,current)
+            approved=False
+        elif kind == "video.transition.update":
+            _object(payload, {"transition"}, kind)
+            row=_video_transition(payload["transition"],current)
+            if not any(t["id"]==row["id"] for t in video_transitions):
+                raise ProjectFormatError("Video transition to update does not exist")
+            video_transitions=[row if t["id"]==row["id"] else t
+                               for t in video_transitions]
+            _validate_video_transitions(video_transitions,current)
+            approved=False
+        elif kind == "video.transition.remove":
+            _object(payload, {"transition_id"}, kind)
+            identity=_id(payload["transition_id"],"transition_id")
+            if not any(t["id"]==identity for t in video_transitions):
+                raise ProjectFormatError("Transition to remove does not exist")
+            video_transitions=[t for t in video_transitions if t["id"]!=identity]
+            approved=False
         elif kind == "video.transform.add":
             _object(payload, {"effect"}, kind)
             effect = _video_transform(payload["effect"], current, duration)
@@ -502,6 +573,7 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
             approved = False
 
     _validate_video_fx(video_fx, current, duration)
+    _validate_video_transitions(video_transitions,current)
     return ProjectView(
         segments=tuple(copy.deepcopy(current)),
         suggested=tuple(copy.deepcopy(suggestion)) if suggestion is not None else None,
@@ -514,6 +586,7 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
         audio_clips=tuple(copy.deepcopy(audio_clips)),
         audio_mix=copy.deepcopy(audio_mix),
         video_fx=tuple(copy.deepcopy(video_fx)),
+        video_transitions=tuple(copy.deepcopy(video_transitions)),
     )
 
 
@@ -634,7 +707,7 @@ class ProjectTape:
             # V1 files are intentionally read-only inputs; exporting always
             # upgrades to V2 with cursor at the end and preserved event IDs.
             return cls(obj["media"], obj["commands"])
-        if version in (PREVIOUS_VERSION, VERSION):
+        if version in (MIGRATION_VERSION, PREVIOUS_VERSION, VERSION):
             obj = _object(
                 document,
                 {"format", "schema_version", "media", "commands",
