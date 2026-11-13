@@ -30,10 +30,21 @@ Il connettore espone questi flussi:
 - `pausio_render_approved_video`: avvia il render finale **solo** dopo che
   l'utente ha confermato il montaggio nella UI. Il risultato rimane sul Mac.
 
-**Non ancora esposti:** caricamento del video o di nuovi asset dal client di
-chat, preview visive di frame per il modello, download dei byte MP4 in chat,
-ricerca B-roll, video B-roll MP4/MOV, approvazione senza utente, server MCP
-remoto pubblico. Il bridge non crea immagini o musica.
+**Asset MCP v1 (nuovo):** `pausio_list_assets` mostra metadati delle
+immagini/audio **attualmente usati** dal progetto; `pausio_place_existing_image`
+e `pausio_place_existing_audio` ripetono il file già importato in un altro
+punto dell'output montato con la stessa SHA-256. `pausio_import_image` e
+`pausio_import_audio` accettano file <=512 KiB passati **esplicitamente**
+come base64 dal client della chat, con una dichiarazione di origine
+(`created_for_user`, `user_supplied`, `licensed_by_user`). Usano la
+validazione/importazione media esistente in Studio. Non recuperano
+automaticamente il contenuto di un file creato nella chat, né verificano
+indipendentemente la licenza: per file grandi, import da UI.
+
+**Non ancora esposti:** caricamento video dal client di chat, preview di frame
+o audio verso il modello, download dell'MP4 in chat, libreria locale globale,
+ricerca/generazione automatica di B-roll, video B-roll MP4/MOV, approvazione
+senza utente, server MCP remoto pubblico. Il bridge non crea immagini o musica.
 
 ## Test rapido, senza cloud e senza chiave LLM
 
@@ -89,7 +100,7 @@ remoto pubblico. Il bridge non crea immagini o musica.
 > se il contenuto lo giustifica. Spiega ogni modifica prima di usare
 > `pausio_apply_command`; applica una modifica per volta con la revisione
 > aggiornata, poi genera una preview breve del punto interessato. Non chiedere
-> di scaricare modelli o importare nuovi asset; non approvare il montaggio.
+> di scaricare modelli né importare asset da fonti o licenze sconosciute; non approvare il montaggio.
 > Quando ho verificato personalmente la preview e confermato il montaggio in
 > Studio, puoi avviare il rendering finale e dirmi dove scaricarlo nella UI.
 
@@ -106,3 +117,5 @@ remoto pubblico. Il bridge non crea immagini o musica.
   l'utente mantiene Undo/Redo e il download dalla UI.
 - Non affermare che un test ChatGPT+Mac è passato senza una vera sessione
   connected-to-server e una chiamata documentata a `tools/call`.
+
+Per il piano di regia e i riferimenti open source, consulta [Social editor research](SOCIAL_EDITOR_RESEARCH.md).
