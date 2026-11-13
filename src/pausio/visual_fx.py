@@ -43,7 +43,7 @@ def prepare_motion_fx(
         if not (segment.start_ms <= a < b <= segment.end_ms and
                 250 <= b - a <= 60000):
             raise ValueError("Video FX outside source KEEP or invalid duration")
-        if type(entry["kind"]) is not str or entry["kind"] not in ("punch", "slow_push", "ease_push", "ratchet"):
+        if type(entry["kind"]) is not str or entry["kind"] not in ("punch", "slow_push", "ease_push", "ratchet", "pulse", "sweep"):
             raise ValueError("Unsupported video FX operation")
         scales = [
             _integer(entry[key], 100, 130, key)
@@ -51,6 +51,12 @@ def prepare_motion_fx(
         ]
         if entry["kind"] == "ratchet" and b-a < 1200:
             raise ValueError("Ratchet must last at least 1200ms")
+        if entry["kind"] == "pulse" and b-a < 900:
+            raise ValueError("Pulse needs at least 900ms for a gentle rise/hold/release")
+        if entry["kind"] == "sweep" and b-a < 1300:
+            raise ValueError("Sweep needs at least 1300ms to avoid camera jitter")
+        if entry["kind"] == "pulse" and scales[0] != 100:
+            raise ValueError("Pulse must start at 1x; end_scale is the zoom peak")
         if entry["kind"] == "punch" and scales[0] != scales[1]:
             raise ValueError("Punch requires a constant scale")
         for key in ("anchor_x_pct", "anchor_y_pct"):
@@ -95,26 +101,43 @@ def motion_filter(
         start,end = _window(fx,source_start_ms)
         initial=fx["start_scale_pct"]/100
         final=fx["end_scale_pct"]/100
-        if fx["kind"]=="punch":
-            zoom=f"{initial:.3f}"
+        pan_progress = None
+        if fx["kind"] == "punch":
+            zoom = f"{initial:.3f}"
         else:
-            frames=max(1,end-start-1)
-            fraction=f"min(1\\,max(0\\,(on-{start})/{frames}))"
-            if fx["kind"]=="ease_push":
-                # Smoothstep: C1-continuous bounded acceleration. No overshoot.
-                phase=f"({fraction})"
-                progress=f"({phase}*{phase}*(3-2*{phase}))"
-            elif fx["kind"]=="ratchet":
-                # Three deliberate discrete steps. No strobing or repeated
-                # fast flashes. Each step is held >= 83ms (250ms minimum).
-                progress=f"(floor(3*({fraction}))/3)"
+            frames = max(1, end-start-1)
+            fraction = f"min(1\,max(0\,(on-{start})/{frames}))"
+            phase = f"({fraction})"
+            smooth = f"({phase}*{phase}*(3-2*{phase}))"
+            if fx["kind"] in ("ease_push", "sweep"):
+                progress = smooth
+            elif fx["kind"] == "ratchet":
+                progress = f"(floor(3*({fraction}))/3)"
+            elif fx["kind"] == "pulse":
+                # 25% eased rise, 40% hold, 35% eased release.
+                rise = f"min(1\,({phase})/0.25)"
+                fall = f"min(1\,max(0\,({phase}-0.65)/0.35))"
+                rise_smooth = f"({rise}*{rise}*(3-2*{rise}))"
+                fall_smooth = f"({fall}*{fall}*(3-2*{fall}))"
+                progress = (f"if(lt({phase}\,0.25)\,{rise_smooth}\,"
+                            f"if(lt({phase}\,0.65)\,1\,(1-{fall_smooth})))")
             else:
-                progress=fraction
-            zoom=f"({initial:.3f}+({final-initial:.3f})*({progress}))"
+                progress = fraction
+            zoom = f"({initial:.3f}+({final-initial:.3f})*({progress}))"
+            if fx["kind"] == "sweep":
+                pan_progress = smooth
         in_window=f"between(on\\,{start}\\,{end-1})"
         z=f"if({in_window}\\,{zoom}\\,{z})"
-        anchor_x=f"if({in_window}\\,{fx['anchor_x_pct']/100:.3f}\\,{anchor_x})"
-        anchor_y=f"if({in_window}\\,{fx['anchor_y_pct']/100:.3f}\\,{anchor_y})"
+        if pan_progress is not None:
+            x_to = fx["anchor_x_pct"] / 100
+            y_to = fx["anchor_y_pct"] / 100
+            move_x = f"(0.5+({x_to-0.5:.3f})*({pan_progress}))"
+            move_y = f"(0.5+({y_to-0.5:.3f})*({pan_progress}))"
+        else:
+            move_x = f"{fx['anchor_x_pct']/100:.3f}"
+            move_y = f"{fx['anchor_y_pct']/100:.3f}"
+        anchor_x=f"if({in_window}\,{move_x}\,{anchor_x})"
+        anchor_y=f"if({in_window}\,{move_y}\,{anchor_y})"
     # During a 1x window, x/y evaluate to 0. During zoom, valid crop window
     # is (iw-iw/zoom); multiplying 0..1 guarantees no out-of-bounds sampling.
     return (
