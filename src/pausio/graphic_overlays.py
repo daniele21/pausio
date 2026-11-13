@@ -41,9 +41,9 @@ def validate_graphic(raw: Any, segments: list[dict], source_duration_ms: int) ->
             and text == text.strip()
             and not any(ord(char) < 32 or ord(char) == 127 for char in text)):
         raise ValueError("Grafica: testo obbligatorio, massimo 100 caratteri e una riga.")
-    if raw["kind"] not in KINDS or type(raw["kind"]) is not str:
+    if type(raw["kind"]) is not str or raw["kind"] not in KINDS:
         raise ValueError("Grafica: stile non supportato.")
-    if raw["animation"] not in ANIMATIONS or type(raw["animation"]) is not str:
+    if type(raw["animation"]) is not str or raw["animation"] not in ANIMATIONS:
         raise ValueError("Grafica: animazione non supportata.")
     for key, low, high in (("x_pct", 15, 85), ("y_pct", 8, 62),
                             ("font_size", 36, 104)):
@@ -101,7 +101,8 @@ def compose_graphics_ass(cues: list[dict], graphics: list[dict], *,
         if (not isinstance(g, dict) or set(g) != FIELDS or
             type(g["start_ms"]) is not int or type(g["end_ms"]) is not int or
             g["end_ms"]-g["start_ms"] < 400 or
-            g["kind"] not in KINDS or g["animation"] not in ANIMATIONS):
+            type(g["kind"]) is not str or g["kind"] not in KINDS or
+            type(g["animation"]) is not str or g["animation"] not in ANIMATIONS):
             raise ValueError("Grafica di rendering non valida.")
         x = round(g["x_pct"] * 1080 / 100)
         y = round(g["y_pct"] * 1920 / 100)
