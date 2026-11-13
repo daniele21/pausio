@@ -4,7 +4,7 @@
 
 **Every editing action is a typed instruction.** The UI never directly owns the final timeline. The pure Python reducer `src/pausio/project_commands.py` validates/replays an ordered command tape and derives the same `EditPlan` used by FFmpeg.
 
-The current format is `pausio.project`, `schema_version: 7` and is documented by [JSON Schema v7](../schemas/pausio-project-v7.schema.json). v6 remains readable through [JSON Schema v6](../schemas/pausio-project-v6.schema.json). v5 remains readable through [JSON Schema v5](../schemas/pausio-project-v5.schema.json). v4 remains readable through [JSON Schema v4](../schemas/pausio-project-v4.schema.json). v3 remains readable using [JSON Schema v3](../schemas/pausio-project-v3.schema.json). v2 remains readable using [JSON Schema v2](../schemas/pausio-project-v2.schema.json). **Existing v1 files remain readable** using a strict migration (all commands preserved; history cursor placed at the end). V1 schema: [JSON Schema v1](../schemas/pausio-project-v1.schema.json). JSON Schema checks the *shape*; the reducer additionally checks ordering, interval overlap, valid IDs, existing targets, media duration bounds and command history semantics.
+The current format is `pausio.project`, `schema_version: 9` and is documented by [JSON Schema v9](../schemas/pausio-project-v9.schema.json). Previous v8 and v7 projects remain importable; their schemas are [v8](../schemas/pausio-project-v8.schema.json) and [v7](../schemas/pausio-project-v7.schema.json). v6 remains readable through [JSON Schema v6](../schemas/pausio-project-v6.schema.json). v5 remains readable through [JSON Schema v5](../schemas/pausio-project-v5.schema.json). v4 remains readable through [JSON Schema v4](../schemas/pausio-project-v4.schema.json). v3 remains readable using [JSON Schema v3](../schemas/pausio-project-v3.schema.json). v2 remains readable using [JSON Schema v2](../schemas/pausio-project-v2.schema.json). **Existing v1 files remain readable** using a strict migration (all commands preserved; history cursor placed at the end). V1 schema: [JSON Schema v1](../schemas/pausio-project-v1.schema.json). JSON Schema checks the *shape*; the reducer additionally checks ordering, interval overlap, valid IDs, existing targets, media duration bounds and command history semantics.
 
 ## Example
 
@@ -13,7 +13,7 @@ Below is explanatory sample data, **not a file for importing against your own vi
 ```json
 {
   "format": "pausio.project",
-  "schema_version": 7,
+  "schema_version": 9,
   "media": {
     "filename": "ripresa.mp4",
     "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
