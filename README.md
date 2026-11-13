@@ -51,6 +51,8 @@ pausio doctor
 pausio studio
 ```
 
+Su macOS, per i sottotitoli serve FFmpeg compilato con il filtro `ass`. Se `/opt/homebrew/bin/ffmpeg` non lo contiene ma `ffmpeg-full` è già installato, Pausio ora individua automaticamente `/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg` (oppure il percorso Homebrew Intel) per l'export con sottotitoli, anche se non è il primo eseguibile nel `PATH`. Esegui `pausio doctor` e verifica `captions_ass: true` e `captions_ffmpeg`: è il percorso realmente scelto per imprimere i sottotitoli. Se necessario installa `brew install ffmpeg-full` e riavvia Studio; non serve esporre il server sulla rete.
+
 Per il controllo finale usa un tuo video originale (ideale Samsung Galaxy A56, anche con frame rate variabile), prova i tagli, una transizione e almeno due tipi di zoom, genera preview, ascolta la continuità del parlato ed esporta l'MP4. Confronta durata, audio, crop e sottotitoli con la sorgente; **non caricare il filmato privato su GitHub**. I test sintetici di CI e Playwright non sostituiscono questa validazione visiva e sonora.
 
 ## Registra dal telefono con il gobbo (Mobile Capture, in sviluppo)
