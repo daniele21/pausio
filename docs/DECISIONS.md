@@ -93,3 +93,25 @@
 **Transport boundary:** local Studio stays on loopback; an MCP connector may use client-supported local integration or a separately authenticated, scoped remote HTTPS gateway. The available tool/file/video capabilities depend on the actual ChatGPT/Claude product/account and must be verified by a proof-of-connectivity prior to implementation. No silent cloud upload or assumed direct access to chat-hosted generated images. Use GitHub Actions only as an optional preapproved remote executor of Pausio's own ASR, not as a general purpose agent shell.
 
 **Consequences and pending decisions:** project schema v3 / atomic batch design, private content-addressed asset manifest, observation endpoints, runner transport, chat compatibility matrix, exact role of user confirmation. See [detailed plan](AGENTIC_EDITING_PLAN.md). This ADR documents intended direction, not shipped behavior.
+
+
+## ADR 016 — Layered social composition over the existing FFmpeg engine (proposed)
+
+**Decision:** Extend Pausio's existing typed `ProjectTape` and FFmpeg renderer
+with small, bounded video B-roll, visual overlay, motion, audio and observation
+adapters. Do **not** adopt EffectCraft/Rust, Remotion/Node or an arbitrary
+filter expression system as a required runtime. Scriptable edit proposal and
+UI edit operations must compile to the exact same canonical events.
+
+**Timeline:** Keep source-bound speech/camera anchors distinct from
+output-timed media inserts. New layer events declare their timebase; pure
+projection maps them to the rendered output after KEEP. Compose images/video
+B-roll beneath captions. Imported footage never overwrites the source; its
+audio is muted by default while narration continues.
+
+**Security:** source hash + revision checks; imported content-addressed media
+with bounded probe; no path/URL/shell surface exposed to MCP; private frames
+or audio shared only with explicit consent; user approves final output.
+
+**Implementation:** See [SOCIAL_COMPOSITION_COMPONENTS.md](SOCIAL_COMPOSITION_COMPONENTS.md).
+This ADR defines direction only, not a shipped media-layer schema or renderer.
