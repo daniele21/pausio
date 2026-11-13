@@ -4,7 +4,7 @@
 
 A local-first toolkit for natural-sounding, talking-head social videos. Pausio is designed to make post-production **reviewable**, not fully automatic at the expense of speech or pacing.
 
-> **Status: v0.1.0 Early Access (technical preview).** The current CLI inspects videos, suggests cuts using FFmpeg's signal-level silence detection, writes a human-editable JSON timeline, and exports a vertical 1080x1920 MP4. It now has optional standalone MLX Whisper ASR on Apple Silicon (no ClosedRoom app or service required), but does not yet make semantic cuts, denoise or export CapCut projects; its on-device transcripts can now drive **editable burned-in captions**.
+> **Status:** `main` include Video FX v2 (zoom avanzati, transizioni dip-to-black e crop statico del volto opzionale); **la release scaricabile `v0.1.0` è una technical preview precedente e non include queste funzioni.** The current CLI inspects videos, suggests cuts using FFmpeg's signal-level silence detection, writes a human-editable JSON timeline, and exports a vertical 1080x1920 MP4. It now has optional standalone MLX Whisper ASR on Apple Silicon (no ClosedRoom app or service required), but does not yet make semantic cuts, denoise or export CapCut projects; its on-device transcripts can now drive **editable burned-in captions**.
 
 ## Download — GitHub Early Access v0.1.0
 
@@ -25,19 +25,33 @@ Segui le [note ufficiali della release](.github/release/v0.1.0.md) per i limiti 
 
 ## Video FX — zoom manuali e suggerimenti automatici (codice di sviluppo)
 
-In Pausio Studio, dopo aver preparato i tagli, apri **Tagli → Video FX**. Puoi posizionare il playhead su un segmento mantenuto e aggiungere **Punch-in** o **Zoom progressivo**, regolando intensità, inizio/fine e punto di ritaglio. Ogni effetto è una precisa istruzione sorgente esportabile/importabile nel progetto v3, con Undo/Redo; lo vedi come blocco nella traccia Video FX separata dalla traccia audio.
+In Pausio Studio, dopo aver preparato i tagli, apri **Tagli → Video FX**. Puoi posizionare il playhead su un segmento mantenuto e aggiungere **Punch-in** o **Zoom progressivo**, regolando intensità, inizio/fine e punto di ritaglio. Ogni effetto è una precisa istruzione sorgente esportabile/importabile nel progetto v4, con Undo/Redo; lo vedi come blocco nella traccia Video FX separata dalla traccia audio.
 
-Il pulsante **Suggerisci effetti** utilizza quattro stili (Naturale, Educativo, Dinamico e Personalizzato-basato-su-Educativo) e restituisce proposte conservative dai tagli reali e dai timestamp delle frasi ASR, se disponibili. **Non modifica il progetto senza un clic su Accetta**. La vera animazione si osserva con **Genera preview FFmpeg** prima di approvare/esportare. Non è un modello AI creativo dentro Pausio: ChatGPT/Claude potranno usarne gli strumenti via MCP locale, nei client che lo supportano.
+Il pulsante **Suggerisci effetti** utilizza quattro stili (Naturale, Educativo, Dinamico e Personalizzato con limiti modificabili) e restituisce proposte conservative dai tagli reali e dai timestamp delle frasi ASR, se disponibili. **Non modifica il progetto senza un clic su Accetta**. La vera animazione si osserva con **Genera preview FFmpeg** prima di approvare/esportare. Non è un modello AI creativo dentro Pausio: ChatGPT/Claude potranno usarne gli strumenti via MCP locale, nei client che lo supportano.
 
-**Disponibilità:** queste funzioni appartengono al ramo di sviluppo successivo alla release `v0.1.0`; il wheel `v0.1.0` non le include. Face tracking, transizioni crossfade, ratchet multi-step e video B-roll non sono ancora implementati. Guida: [Video FX MVP](docs/VISUAL_FX_MVP.md).
+**Disponibilità:** Video FX v1 e v2 sono integrati su `main`, ma non nel wheel della release storica `v0.1.0`. Sono ancora esclusi tracking continuo del volto, vere transizioni crossfade e video B-roll. Guida: [Video FX MVP](docs/VISUAL_FX_MVP.md).
 
-### Video FX avanzati (branch di sviluppo, non inclusi nel wheel v0.1.0)
+### Video FX avanzati (su `main`, non inclusi nel wheel v0.1.0)
 
 Il nuovo editor Video FX supporta **Zoom morbido (ease)** e **Ratchet a tre scatti**, entrambi applicati dal renderer FFmpeg e salvati in eventi tipizzati importabili/esportabili. **Personalizzato** consente di modificare realmente frequenza, intervallo minimo, intensità e durata delle proposte; può utilizzare aumenti di energia misurati nella waveform originale, senza dichiarare di capire semanticamente il video. Le proposte richiedono sempre conferma.
 
 Nel pannello **Transizioni tra tagli** si può aggiungere il **dip to black**, che conserva durata e audio originale e non duplica il parlato. Il **reframing statico del volto** è opzionale, completamente locale, con installazione separata di OpenCV e consenso esplicito per applicare l'ancoraggio. Non è tracking continuo. Questi effetti si verificano tramite preview FFmpeg, non con un'animazione fittizia sul player originale.
 
 [Guida Video FX avanzati, dipendenze, sicurezza e limiti](docs/VISUAL_FX_ADVANCED.md).
+
+Per provarli **sul Mac dal repository che hai già**, senza clonarene un altro:
+
+```bash
+cd /percorso/del/tuo/pausio
+# Verifica di non avere modifiche locali non committate prima di aggiornare.
+git pull --ff-only origin main
+source .venv/bin/activate
+python -m pip install -e .
+pausio doctor
+pausio studio
+```
+
+Per il controllo finale usa un tuo video originale (ideale Samsung Galaxy A56, anche con frame rate variabile), prova i tagli, una transizione e almeno due tipi di zoom, genera preview, ascolta la continuità del parlato ed esporta l'MP4. Confronta durata, audio, crop e sottotitoli con la sorgente; **non caricare il filmato privato su GitHub**. I test sintetici di CI e Playwright non sostituiscono questa validazione visiva e sonora.
 
 ## Registra dal telefono con il gobbo (Mobile Capture, in sviluppo)
 

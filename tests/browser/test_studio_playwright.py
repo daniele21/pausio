@@ -60,6 +60,9 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.context=self.browser.new_context(viewport={"width":1440,"height":900},accept_downloads=True)
         self.page=self.context.new_page()
         self.errors=[]
+        self.http_errors=[]
+        self.page.on("response",lambda response:self.http_errors.append(
+            f"{response.status} {response.url}") if response.status >= 400 else None)
         self.page.on("pageerror",lambda err:self.errors.append(str(err)))
         self.page.on("console",lambda msg:self.errors.append("console: "+msg.text) if msg.type=="error" else None)
         self.page.goto(f"http://127.0.0.1:{self.server.server_port}/",wait_until="networkidle")
@@ -238,10 +241,15 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.page.locator("#preview-action").click()
         preview=self.wait_state("preview","completed",timeout=120000)
         self.assertTrue(preview["preview_ready"])
+        self.wait_condition(lambda: "/api/preview" in (
+            self.page.locator("#preview-video").get_attribute("src") or ""),timeout=15000)
         self.shot("transition-dip-preview")
         self.page.keyboard.press("Control+z")
         undone=self.wait_state("revision",changed["project_revision"]+1)
         self.assertEqual(undone["video_transitions"],[])
+        self.wait_condition(lambda: "/api/media" in (
+            self.page.locator("#preview-video").get_attribute("src") or ""),timeout=15000)
+        self.assertFalse(self.http_errors,self.http_errors)
         self.assertFalse(self.errors,self.errors)
 
     def test_custom_audio_fx_import_in_real_browser(self):
