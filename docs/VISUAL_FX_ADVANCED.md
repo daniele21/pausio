@@ -1,6 +1,6 @@
 # Advanced Video FX — Pausio local Studio
 
-Status: developed on the FX2 integration branch, **not included in the historical v0.1.0 release**. Do not describe Face Crop as live tracking or Dip as xfade.
+Status: **merged into `main` in PR #52 (2026-11-13)**; **not included in the historical v0.1.0 release wheel**. Do not describe Face Crop as live tracking or Dip as xfade. The PR head passed Python 3.11–3.13 CI and Playwright; real-phone QA remains pending.
 
 ## Creator workflow
 
