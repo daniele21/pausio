@@ -29,6 +29,7 @@ from pausio.captions import (
     CAPTION_STYLES, CAPTION_PRESETS, CAPTION_FONTS, propose_captions, remap_captions
 )
 from pausio.media import MediaError, MediaInfo, detect_silences, probe, probe_audio, render, waveform_envelope
+from pausio.graphic_overlays import remap_graphics
 from pausio.planner import CUT_PRESETS, validate_cut_settings, policy_from_cut_settings, propose_segments
 from pausio.project_commands import ProjectTape, ProjectFormatError, UI_COMMANDS, default_audio_mix
 from pausio.visual_fx_auto import propose_visual_fx
@@ -161,6 +162,7 @@ class StudioWorkspace:
                 "audio_mix": dict(self.tape.view.audio_mix) if self.tape else default_audio_mix(),
                 "video_fx": [dict(fx) for fx in self.tape.view.video_fx] if self.tape else [],
                 "video_transitions": [dict(t) for t in self.tape.view.video_transitions] if self.tape else [],
+                "graphic_overlays": [dict(g) for g in self.tape.view.graphic_overlays] if self.tape else [],
                 "caption_style": self.tape.view.caption_style if self.tape else "social",
                 "caption_config": self.tape.view.caption_config if self.tape else CAPTION_PRESETS["social"],
                 "caption_presets": CAPTION_PRESETS,
@@ -696,12 +698,14 @@ class StudioWorkspace:
                             for t in self.tape.view.video_transitions
                         ]
                     mapped = remap_captions(current_captions, plan.segments)
+                    graphics = remap_graphics(self.tape.view.graphic_overlays, plan.segments)
                     render(
                         source, self.directory / ("preview.mp4" if kind == "preview" else "export.mp4"),
                         plan.segments, has_audio=plan.has_audio, overwrite=True,
                         size=(540, 960) if kind == "preview" else (1080, 1920),
                         captions=mapped, caption_style=current_style,
                         caption_config=current_config,
+                        graphic_overlays=graphics,
                         audio_fx=active_fx, audio_mix=current_audio_mix,
                         video_fx=current_visual_fx,
                         video_transitions=current_transitions,
