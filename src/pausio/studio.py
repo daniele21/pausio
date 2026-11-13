@@ -28,8 +28,9 @@ from pausio.domain import EditPlan, Interval
 from pausio.captions import (
     CAPTION_STYLES, CAPTION_PRESETS, CAPTION_FONTS, propose_captions, remap_captions
 )
-from pausio.media import MediaError, MediaInfo, detect_silences, probe, probe_audio, render, waveform_envelope
+from pausio.media import MediaError, MediaInfo, detect_silences, probe, probe_audio, probe_image, render, waveform_envelope
 from pausio.graphic_overlays import remap_graphics
+from pausio.image_overlays import MAX_IMAGE_BYTES, IMAGE_EXTENSIONS
 from pausio.planner import CUT_PRESETS, validate_cut_settings, policy_from_cut_settings, propose_segments
 from pausio.project_commands import ProjectTape, ProjectFormatError, UI_COMMANDS, default_audio_mix
 from pausio.visual_fx_auto import propose_visual_fx
@@ -164,6 +165,12 @@ class StudioWorkspace:
                 "video_fx": [dict(fx) for fx in self.tape.view.video_fx] if self.tape else [],
                 "video_transitions": [dict(t) for t in self.tape.view.video_transitions] if self.tape else [],
                 "graphic_overlays": [dict(g) for g in self.tape.view.graphic_overlays] if self.tape else [],
+                "image_overlays": [
+                    {**dict(item), "available": self._image_path(
+                        item["asset_sha256"], item["filename"]).is_file() and
+                        not self._image_path(item["asset_sha256"], item["filename"]).is_symlink()}
+                    for item in self.tape.view.image_overlays
+                ] if self.tape else [],
                 "caption_style": self.tape.view.caption_style if self.tape else "social",
                 "caption_config": self.tape.view.caption_config if self.tape else CAPTION_PRESETS["social"],
                 "caption_presets": CAPTION_PRESETS,
@@ -183,6 +190,64 @@ class StudioWorkspace:
         if not re.fullmatch(r"[0-9a-f]{64}", digest):
             raise StudioError("Invalid audio digest.")
         return self.directory / ("fx-" + digest)
+
+    def _image_path(self, digest: str, filename: str) -> Path:
+        if not re.fullmatch(r"[0-9a-f]{64}", digest):
+            raise StudioError("Digest immagine non valido.")
+        suffix = Path(filename).suffix.lower()
+        if suffix not in IMAGE_EXTENSIONS:
+            raise StudioError("Formato immagine non supportato.")
+        return self.directory / ("pip-" + digest + suffix)
+
+    def begin_image_import(self, name: str, revision: int) -> tuple[Path, str]:
+        label = Path(name).name.strip()
+        suffix = Path(label).suffix.lower()
+        if (not label or len(label) > 160 or "\\\\" in label or
+            any(ord(ch)<32 or ord(ch)==127 for ch in label) or
+            suffix not in IMAGE_EXTENSIONS):
+            raise StudioError("Immagine PIP: usa PNG, JPG oppure WebP.")
+        with self.lock:
+            self._ensure_unlocked()
+            if (self.tape is None or self.plan is None or
+                type(revision) is not int or revision != self.tape.revision):
+                raise StudioError("Prepara un montaggio e aggiorna la versione del progetto.")
+            self.importing = True
+        return self.directory / f"incoming-pip-{uuid.uuid4().hex}{suffix}", label
+
+    def finish_image_import(
+        self, candidate: Path, label: str, digest: str,
+        revision: int, anchor_ms: int
+    ) -> None:
+        with self.lock:
+            try:
+                if (self.tape is None or self.plan is None or
+                    revision != self.tape.revision):
+                    raise StudioError("Progetto cambiato durante l'import immagine.")
+                total = sum(s.end_ms-s.start_ms for s in self.plan.segments)
+                if type(anchor_ms) is not int or not 0 <= anchor_ms < total:
+                    raise StudioError("Cursore fuori dal montaggio.")
+                target = self._image_path(digest, label)
+                if target.is_symlink() or (target.exists() and not target.is_file()):
+                    raise StudioError("Asset immagine non sicuro.")
+                os.replace(candidate, target)
+                if os.name == "posix":
+                    target.chmod(0o600)
+                existing = any(item["asset_sha256"] == digest
+                               for item in self.tape.view.image_overlays)
+                if not existing:
+                    duration = min(3200, total)
+                    if duration < 400:
+                        raise StudioError("Il montaggio deve durare almeno 400 ms.")
+                    start = max(0, min(anchor_ms, total-duration))
+                    image = {
+                        "id": uuid.uuid4().hex, "asset_sha256": digest,
+                        "filename": label,
+                        "start_ms": start, "duration_ms": duration,
+                        "x_pct": 50, "y_pct": 20, "width_pct": 55
+                    }
+                    self._install_tape(self.tape.append("image.overlay.add", {"image": image}))
+            finally:
+                self.importing = False
 
     def begin_audio_import(self, name: str, revision: int) -> tuple[Path, str]:
         label = Path(name).name.strip()
@@ -329,6 +394,9 @@ class StudioWorkspace:
                 self.source.unlink(missing_ok=True)
             (self.directory / "export.mp4").unlink(missing_ok=True)
             (self.directory / "preview.mp4").unlink(missing_ok=True)
+            for image in self.directory.glob("pip-*"):
+                if image.is_file() or image.is_symlink():
+                    image.unlink(missing_ok=True)
             self.source = None
             self.filename = None
             self.info = None
@@ -698,6 +766,12 @@ class StudioWorkspace:
                              "kind":t["kind"],"duration_ms":t["duration_ms"]}
                             for t in self.tape.view.video_transitions
                         ]
+                    active_images = []
+                    for item in self.tape.view.image_overlays:
+                        path = self._image_path(item["asset_sha256"], item["filename"])
+                        if path.is_symlink() or not path.is_file():
+                            raise StudioError("Immagine PIP mancante: reimporta l'originale.")
+                        active_images.append((path, dict(item)))
                     mapped = remap_captions(current_captions, plan.segments)
                     graphics = remap_graphics(self.tape.view.graphic_overlays, plan.segments)
                     render(
@@ -707,6 +781,7 @@ class StudioWorkspace:
                         captions=mapped, caption_style=current_style,
                         caption_config=current_config,
                         graphic_overlays=graphics,
+                        image_overlays=active_images,
                         audio_fx=active_fx, audio_mix=current_audio_mix,
                         video_fx=current_visual_fx,
                         video_transitions=current_transitions,
