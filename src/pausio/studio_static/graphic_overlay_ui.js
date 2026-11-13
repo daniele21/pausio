@@ -39,6 +39,37 @@
       field.value=String(graphic[key]);edits[key]=field;
       label.append(field);controls.append(label);
     }
+    // Editing controls are projections of canonical v5 fields; save dispatches
+    // a single typed update rather than storing a browser-only draft.
+    const choice=(labelText,key,options)=>{
+      const label=document.createElement("label");label.textContent=labelText;
+      const select=document.createElement("select");
+      select.setAttribute("aria-label",labelText+" grafica");
+      for(const [keyValue,text] of options){
+        const option=document.createElement("option");
+        option.value=keyValue;option.textContent=text;select.append(option);
+      }
+      select.value=graphic[key];label.append(select);controls.append(label);
+      return select;
+    };
+    const kindField=choice("Stile","kind",[
+      ["headline","Titolo"],["stat","Dato"],["code","Codice"],["tip","Suggerimento"]
+    ]);
+    const animationField=choice("Animazione","animation",[
+      ["fade","Fade"],["pop","Pop"],["slide","Slide"]
+    ]);
+    const durationLabel=document.createElement("label");
+    durationLabel.textContent="Durata (ms)";
+    const durationField=document.createElement("input");
+    durationField.type="number";durationField.min="400";durationField.max="12000";
+    durationField.step="100";durationField.value=String(graphic.end_ms-graphic.start_ms);
+    durationField.setAttribute("aria-label","Durata grafica (ms)");
+    durationLabel.append(durationField);controls.append(durationLabel);
+    const colorLabel=document.createElement("label");colorLabel.textContent="Colore";
+    const colorField=document.createElement("input");
+    colorField.type="color";colorField.value=graphic.color.toLowerCase();
+    colorField.setAttribute("aria-label","Colore grafica");
+    colorLabel.append(colorField);controls.append(colorLabel);
     const actions=document.createElement("div");
     actions.className="visual-fx-entry-actions";
     const button=(title,callback)=>{
@@ -48,7 +79,14 @@
     };
     actions.append(
       button("Salva modifiche",async()=>{
-        const updated={...graphic,text:input.value.trim()};
+        if(!durationField.checkValidity()||!Number.isInteger(Number(durationField.value)))
+          throw Error("Durata grafica fuori dai limiti.");
+        const updated={
+          ...graphic,text:input.value.trim(),
+          kind:kindField.value,animation:animationField.value,
+          color:colorField.value.toUpperCase(),
+          end_ms:graphic.start_ms+Number(durationField.value),
+        };
         for(const [title,key] of spec){
           const field=edits[key];
           if(!field.checkValidity()||!Number.isInteger(Number(field.value)))
@@ -73,7 +111,7 @@
     e("graphic-status").textContent=available
       ? graphics().length+"/12 schede grafiche · la simulazione mostra solo i tagli; per vedere le animazioni genera una preview FFmpeg."
       : "Analizza prima il video, poi aggiungi schede grafiche.";
-    for(const node of list.querySelectorAll("input,button"))node.disabled=working();
+    for(const node of list.querySelectorAll("input,button,select"))node.disabled=working();
   }
   async function add(){
     if(!project?.plan)throw Error("Analizza prima il video.");
