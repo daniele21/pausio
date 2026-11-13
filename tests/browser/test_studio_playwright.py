@@ -185,7 +185,9 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertTrue(preview["preview_ready"])
         self.wait_condition(lambda: self.page.locator('[data-mode="rendered"]').is_enabled())
         self.shot("graphic-overlay-preview")
-        self.page.locator("#undo-action").click()
+        # The dedicated Video FX workspace hides the legacy left project rail.
+        # Use its supported global Undo shortcut, as creators do on desktop.
+        self.page.keyboard.press("Control+z")
         undone=self.wait_state("revision",added["project_revision"]+1)
         self.assertEqual(undone["graphic_overlays"],[])
         self.assertFalse(self.errors,self.errors)
