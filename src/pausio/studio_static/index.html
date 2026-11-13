@@ -12,6 +12,7 @@
   <script src="/visual_fx_ui.js" defer></script>
   <script src="/face_reframe_ui.js" defer></script>
   <script src="/visual_transition_ui.js" defer></script>
+  <script src="/graphic_overlay_ui.js" defer></script>
 </head>
 <body>
   <div class="app-shell" id="app">
@@ -383,6 +384,41 @@
                 <button type="button" class="button button-outline button-full" id="transition-add">+ Aggiungi dip</button>
                 <p id="transition-status" class="visual-fx-status" role="status" aria-live="polite"></p>
                 <div id="transition-list" class="visual-fx-list" aria-label="Transizioni applicate"></div>
+              </div>
+            </section>
+            <section class="visual-fx-panel" id="graphic-overlay-panel" aria-labelledby="graphic-overlay-heading">
+              <header class="visual-fx-heading">
+                <h3 id="graphic-overlay-heading">Schede grafiche animate</h3>
+                <p>Titoli, dati, suggerimenti e righe di codice. Ogni scheda è un'istruzione esportabile; la preview FFmpeg mostra l'animazione effettiva.</p>
+              </header>
+              <div class="visual-fx-controls">
+                <label>Testo della scheda <input id="graphic-text" maxlength="100" placeholder="Es. 1.379 segreti esposti" aria-label="Testo scheda grafica"></label>
+                <label>Stile
+                  <select id="graphic-kind">
+                    <option value="headline">Titolo</option>
+                    <option value="stat">Dato / numero</option>
+                    <option value="code">Codice</option>
+                    <option value="tip">Suggerimento</option>
+                  </select>
+                </label>
+                <label>Animazione
+                  <select id="graphic-animation">
+                    <option value="pop">Pop morbido</option>
+                    <option value="slide">Slide dal basso</option>
+                    <option value="fade">Dissolvenza</option>
+                  </select>
+                </label>
+                <div class="visual-fx-edit-grid">
+                  <label>Durata (ms) <input type="number" id="graphic-duration" min="400" max="12000" step="100" value="2500"></label>
+                  <label>Orizzontale (%) <input type="number" id="graphic-x" min="15" max="85" step="1" value="50"></label>
+                  <label>Verticale (%) <input type="number" id="graphic-y" min="8" max="62" step="1" value="24"></label>
+                  <label>Dimensione <input type="number" id="graphic-size" min="36" max="104" step="2" value="64"></label>
+                  <label>Colore <input type="color" id="graphic-color" value="#ffc69f"></label>
+                </div>
+                <button type="button" class="button button-outline button-full" id="graphic-add" disabled>+ Aggiungi scheda al cursore</button>
+                <p id="graphic-status" class="visual-fx-status" role="status" aria-live="polite"></p>
+                <div id="graphic-list" class="visual-fx-list" aria-label="Schede grafiche applicate"></div>
+                <button type="button" class="button button-ghost button-full" id="graphic-preview" disabled>Genera preview grafica</button>
               </div>
             </section>
           </div>
