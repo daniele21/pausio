@@ -13,6 +13,7 @@
   <script src="/face_reframe_ui.js" defer></script>
   <script src="/visual_transition_ui.js" defer></script>
   <script src="/graphic_overlay_ui.js" defer></script>
+  <script src="/image_overlay_ui.js" defer></script>
 </head>
 <body>
   <div class="app-shell" id="app">
@@ -430,6 +431,19 @@
                 <p id="graphic-status" class="visual-fx-status" role="status" aria-live="polite"></p>
                 <div id="graphic-list" class="visual-fx-list" aria-label="Schede grafiche applicate"></div>
                 <button type="button" class="button button-ghost button-full" id="graphic-preview" disabled>Genera preview grafica</button>
+              </div>
+            </section>
+            <section class="visual-fx-panel" id="image-overlay-panel" aria-labelledby="image-overlay-heading">
+              <header class="visual-fx-heading">
+                <h3 id="image-overlay-heading">B-roll · immagini PIP</h3>
+                <p>Importa uno screenshot locale (PNG, JPG, WebP). Sarà sovrapposto al video con durata e posizione modificabili, senza cloud.</p>
+              </header>
+              <div class="visual-fx-controls">
+                <input id="pip-image-input" type="file" accept="image/png,image/jpeg,image/webp" hidden aria-label="Immagine locale B-roll">
+                <button type="button" class="button button-outline button-full" id="pip-image-import" disabled>+ Importa immagine al cursore</button>
+                <p id="pip-image-status" class="visual-fx-status" role="status" aria-live="polite"></p>
+                <div id="pip-image-list" class="visual-fx-list" aria-label="Immagini PIP del progetto"></div>
+                <button type="button" class="button button-ghost button-full" id="pip-image-preview" disabled>Genera preview FFmpeg con PIP</button>
               </div>
             </section>
           </div>

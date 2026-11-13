@@ -1676,3 +1676,17 @@ a { color: inherit; text-decoration: none; }
   display: block; height: min(68vh, 530px); max-width: 100%; width: 100%;
   background: #000; object-fit: contain; border-radius: 6px;
 }
+
+/* Image PIP inspector: same design language as native video and graphic FX. */
+#image-overlay-panel .visual-fx-entry {
+  display: grid; gap: 8px;
+  padding: 11px; margin-top: 8px;
+  border: 1px solid var(--border); border-radius: 8px;
+}
+#image-overlay-panel .visual-fx-entry strong { overflow-wrap: anywhere; }
+#image-overlay-panel .visual-fx-entry input {
+  width: 100%; min-width: 0; padding: 8px;
+  color: var(--ink); background: var(--surface-raised);
+  border: 1px solid var(--border); border-radius: 6px;
+}
+#image-overlay-panel .visual-fx-entry-actions { display: flex; gap: 7px; flex-wrap: wrap; }

@@ -186,6 +186,41 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertEqual(self.state()["video_fx"][0]["kind"],"ease_push")
         self.assertFalse(self.errors,self.errors)
 
+    def test_local_image_pip_import_typed_edit_and_real_ffmpeg_preview(self):
+        initial=self.upload_analyze()
+        self.page.locator('[data-workspace-nav="visual"]').click()
+        self.assertTrue(self.page.locator("#pip-image-import").is_enabled())
+        image=self.root/"screen.png"
+        subprocess.run([
+            "ffmpeg","-hide_banner","-nostdin","-v","error","-y",
+            "-f","lavfi","-i","color=c=red:s=140x80:r=1:d=1",
+            "-frames:v","1","-threads:v","1",str(image)
+        ],check=True,timeout=35)
+        self.page.locator("#pip-image-input").set_input_files(str(image))
+        added=self.wait_state("revision",initial["project_revision"]+1)
+        self.assertEqual(len(added["image_overlays"]),1)
+        self.assertTrue(added["image_overlays"][0]["available"])
+        self.assertTrue(self.page.locator("[data-pip-id]").is_visible())
+        item=self.page.locator("[data-pip-id]").first
+        item.locator('input[aria-label="Larghezza (%) immagine PIP"]').fill("60")
+        item.get_by_role("button",name="Salva posizione").click()
+        revised=self.wait_state("revision",added["project_revision"]+1)
+        self.assertEqual(revised["image_overlays"][0]["width_pct"],60)
+        self.assertEqual(revised["image_overlays"][0]["asset_sha256"],
+                         added["image_overlays"][0]["asset_sha256"])
+        self.page.locator("#pip-image-preview").click()
+        ready=self.wait_state("preview","completed",timeout=120000)
+        self.assertTrue(ready["preview_ready"],ready["job"])
+        self.wait_condition(lambda:self.page.locator('[data-mode="rendered"]').is_enabled())
+        self.shot("image-pip-rendered-preview")
+        self.page.keyboard.press("Control+z")
+        undone=self.wait_state("revision",revised["project_revision"]+1)
+        self.assertEqual(undone["image_overlays"][0]["width_pct"],55)
+        self.page.keyboard.press("Control+z")
+        gone=self.wait_state("revision",undone["project_revision"]+1)
+        self.assertEqual(gone["image_overlays"],[])
+        self.assertFalse(self.errors,self.errors)
+
     def test_graphic_overlay_typed_edit_and_real_ffmpeg_preview(self):
         """Add source-bound graphic card, render actual ASS and undo/import."""
         initial=self.upload_analyze()
@@ -299,7 +334,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
         exported=self.root/"visual-fx.pausio.json"
         download.value.save_as(exported)
         document=json.loads(exported.read_text())
-        self.assertEqual(document["schema_version"],6)
+        self.assertEqual(document["schema_version"],7)
         self.assertIn("video.transform.update",[row["type"] for row in document["commands"]])
         self.assertFalse(self.errors,self.errors)
 
@@ -780,7 +815,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
             self.page.locator("#project-export").click()
         saved=self.root/"project.pausio.json";download.value.save_as(saved)
         data=json.loads(saved.read_text())
-        self.assertEqual(data["schema_version"],6)
+        self.assertEqual(data["schema_version"],7)
         self.assertIn("segment.update",[c["type"] for c in data["commands"]])
 
         self.page.locator("#preview-action").click()
