@@ -684,6 +684,52 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         self.assertTrue(all(0<=value<=1000 for value in data["values"]))
         self.assertEqual(data["duration_ms"],state["media"]["duration_ms"])
 
+    def test_quick_preview_reuses_current_ffmpeg_output_without_full_render(self):
+        self.import_clip()
+        self.assertEqual(self.post("/api/jobs",{"kind":"preview_range",
+            "range_start_ms":0,"range_duration_ms":600})[0],400)
+        status,_,_=self.post("/api/jobs",{"kind":"analyze"})
+        self.assertEqual(status,202)
+        self.await_job("analyze")
+        self.assertEqual(self.post("/api/jobs",{"kind":"preview"})[0],202)
+        ready=self.await_job("preview")
+        self.assertTrue(ready["preview_ready"])
+        for start,duration in ((True,600),(-1,600),(0,11000),
+                               (1400,900),(300,0)):
+            with self.subTest(start=start,duration=duration):
+                status,_,payload=self.post("/api/jobs",{"kind":"preview_range",
+                    "range_start_ms":start,"range_duration_ms":duration})
+                self.assertEqual(status,400,payload)
+        self.assertEqual(self.request("GET","/api/preview/range")[0],404)
+        self.assertEqual(self.post("/api/jobs",{"kind":"preview_range",
+            "range_start_ms":250,"range_duration_ms":750})[0],202)
+        clip=self.await_job("preview_range")
+        self.assertTrue(clip["preview_range_ready"])
+        self.assertEqual(clip["preview_range_window"],
+                         {"start_ms":250,"duration_ms":750})
+        path=self.workspace.directory/"preview-range.mp4"
+        self.assertTrue(path.is_file())
+        info=probe(path)
+        self.assertTrue(600 <= info.duration_ms <= 950,info.duration_ms)
+        self.assertEqual((info.width,info.height),(540,960))
+        status,headers,data=self.request("GET","/api/preview/range",
+                                         headers={"Range":"bytes=0-99"})
+        self.assertEqual(status,206)
+        self.assertEqual(len(data),100)
+        self.assertEqual(self.request("HEAD","/api/preview/range")[0],200)
+        mtime=path.stat().st_mtime_ns
+        status,_,payload=self.post("/api/jobs",{"kind":"preview_range",
+            "range_start_ms":250,"range_duration_ms":750})
+        self.assertEqual(status,202,payload)
+        self.assertEqual(path.stat().st_mtime_ns,mtime,"identical quick-preview is cached")
+        status,_,data=self.post("/api/command",{
+            "revision":clip["project_revision"],"type":"timeline.keep_all","payload":{},
+        })
+        self.assertEqual(status,200,data)
+        self.assertFalse(json.loads(data)["preview_range_ready"])
+        self.assertEqual(self.request("GET","/api/preview/range")[0],404)
+        self.assertFalse(path.exists())
+
     def test_ffmpeg_draft_preview_without_approval_and_invalidation(self):
         self.import_clip()
         # Before making any edit proposal, preview cannot run.
