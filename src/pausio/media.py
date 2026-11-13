@@ -137,6 +137,45 @@ def probe(path: Path) -> MediaInfo:
     except (KeyError, StopIteration, TypeError, ValueError) as exc:
         raise MediaError(f"no valid video stream in {path}: {exc}") from exc
 
+
+def probe_image(path: Path) -> tuple[int, int]:
+    """Bounded local-only preflight for still PIP assets.
+
+    FFmpeg image decoding still handles untrusted content; cap file size,
+    pixel dimensions and codec before letting it into a rendering graph.
+    """
+    from pausio.image_overlays import IMAGE_EXTENSIONS, MAX_IMAGE_BYTES
+    if (path.is_symlink() or not path.is_file() or
+        path.suffix.lower() not in IMAGE_EXTENSIONS or
+        not 0 < path.stat().st_size <= MAX_IMAGE_BYTES):
+        raise MediaError("Immagine non valida o troppo grande (max 12 MB).")
+    proc = _run([
+        require_binary("ffprobe"), "-v", "error", "-probesize", "2000000",
+        "-analyzeduration", "1000000", "-show_streams", "-of", "json",
+        str(path)
+    ], timeout_s=20)
+    try:
+        streams = json.loads(proc.stdout)["streams"]
+        images = [s for s in streams if s.get("codec_type") == "video"]
+        if len(images) != 1 or any(s.get("codec_type") == "audio" for s in streams):
+            raise MediaError("Serve una sola immagine senza audio.")
+        item = images[0]
+        codec = item.get("codec_name")
+        suffix = path.suffix.lower()
+        expected = ("png",) if suffix == ".png" else (
+            ("mjpeg",) if suffix in {".jpg", ".jpeg"} else ("webp",)
+        )
+        if codec not in expected:
+            raise MediaError("Formato immagine diverso dall'estensione.")
+        width, height = int(item["width"]), int(item["height"])
+        if not (32 <= width <= 4096 and 32 <= height <= 4096 and
+                width * height <= 12_000_000):
+            raise MediaError("Immagine fuori dai limiti 32..4096 px / 12 MP.")
+        return width, height
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        raise MediaError("Impossibile leggere l'immagine importata.") from exc
+
+
 def probe_audio(path: Path) -> int:
     """Validate an audio-only local FX asset; return duration in integer ms."""
     if not path.is_file() or path.is_symlink():
