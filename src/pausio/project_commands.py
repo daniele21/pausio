@@ -189,7 +189,7 @@ def _captions(raw: Any, duration_ms: int) -> list[dict]:
                     raise ProjectFormatError("Allineamento parola fuori dal sottotitolo.")
                 verified.append({"text": value, "start_ms": a, "end_ms": b})
                 prior_end = b
-            joined = re.sub(r"\\s+([,.;:!?%])", r"\\1",
+            joined = re.sub(r"\s+([,.;:!?%])", r"\1",
                             " ".join(w["text"] for w in verified))
             if joined != caption["text"]:
                 raise ProjectFormatError("Parole allineate diverse dal sottotitolo.")
