@@ -1252,7 +1252,9 @@
             "punch",
             "slow_push",
             "ease_push",
-            "ratchet"
+            "ratchet",
+            "pulse",
+            "sweep"
           ]
         },
         "start_scale_pct": {
