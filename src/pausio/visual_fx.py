@@ -106,7 +106,7 @@ def motion_filter(
             zoom = f"{initial:.3f}"
         else:
             frames = max(1, end-start-1)
-            fraction = f"min(1\,max(0\,(on-{start})/{frames}))"
+            fraction = f"min(1\\,max(0\\,(on-{start})/{frames}))"
             phase = f"({fraction})"
             smooth = f"({phase}*{phase}*(3-2*{phase}))"
             if fx["kind"] in ("ease_push", "sweep"):
@@ -115,12 +115,12 @@ def motion_filter(
                 progress = f"(floor(3*({fraction}))/3)"
             elif fx["kind"] == "pulse":
                 # 25% eased rise, 40% hold, 35% eased release.
-                rise = f"min(1\,({phase})/0.25)"
-                fall = f"min(1\,max(0\,({phase}-0.65)/0.35))"
+                rise = f"min(1\\,({phase})/0.25)"
+                fall = f"min(1\\,max(0\\,({phase}-0.65)/0.35))"
                 rise_smooth = f"({rise}*{rise}*(3-2*{rise}))"
                 fall_smooth = f"({fall}*{fall}*(3-2*{fall}))"
-                progress = (f"if(lt({phase}\,0.25)\,{rise_smooth}\,"
-                            f"if(lt({phase}\,0.65)\,1\,(1-{fall_smooth})))")
+                progress = (f"if(lt({phase}\\,0.25)\\,{rise_smooth}\\,"
+                            f"if(lt({phase}\\,0.65)\\,1\\,(1-{fall_smooth})))")
             else:
                 progress = fraction
             zoom = f"({initial:.3f}+({final-initial:.3f})*({progress}))"
@@ -136,8 +136,8 @@ def motion_filter(
         else:
             move_x = f"{fx['anchor_x_pct']/100:.3f}"
             move_y = f"{fx['anchor_y_pct']/100:.3f}"
-        anchor_x=f"if({in_window}\,{move_x}\,{anchor_x})"
-        anchor_y=f"if({in_window}\,{move_y}\,{anchor_y})"
+        anchor_x=f"if({in_window}\\,{move_x}\\,{anchor_x})"
+        anchor_y=f"if({in_window}\\,{move_y}\\,{anchor_y})"
     # During a 1x window, x/y evaluate to 0. During zoom, valid crop window
     # is (iw-iw/zoom); multiplying 0..1 guarantees no out-of-bounds sampling.
     return (
