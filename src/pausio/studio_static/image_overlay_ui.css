@@ -1,0 +1,125 @@
+/* B-roll UX: dedicated workspace, no duplicate image editor or dependencies. */
+@media (min-width: 1001px) {
+  .app-shell[data-workspace="broll"] .rail .rail-section,
+  .app-shell[data-workspace="broll"] .inspector-tabs,
+  .app-shell[data-workspace="broll"] .inspector-counter,
+  .app-shell[data-workspace="broll"] .selection-inspector,
+  .app-shell[data-workspace="broll"] #cuts-content > :not(#image-overlay-panel) {
+    display: none !important;
+  }
+  .app-shell[data-workspace="broll"] .editor-dock {
+    grid-template-columns: 0 minmax(0,1fr);
+  }
+  .app-shell[data-workspace="broll"] .editor-dock .audio-mixer {
+    display: none !important;
+  }
+}
+.app-shell[data-workspace="visual"] #image-overlay-panel { display:none !important; }
+.app-shell[data-workspace="broll"] #image-overlay-panel {
+  margin-top:0; padding-top:5px; border-top:0;
+}
+#image-overlay-panel .pip-playhead-note {
+  padding:8px 9px; border:1px solid var(--border);
+  border-radius:6px; background:var(--surface-raised);
+  font-variant-numeric:tabular-nums; line-height:1.5;
+}
+#image-overlay-panel .pip-card .pip-interval {
+  color:var(--accent-bright); font-variant-numeric:tabular-nums;
+}
+#image-overlay-panel .pip-card .pip-name {
+  overflow-wrap:anywhere; font-size:12px;
+}
+#image-overlay-panel .pip-advanced {
+  border:1px solid var(--border); border-radius:6px;
+  padding:8px; min-width:0;
+}
+#image-overlay-panel .pip-advanced summary {
+  cursor:pointer; padding:5px; color:var(--ink);
+  font-size:11px;
+}
+#image-overlay-panel .pip-advanced summary:focus-visible {
+  outline:2px solid var(--focus);outline-offset:2px;
+}
+#image-overlay-panel .pip-advanced .visual-fx-edit-grid { margin:10px 0; }
+#image-overlay-panel .pip-advanced .button { width:100%; }
+#image-overlay-panel .pip-card > .button { width:100%; }
+#image-overlay-panel .pip-empty {
+  margin:0; padding:12px; border:1px dashed var(--border);
+  border-radius:8px; line-height:1.5; font-size:11px;
+}
+/* The ruler stays source-timed. These markers project output-timed overlays
+   onto the kept source spans, correctly splitting them across cut boundaries. */
+.timeline-broll-track {
+  position:absolute; inset-inline:0; top:calc(100% + 142px);
+  height:30px; border:1px solid var(--accent);
+  border-radius:5px; background:#30251e; overflow:hidden;
+}
+.timeline-surface.has-visual-fx:not(.has-captions) .timeline-broll-track {
+  top:calc(100% + 102px);
+}
+.timeline-surface.has-captions:not(.has-visual-fx) .timeline-broll-track {
+  top:calc(100% + 103px);
+}
+.timeline-surface:not(.has-captions):not(.has-visual-fx) .timeline-broll-track {
+  top:calc(100% + 64px);
+}
+.broll-lane { position:absolute;inset:0; }
+.broll-lane-empty {
+  position:absolute;inset:0;display:flex;align-items:center;
+  justify-content:center;padding:0 8px;color:var(--accent-bright);
+  font-size:10px;pointer-events:none;
+}
+.broll-mark {
+  position:absolute;top:3px;bottom:3px;min-width:6px;
+  border:1px solid var(--accent-bright);border-radius:4px;
+  background:#81583a;color:#fff4e8;padding:0 5px;font-size:10px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  text-align:left;cursor:pointer;
+}
+.broll-mark:hover,.broll-mark.is-selected {
+  background:#a16b45;border-color:#fff1d7;
+}
+.broll-mark:focus-visible {outline:3px solid var(--focus);outline-offset:2px;}
+.broll-mark:disabled {cursor:not-allowed;opacity:.55;}
+.timeline-surface.has-broll {height:250px;min-height:250px;}
+.timeline-surface.has-broll:not(.has-captions):not(.has-visual-fx) {
+  height:173px;min-height:173px;
+}
+.timeline-surface.has-broll.has-captions:not(.has-visual-fx) {
+  height:219px;min-height:219px;
+}
+.timeline-surface.has-broll.has-visual-fx:not(.has-captions) {
+  height:210px;min-height:210px;
+}
+.timeline-surface.has-broll .timeline-track > .playhead {height:calc(100% + 182px);}
+.timeline-surface.has-broll:not(.has-captions):not(.has-visual-fx) .timeline-track > .playhead {
+  height:calc(100% + 105px);
+}
+.timeline-surface.has-broll.has-captions:not(.has-visual-fx) .timeline-track > .playhead {
+  height:calc(100% + 151px);
+}
+.timeline-surface.has-broll.has-visual-fx:not(.has-captions) .timeline-track > .playhead {
+  height:calc(100% + 142px);
+}
+@media (max-width:650px) {
+  .timeline-broll-track {top:calc(100% + 133px);height:28px;}
+  .timeline-surface.has-visual-fx:not(.has-captions) .timeline-broll-track {
+    top:calc(100% + 96px);
+  }
+  .timeline-surface.has-captions:not(.has-visual-fx) .timeline-broll-track {
+    top:calc(100% + 95px);
+  }
+  .timeline-surface:not(.has-captions):not(.has-visual-fx) .timeline-broll-track {
+    top:calc(100% + 60px);
+  }
+  .timeline-surface.has-broll {height:239px;min-height:239px;}
+  .timeline-surface.has-broll:not(.has-captions):not(.has-visual-fx) {
+    height:164px;min-height:164px;
+  }
+  .timeline-surface.has-broll.has-captions:not(.has-visual-fx) {
+    height:205px;min-height:205px;
+  }
+  .timeline-surface.has-broll.has-visual-fx:not(.has-captions) {
+    height:203px;min-height:203px;
+  }
+}

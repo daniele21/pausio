@@ -3,9 +3,9 @@
 ## Utilizzo
 
 1. Apri Pausio Studio, importa un video e prepara il montaggio con **Tagli AI**.
-2. In **Video FX → B-roll · immagini PIP**, premi **Importa immagine al cursore** e seleziona un PNG, JPG oppure WebP dal Mac.
-3. Dopo l'importazione viene creata una scheda PIP ancorata alla timeline **montata** (non al file sorgente). Imposta inizio, durata (0,4–12 secondi), larghezza e posizione X/Y, poi premi **Salva posizione**. Tutte le modifiche sono istruzioni versionate, esportabili e annullabili.
-4. Premi **Genera preview FFmpeg con PIP**, poi **Preview FFmpeg**. Le immagini vengono impresse dopo gli zoom, ma sotto sottotitoli e card testuali. Conferma il montaggio per esportare l'MP4.
+2. Apri **B-roll** nella navigazione principale, posiziona il cursore e premi **Aggiungi immagine al cursore**. Seleziona un PNG, JPG o WebP.
+3. La scheda mostra **inizio e fine nel video montato**. La traccia B-roll sulla timeline originale visualizza ogni intervallo sorgente effettivamente mantenuto: se l'immagine attraversa un taglio, compare in più pezzi visivi ma rimane una sola istruzione. Clicca un pezzo oppure **Vai al punto** per raggiungere l'elemento. Apri **Regola tempi, dimensione e posizione** per effettuare modifiche reversibili (0,4–12 secondi, dimensione e X/Y).
+4. Premi **Guarda 5 s** sulla singola immagine per verificare immediatamente il clip montato con FFmpeg, anche senza preview completa precedente. La preview completa si trova nella timeline con **Genera preview**; non c'è una seconda pipeline. Le immagini sono impresse dopo gli zoom, ma sotto sottotitoli e card testuali. Conferma il montaggio per esportare l'MP4.
 5. Esporta il progetto `.pausio.json` v7. Il file contiene hash e metadati dei riferimenti, **non contiene i file immagine**. Se riapri il progetto su un dispositivo diverso o hai cancellato la copia privata, importa nuovamente gli stessi byte di immagine per ricollegarla, senza duplicare i comandi.
 
 ## Sicurezza e confini
@@ -20,3 +20,7 @@
 ## Verifica
 
 Test: replay v7, Undo/Redo, compatibilità vecchi progetti, valori invalidi, hash errati, MP4 FFmpeg con overlay visibile, import locale e retry/relink, preview e UI Playwright. Eseguire inoltre una prova privata con registrazioni reali e schermate sensibili, senza caricarle su GitHub.
+
+## Limiti UX attuali
+
+La traccia B-roll mostra posizioni e durata, **non una composizione CSS live**: in Originale/Simulazione l'immagine non è impressa nel player. Usa **Guarda 5 s** per la resa reale. La barra del tempo è in coordinate sorgente, le proprietà sono in coordinate del montaggio: le conversioni attraversano solo i segmenti KEEP. Il supporto a clip B-roll video rimane separato, non va confuso con immagini PIP.

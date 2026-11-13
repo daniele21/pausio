@@ -229,7 +229,10 @@ class StudioPlaywrightAudit(unittest.TestCase):
 
     def test_local_image_pip_import_typed_edit_and_real_ffmpeg_preview(self):
         initial=self.upload_analyze()
-        self.page.locator('[data-workspace-nav="visual"]').click()
+        self.page.locator('[data-workspace-nav="broll"]').click()
+        self.assertEqual(self.page.locator("#app").get_attribute("data-workspace"),"broll")
+        self.assertTrue(self.page.locator("#timeline-broll-track").is_visible())
+        self.assertIn("Nessuna immagine",self.page.locator("#pip-image-list").inner_text())
         self.assertTrue(self.page.locator("#pip-image-import").is_enabled())
         image=self.root/"screen.png"
         subprocess.run([
@@ -241,15 +244,33 @@ class StudioPlaywrightAudit(unittest.TestCase):
         added=self.wait_state("revision",initial["project_revision"]+1)
         self.assertEqual(len(added["image_overlays"]),1)
         self.assertTrue(added["image_overlays"][0]["available"])
-        self.assertTrue(self.page.locator("[data-pip-id]").is_visible())
-        item=self.page.locator("[data-pip-id]").first
+        self.assertTrue(self.page.locator(".pip-card[data-pip-id]").is_visible())
+        self.assertIn("Nel video finale:",self.page.locator("#pip-image-list").inner_text())
+        # The 3.2s image intersects two KEEP regions separated by a real cut;
+        # one output-time command must project into two source-ruler markers.
+        self.assertEqual(self.page.locator(".broll-mark").count(),2)
+        self.assertTrue(self.page.locator("#timeline-broll-track").is_visible())
+        self.assertTrue(self.page.locator("#pip-image-playhead-note").is_visible())
+        self.page.locator(".broll-mark").first.click()
+        self.assertTrue(self.page.locator(".pip-card details").evaluate("(node)=>node.open"))
+        self.assertEqual(self.page.locator("#app").get_attribute("data-workspace"),"broll")
+        self.assertEqual(len(self.state()["image_overlays"]),1)
+        item=self.page.locator(".pip-card[data-pip-id]").first
         item.locator('input[aria-label="Larghezza (%) immagine PIP"]').fill("60")
-        item.get_by_role("button",name="Salva posizione").click()
+        item.get_by_role("button",name="Salva modifiche").click()
         revised=self.wait_state("revision",added["project_revision"]+1)
         self.assertEqual(revised["image_overlays"][0]["width_pct"],60)
         self.assertEqual(revised["image_overlays"][0]["asset_sha256"],
                          added["image_overlays"][0]["asset_sha256"])
-        self.page.locator("#pip-image-preview").click()
+        # Direct FFmpeg range must work without an entire preview first.
+        self.assertFalse(revised["preview_ready"])
+        self.page.locator(".pip-card .visual-fx-entry-actions .button-primary").click()
+        quick=self.wait_state("preview_range","completed",timeout=120000)
+        self.assertTrue(quick["preview_range_ready"])
+        self.assertFalse(quick["preview_ready"])
+        self.wait_condition(lambda:self.page.locator("#quick-preview-dialog").is_visible())
+        self.page.locator("#quick-preview-close").click()
+        self.page.locator("#preview-action").click()
         ready=self.wait_state("preview","completed",timeout=120000)
         self.assertTrue(ready["preview_ready"],ready["job"])
         self.wait_condition(lambda:self.page.locator('[data-mode="rendered"]').is_enabled())

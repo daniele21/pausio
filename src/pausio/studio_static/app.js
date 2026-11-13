@@ -1377,6 +1377,7 @@ const WORKSPACE_LABELS = {
   transcript: ["Trascrizione","Trascrivi localmente e rivedi le parole riconosciute.","Trascrizione"],
   captions: ["Sottotitoli","Genera, correggi e posiziona i sottotitoli nella preview.","Sottotitoli"],
   visual: ["Video FX","Zoom, movimenti e transizioni. Gli effetti diventano visibili nel video dopo una preview FFmpeg.","Effetti visivi"],
+  broll: ["B-roll","Immagini sopra il parlato, con una traccia dedicata. Clicca un elemento per vedere quando compare.","B-roll · immagini"],
   audio: ["Audio e riser","Importa effetti, spostali sulla timeline e regola il volume.","Effetti audio"],
   settings: ["Progetto e impostazioni","Gestisci autosalvataggio, cronologia e file di progetto.","Revisione tagli"]
 };
@@ -1396,6 +1397,7 @@ function setWorkspace(name, persist=true){
   if(name==="transcript"||name==="captions")tab("transcript");
   else tab("cuts");
   renderWorkspaceLibraries();
+  window.pausioImages?.update();
   if(persist){try{localStorage.setItem("pausio-studio-workspace",name);}catch(_error){}}
 }
 function syncDesktopCommands(){
