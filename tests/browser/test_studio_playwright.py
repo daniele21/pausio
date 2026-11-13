@@ -120,6 +120,36 @@ class StudioPlaywrightAudit(unittest.TestCase):
                             timeout=30000)
         return result
 
+    def test_ffmpeg_preview_disabled_state_and_persistent_failure_recovery(self):
+        """A failed render must not leave the disabled preview unexplained."""
+        from unittest.mock import patch
+        from pausio.media import MediaError
+
+        self.upload_analyze()
+        self.page.locator('[data-workspace-nav="cuts"]').click()
+        self.assertTrue(self.page.locator('[data-mode="rendered"]').is_disabled())
+        self.assertIn("Genera preview",self.page.locator("#preview-state-note").inner_text())
+
+        with patch("pausio.studio.render",side_effect=MediaError(
+            "ffmpeg failed (exit 8): No such filter: 'ass'")):
+            self.page.locator("#preview-action").click()
+            failed=self.wait_state("preview","failed",timeout=30000)
+            self.assertFalse(failed["preview_ready"])
+            self.wait_condition(lambda: "No such filter" in
+                                self.page.locator("#preview-state-note").inner_text())
+            self.assertTrue(self.page.locator('[data-mode="rendered"]').is_disabled())
+            self.assertTrue(self.page.locator("#preview-action").is_enabled())
+
+        # Error stays visible after a refresh; it must not be a 6-second toast.
+        self.page.reload(wait_until="networkidle")
+        self.assertIn("No such filter",self.page.locator("#preview-state-note").inner_text())
+        self.page.locator("#preview-action").click()
+        ready=self.wait_state("preview","completed",timeout=120000)
+        self.assertTrue(ready["preview_ready"])
+        self.wait_condition(lambda: self.page.locator('[data-mode="rendered"]').is_enabled())
+        self.assertTrue(self.page.locator("#preview-state-note").is_hidden())
+        self.assertFalse(self.errors,self.errors)
+
     def test_video_fx_manual_automatic_review_and_real_preview(self):
         """Visible 9:16 zoom editing + evidence-only suggestion + undo/export."""
         initial=self.upload_analyze()
