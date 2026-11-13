@@ -22,26 +22,28 @@ class TestCLI(unittest.TestCase):
             return "/opt/homebrew/bin/" + name
         with (
             patch("pausio.cli.shutil.which", side_effect=binaries),
-            patch("pausio.cli.ffmpeg_has_filter", return_value=False),
+            patch("pausio.cli.select_ffmpeg_for_filter", return_value=None),
             redirect_stdout(io.StringIO()) as out,
         ):
             result=main(["doctor"])
         self.assertEqual(result,2)
         doc=json.loads(out.getvalue())
         self.assertFalse(doc["captions_ass"])
+        self.assertIsNone(doc["captions_ffmpeg"])
         self.assertFalse(doc["ready"])
         self.assertIn("ffmpeg-full",doc["warnings"][0])
 
     def test_doctor_requires_ffmpeg_and_ass_to_be_ready(self):
         with (
             patch("pausio.cli.shutil.which", side_effect=lambda name:"/usr/bin/"+name),
-            patch("pausio.cli.ffmpeg_has_filter", return_value=True),
+            patch("pausio.cli.select_ffmpeg_for_filter", return_value="/usr/bin/ffmpeg"),
             redirect_stdout(io.StringIO()) as out,
         ):
             result=main(["doctor"])
         self.assertEqual(result,0)
         doc=json.loads(out.getvalue())
         self.assertTrue(doc["captions_ass"])
+        self.assertEqual(doc["captions_ffmpeg"],"/usr/bin/ffmpeg")
         self.assertTrue(doc["ready"])
         self.assertEqual(doc["warnings"],[])
 
