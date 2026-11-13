@@ -49,11 +49,15 @@ def ffmpeg_has_filter(name: str, *, executable: str | None = None) -> bool:
     if not re.fullmatch(r"[a-z][a-z0-9_]{0,39}", name):
         raise ValueError("Invalid FFmpeg filter name")
     result = _run([executable or require_binary("ffmpeg"), "-hide_banner", "-filters"], timeout_s=20)
-    # FFmpeg prints three capability markers followed by the filter name.
-    return any(
-        re.match(r"^\s*[TSC.]{3}\s+" + re.escape(name) + r"\s", line)
-        for line in result.stdout.splitlines()
+    # FFmpeg's optional T/S/C markers vary between builds: some print
+    # "... ass V->V", while macOS ffmpeg-full may print " .. ass V->V"
+    # (a blank first marker). Identify exact filter names and pad topology,
+    # not descriptions or a fixed count of visible marker characters.
+    pattern = re.compile(
+        r"^\s*(?:[TSC.]{1,3}\s+)?" + re.escape(name)
+        + r"\s+[AVN|]+->[AVN|]+(?:\s|$)"
     )
+    return any(pattern.match(line) for line in result.stdout.splitlines())
 
 
 
