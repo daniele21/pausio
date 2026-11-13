@@ -90,9 +90,20 @@ def compose_graphics_ass(cues: list[dict], graphics: list[dict], *,
     No user-controlled ASS override text is evaluated.
     """
     base = ass_document(cues, style=style, settings=settings)
+    # Distinct native libass card styles; no user-provided fonts or filters.
+    def style_line(name: str, font: str, border: int, outline: int,
+                   back_color: str) -> str:
+        return (
+            f"Style: {name},{font},64,&H00FFFFFF,&H00FFFFFF,&H00000000,"
+            f"{back_color},-1,0,0,0,100,100,0,0,"
+            f"{border},{outline},0,5,40,40,0,1\\n"
+        )
     overlay_style = (
-        "Style: Graphic,Arial,64,&H00FFFFFF,&H00FFFFFF,&H00000000,"
-        "&H70000000,-1,0,0,0,100,100,0,0,1,5,0,5,40,40,0,1\n"
+        style_line("Graphic", "Arial", 1, 5, "&H70000000")
+        + style_line("GraphicHeadline", "Arial", 1, 5, "&H70000000")
+        + style_line("GraphicStat", "Impact", 3, 10, "&H550D1724")
+        + style_line("GraphicCode", "Courier New", 3, 12, "&H50131520")
+        + style_line("GraphicTip", "Avenir Next", 3, 9, "&H5533291C")
     )
     result = base.replace("[Events]\n", overlay_style+"[Events]\n", 1)
     events = []
@@ -108,7 +119,12 @@ def compose_graphics_ass(cues: list[dict], graphics: list[dict], *,
         y = round(g["y_pct"] * 1920 / 100)
         color = _ass_color(g["color"])
         size = g["font_size"]
-        font = "Courier New" if g["kind"] == "code" else "Arial"
+        style_name, font, padding = {
+            "headline": ("GraphicHeadline", "Arial", 5),
+            "stat": ("GraphicStat", "Impact", 10),
+            "code": ("GraphicCode", "Courier New", 12),
+            "tip": ("GraphicTip", "Avenir Next", 9),
+        }[g["kind"]]
         # Native fixed ASS templates, never raw expressions from a project.
         pos = (fr"\move({x},{y+42},{x},{y},0,260)"
                if g["animation"] == "slide" else fr"\pos({x},{y})")
@@ -119,9 +135,9 @@ def compose_graphics_ass(cues: list[dict], graphics: list[dict], *,
         if not line:
             continue
         overrides = (fr"\an5{pos}\fn{font}\fs{size}\c{color}"
-                     fr"\bord5\shad0{fade}{effect}")
+                     fr"\bord{padding}\shad0{fade}{effect}")
         events.append(
             f"Dialogue: 1,{_ass_time(g['start_ms'])},{_ass_time(g['end_ms'])},"
-            f"Graphic,,0,0,0,,{{{overrides}}}{line}\n"
+            f"{style_name},,0,0,0,,{{{overrides}}}{line}\n"
         )
     return result + "".join(events)
