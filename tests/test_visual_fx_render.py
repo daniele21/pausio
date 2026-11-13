@@ -107,6 +107,30 @@ class VisualFxRendererTests(unittest.TestCase):
             # Within the punch window, the output is visibly re-cropped.
             self.assertNotEqual(frame(standard,0.7),frame(zoomed,0.7))
 
+    @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"),
+                         "FFmpeg and FFprobe required")
+    def test_pulse_and_sweep_render_actual_video_without_changing_duration(self):
+        with tempfile.TemporaryDirectory() as d:
+            source=Path(d)/"source.mp4"
+            subprocess.run([
+                "ffmpeg","-hide_banner","-nostdin","-v","error","-y",
+                "-f","lavfi","-i","testsrc2=size=180x320:rate=30:duration=2.5",
+                "-c:v","libx264","-pix_fmt","yuv420p",str(source),
+            ],check=True,timeout=40)
+            for kind in ("pulse","sweep"):
+                with self.subTest(kind=kind):
+                    fx=entry(start=250,end=2100,kind=kind,amount=120)
+                    if kind=="sweep":
+                        fx["anchor_x_pct"]=65
+                        fx["anchor_y_pct"]=40
+                    target=Path(d)/(kind+".mp4")
+                    render(source,target,(Interval(0,2500),),has_audio=False,
+                           size=(540,960),video_fx=[fx])
+                    info=probe(target)
+                    self.assertEqual((info.width,info.height),(540,960))
+                    self.assertTrue(2250<=info.duration_ms<=2700)
+                    self.assertFalse(info.has_audio)
+
     @unittest.skipUnless(shutil.which("ffmpeg"),"ffmpeg required")
     def test_dry_run_effect_filter_precedes_joined_caption_pipeline(self):
         with tempfile.TemporaryDirectory() as d:
