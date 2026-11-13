@@ -4,7 +4,7 @@
 
 **Every editing action is a typed instruction.** The UI never directly owns the final timeline. The pure Python reducer `src/pausio/project_commands.py` validates/replays an ordered command tape and derives the same `EditPlan` used by FFmpeg.
 
-The current format is `pausio.project`, `schema_version: 4` and is documented by [JSON Schema v4](../schemas/pausio-project-v4.schema.json). v3 remains readable using [JSON Schema v3](../schemas/pausio-project-v3.schema.json). v2 remains readable using [JSON Schema v2](../schemas/pausio-project-v2.schema.json). **Existing v1 files remain readable** using a strict migration (all commands preserved; history cursor placed at the end). V1 schema: [JSON Schema v1](../schemas/pausio-project-v1.schema.json). JSON Schema checks the *shape*; the reducer additionally checks ordering, interval overlap, valid IDs, existing targets, media duration bounds and command history semantics.
+The current format is `pausio.project`, `schema_version: 5` and is documented by [JSON Schema v5](../schemas/pausio-project-v5.schema.json). v4 remains readable through [JSON Schema v4](../schemas/pausio-project-v4.schema.json). v3 remains readable using [JSON Schema v3](../schemas/pausio-project-v3.schema.json). v2 remains readable using [JSON Schema v2](../schemas/pausio-project-v2.schema.json). **Existing v1 files remain readable** using a strict migration (all commands preserved; history cursor placed at the end). V1 schema: [JSON Schema v1](../schemas/pausio-project-v1.schema.json). JSON Schema checks the *shape*; the reducer additionally checks ordering, interval overlap, valid IDs, existing targets, media duration bounds and command history semantics.
 
 ## Example
 
@@ -13,7 +13,7 @@ Below is explanatory sample data, **not a file for importing against your own vi
 ```json
 {
   "format": "pausio.project",
-  "schema_version": 4,
+  "schema_version": 5,
   "media": {
     "filename": "ripresa.mp4",
     "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -165,3 +165,9 @@ A single native event family adds bounded, source-anchored punch and progressive
 A **dip to black** is an explicit `video.transition.add`, `video.transition.update` or `video.transition.remove` event, separate from per-segment zoom transforms. Each event requires `id`, `left_segment_id`, `right_segment_id`, `kind: dip_black`, and integer `duration_ms` 200..600. Both referenced KEEP segments must exist and be adjacent in the **same source-time project**; each is at least 1,200ms long. Duplicate boundary events, orphaned segments, overly dense adjacent ramps and unknown properties are rejected at command replay/import. FFmpeg fades picture only, half on each side, with **no overlapping frames, unchanged source-audio concat and unchanged output duration**. This is not an `xfade`/cross-dissolve. Changes to existing segment bounds that would invalidate a transition must be resolved before editing the cut (no silent retarget).
 
 Schema [v4](../schemas/pausio-project-v4.schema.json) combines the additional transitions with bounded `ease_push` and `ratchet`; legacy v1/v2/v3 projects import and export as v4. Human-reviewed custom zoom suggestions and optional stable-face proposals become exported video changes **only** after one of the canonical typed `video.transform.*` commands is accepted.
+
+## Source-bound animated graphic cards — project v5
+
+`graphic.overlay.add`, `graphic.overlay.update` and `graphic.overlay.remove` are first-class commands. Add/update payloads contain a full validated `graphic` with a stable 32-hex `id`, a retained `segment_id`, source `start_ms/end_ms` (400–12,000ms, entirely inside the segment), a single-line `text` (1–100 characters), `kind` (headline/stat/code/tip), `animation` (fade/pop/slide), integer `x_pct` (15–85), `y_pct` (8–62), `font_size` (36–104), and uppercase `color` (#RRGGBB). Remove payload is `{graphic_id}`. Maximum 12 cards per project; invalid/orphaned references are rejected during replay, before project mutation. Imported v1–v4 projects remain readable; exports write v5.
+
+The deterministic ASS composer maps source times through KEEP cuts and applies fixed effect templates **after** camera motion; user/project data never becomes arbitrary FFmpeg syntax, JS, HTML or remote URLs. Overlay text is escaped. Preview and final render share this composition. Source videos/transcripts are never embedded in portable projects. User acceptance remains required for export; overlays invalidate prior approval.
