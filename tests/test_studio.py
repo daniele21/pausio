@@ -329,6 +329,63 @@ class StudioMediaWorkflowTests(StudioHttpTests):
             self.assertEqual(json.loads(payload)["file"], "test footage.mp4")
         return original
 
+    def test_import_image_pip_v7_preview_and_relink_by_digest(self):
+        self.import_clip()
+        self.assertEqual(self.post("/api/jobs", {"kind":"analyze"})[0],202)
+        self.await_job("analyze")
+        initial=self.get_state()
+        with tempfile.TemporaryDirectory() as directory:
+            image=Path(directory)/"display.png"
+            subprocess.run([
+                "ffmpeg","-hide_banner","-nostdin","-v","error","-y",
+                "-f","lavfi","-i","color=c=red:s=120x96:r=1:d=1",
+                "-frames:v","1","-threads:v","1",str(image)
+            ],check=True,timeout=35)
+            original=image.read_bytes()
+        headers={
+            "Content-Type":"application/octet-stream",
+            "X-Pausio-Client":"studio",
+            "Origin":self.base,
+            "X-Filename":"display.png",
+            "X-Pausio-Revision":str(initial["project_revision"]),
+            "X-Pausio-Start-Ms":"200",
+        }
+        bad={**headers,"X-Filename":"..%2Fsecret.png"}
+        status,_,data=self.request("POST","/api/image/import",original,bad)
+        self.assertEqual(status,400,data[:200])
+        self.assertEqual(self.get_state()["project_revision"],initial["project_revision"])
+        status,_,data=self.request("POST","/api/image/import",original,headers)
+        self.assertEqual(status,200,data[:200])
+        ready=json.loads(data)
+        self.assertEqual(len(ready["image_overlays"]),1)
+        row=ready["image_overlays"][0]
+        self.assertTrue(row["available"])
+        self.assertEqual(row["filename"],"display.png")
+        self.assertNotIn("base64",json.dumps(row))
+        self.assertEqual(ready["project_revision"],initial["project_revision"]+1)
+        self.assertEqual(self.post("/api/jobs",{"kind":"preview"})[0],202)
+        preview=self.await_job("preview")
+        self.assertTrue(preview["preview_ready"])
+        self.assertEqual(self.request("GET","/api/preview")[0],200)
+        export=json.loads(self.request("GET","/api/project/export")[2])
+        self.assertEqual(export["schema_version"],7)
+        self.assertNotIn(original[:32].hex(),json.dumps(export))
+        digest=row["asset_sha256"]
+        stored=self.workspace._image_path(digest,row["filename"])
+        self.assertTrue(stored.is_file())
+        stored.unlink()
+        self.assertFalse(self.get_state()["image_overlays"][0]["available"])
+        # An identical image can be reimported under a different filename.
+        headers2={**headers,"X-Filename":"renamed.png",
+                  "X-Pausio-Revision":str(ready["project_revision"])}
+        status,_,result=self.request("POST","/api/image/import",original,headers2)
+        self.assertEqual(status,200,result[:200])
+        reloaded=json.loads(result)
+        self.assertTrue(reloaded["image_overlays"][0]["available"])
+        self.assertEqual(reloaded["image_overlays"][0]["filename"],"display.png")
+        self.assertEqual(reloaded["project_revision"],ready["project_revision"])
+        self.assertTrue(stored.is_file())
+
     def test_import_custom_audio_fx_preview_relink_and_export(self):
         self.import_clip()
         state = self.get_state()
