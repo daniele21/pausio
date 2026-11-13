@@ -79,6 +79,20 @@ class VideoFxCommandsTests(unittest.TestCase):
         old["schema_version"]=3
         self.assertEqual(ProjectTape.from_dict(old).as_dict()["schema_version"],5)
 
+    def test_pulse_and_sweep_replay_v5_and_reject_short_source_windows(self):
+        for kind in ("pulse", "sweep"):
+            with self.subTest(kind=kind):
+                fx=effect(self.a,start=600,end=2400,kind=kind,scale=120)
+                tape=self.tape.append("video.transform.add",{"effect":fx})
+                self.assertEqual(tape.view.video_fx[0]["kind"],kind)
+                self.assertEqual(ProjectTape.from_dict(tape.as_dict()).view.video_fx,
+                                 tape.view.video_fx)
+                self.assertEqual(tape.undo().view.video_fx,())
+        for kind,end in (("pulse",1500),("sweep",1800)):
+            with self.subTest(kind=kind), self.assertRaises(ProjectFormatError):
+                self.tape.append("video.transform.add",{
+                    "effect":effect(self.a,start=700,end=end,kind=kind,scale=120)})
+
     def test_invalid_effects_rejected_without_mutating_original(self):
         base = effect(self.a)
         for change in (

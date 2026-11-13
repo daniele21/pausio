@@ -24,7 +24,7 @@
     return b;
   };
   function title(kind){
-    return ({punch:"Punch-in",slow_push:"Zoom progressivo",ease_push:"Zoom morbido",ratchet:"Ratchet · 3 scatti"})[kind]||"Video FX";
+    return ({punch:"Punch-in",slow_push:"Zoom progressivo",ease_push:"Zoom morbido",ratchet:"Ratchet · 3 scatti",pulse:"Pulse · zoom e rientro",sweep:"Sweep · pan morbido"})[kind]||"Video FX";
   }
   function ignoredKey(preset){
     return "pausio.fx.ignored.v1."+String(current().media_id||"")+"."+preset;
@@ -65,7 +65,7 @@
     item.dataset.visualFxId=effect.id;
     const head=document.createElement("strong");
     head.textContent=title(effect.kind)+" · "+
-      (effect.end_scale_pct/100).toFixed(2)+"×";
+      (effect.end_scale_pct/100).toFixed(2)+"×"+(effect.kind==="pulse"?" picco":"");
     const desc=document.createElement("p");
     desc.textContent="Sorgente "+formatMs(effect.start_ms)+" – "+
       formatMs(effect.end_ms)+" · modificabile ed esportabile";
@@ -75,12 +75,12 @@
                       {min:0,max:172800,step:0.05});
     const end=field("Fine (s)",(effect.end_ms/1000).toFixed(2),
                     {min:0,max:172800,step:0.05});
-    const scale=field("Zoom finale (%)",effect.end_scale_pct,{min:100,max:130});
+    const scale=field(effect.kind==="pulse"?"Zoom picco (%)":"Zoom finale (%)",effect.end_scale_pct,{min:100,max:130});
     const x=field("Centro X (%)",effect.anchor_x_pct,{min:0,max:100});
     const y=field("Centro Y (%)",effect.anchor_y_pct,{min:0,max:100});
     const kind=document.createElement("label");kind.textContent="Movimento";
     const select=document.createElement("select");
-    for(const value of ["punch","slow_push","ease_push","ratchet"]){
+    for(const value of ["punch","slow_push","ease_push","ratchet","pulse","sweep"]){
       const option=document.createElement("option");
       option.value=value;option.textContent=title(value);
       select.append(option);
@@ -264,14 +264,18 @@
       segments().find(s=>s.start_ms>at)||segments().at(-1);
     if(!seg||seg.end_ms-seg.start_ms<250)
       throw Error("Serve un segmento mantenuto di almeno 250 ms.");
-    const start=Math.min(Math.max(at,seg.start_ms),seg.end_ms-250);
-    const end=Math.min(seg.end_ms,start+1150);
     const kind=e("visual-fx-kind").value;
+    const minimum=kind==="sweep"?1300:kind==="pulse"?900:250;
+    if(seg.end_ms-seg.start_ms<minimum)
+      throw Error("Segmento troppo breve per "+title(kind)+".");
+    const desired=kind==="sweep"?1900:kind==="pulse"?1500:1150;
+    const start=Math.min(Math.max(at,seg.start_ms),seg.end_ms-minimum);
+    const end=Math.min(seg.end_ms,start+desired);
     const zoom=Math.round(Number(e("visual-fx-scale").value));
     const effect={
       id:createId(),segment_id:seg.id,start_ms:start,end_ms:end,kind,
       start_scale_pct:kind==="punch"?zoom:100,end_scale_pct:zoom,
-      anchor_x_pct:50,anchor_y_pct:48
+      anchor_x_pct:kind==="sweep"?63:50,anchor_y_pct:kind==="sweep"?43:48
     };
     await edit("video.transform.add",{effect});
     selectedFxId=effect.id;draw();
