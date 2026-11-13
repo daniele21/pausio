@@ -131,6 +131,14 @@ def propose_captions(
                     "words": [dict(w) for w in chunk],
                 }
                 if cue["text"] and cue["end_ms"] > cue["start_ms"]:
+                    # Some ASR engines emit overlapping word clocks. Preserve
+                    # the caption text but never certify ambiguous alignment.
+                    previous = cue["start_ms"]
+                    for word in cue["words"]:
+                        if word["start_ms"] < previous or word["end_ms"] > cue["end_ms"]:
+                            cue.pop("words", None)
+                            break
+                        previous = word["end_ms"]
                     proposed.append(cue)
                 chunk.clear()
 
