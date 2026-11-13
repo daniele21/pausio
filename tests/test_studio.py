@@ -614,7 +614,7 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         status,_,document=self.request("GET","/api/project/export")
         self.assertEqual(status,200)
         self.assertIn("video.transform.add",[e["type"] for e in json.loads(document)["commands"]])
-        self.assertEqual(json.loads(document)["schema_version"],6)
+        self.assertEqual(json.loads(document)["schema_version"],7)
         status,_,raw=self.post("/api/command",{
             "revision":changed["project_revision"],"type":"history.undo","payload":{}
         })
@@ -762,7 +762,7 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         self.assertEqual(status, 200)
         self.assertIn(".pausio.json", headers["Content-Disposition"])
         document = json.loads(serialized)
-        self.assertEqual(document["schema_version"], 6)
+        self.assertEqual(document["schema_version"], 7)
         self.assertEqual(
             [item["type"] for item in document["commands"]],
             ["analysis.propose", "segment.update", "timeline.approve"],
@@ -788,7 +788,7 @@ class StudioMediaWorkflowTests(StudioHttpTests):
 
         wrong = json.loads(json.dumps(document))
         wrong["media"]["sha256"] = "f" * 64
-        for bad in (wrong, {**document, "schema_version": 7},
+        for bad in (wrong, {**document, "schema_version": 8},
                     {**document, "commands": [{"id": "0" * 32,
                                               "type": "execute.code", "payload": {}}]}):
             status, _, _ = self.post("/api/project/import", bad)
@@ -824,7 +824,7 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         self.assertTrue(undone["can_redo"])
 
         portable = json.loads(self.request("GET", "/api/project/export")[2])
-        self.assertEqual(portable["schema_version"], 6)
+        self.assertEqual(portable["schema_version"], 7)
         self.assertEqual(portable["history_cursor"], 1)
         self.assertEqual(len(portable["commands"]), 2)
         self.assertEqual(portable["revision"], 3)
