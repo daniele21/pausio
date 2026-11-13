@@ -4,7 +4,7 @@
 
 **Every editing action is a typed instruction.** The UI never directly owns the final timeline. The pure Python reducer `src/pausio/project_commands.py` validates/replays an ordered command tape and derives the same `EditPlan` used by FFmpeg.
 
-The current format is `pausio.project`, `schema_version: 5` and is documented by [JSON Schema v5](../schemas/pausio-project-v5.schema.json). v4 remains readable through [JSON Schema v4](../schemas/pausio-project-v4.schema.json). v3 remains readable using [JSON Schema v3](../schemas/pausio-project-v3.schema.json). v2 remains readable using [JSON Schema v2](../schemas/pausio-project-v2.schema.json). **Existing v1 files remain readable** using a strict migration (all commands preserved; history cursor placed at the end). V1 schema: [JSON Schema v1](../schemas/pausio-project-v1.schema.json). JSON Schema checks the *shape*; the reducer additionally checks ordering, interval overlap, valid IDs, existing targets, media duration bounds and command history semantics.
+The current format is `pausio.project`, `schema_version: 6` and is documented by [JSON Schema v6](../schemas/pausio-project-v6.schema.json). v5 remains readable through [JSON Schema v5](../schemas/pausio-project-v5.schema.json). v4 remains readable through [JSON Schema v4](../schemas/pausio-project-v4.schema.json). v3 remains readable using [JSON Schema v3](../schemas/pausio-project-v3.schema.json). v2 remains readable using [JSON Schema v2](../schemas/pausio-project-v2.schema.json). **Existing v1 files remain readable** using a strict migration (all commands preserved; history cursor placed at the end). V1 schema: [JSON Schema v1](../schemas/pausio-project-v1.schema.json). JSON Schema checks the *shape*; the reducer additionally checks ordering, interval overlap, valid IDs, existing targets, media duration bounds and command history semantics.
 
 ## Example
 
@@ -13,7 +13,7 @@ Below is explanatory sample data, **not a file for importing against your own vi
 ```json
 {
   "format": "pausio.project",
-  "schema_version": 5,
+  "schema_version": 6,
   "media": {
     "filename": "ripresa.mp4",
     "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -175,3 +175,7 @@ The deterministic ASS composer maps source times through KEEP cuts and applies f
 ## Camera motion extensions — portable v5
 
 `video.transform.*` now also accepts `pulse` (1x → bounded zoom peak → 1x, 25% rise, 40% hold, 35% release, >=900ms) and `sweep` (eased zoom combined with a smooth pan from center to creator-defined anchor, >=1300ms). Both retain the exact v5 shape of existing video transforms, with `start_scale_pct=100`, bounded integer source timestamps, endpoint zoom in 100..130, and anchor X/Y in 0..100. They remain KEEP-anchored, Undo/Redo-safe, and pass through the same preview/export FFmpeg graph as all other camera movement; not untracked browser animations.
+
+## Verified word-focus captions — portable v6
+
+`caption.set` may include `words` per cue, each with exact original-source `text`, `start_ms`, `end_ms` from a real word-aligned ASR segment. There are 1–12 ordered, non-overlapping, in-bounds word intervals per cue; the normalized joined words must equal the reviewed cue text. The `word_focus` preset displays the full cue normally and highlights the exact verified word only during its original interval. Cut remapping discards clipped/missing words rather than showing text from a removed pause. When a creator corrects text or retimes a cue, its word alignment is explicitly invalidated (no invented timestamps); selecting `word_focus` then falls back to plain phrase display for that cue. V1–V5 projects are readable; export writes v6.
