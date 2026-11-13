@@ -20,11 +20,13 @@ from pausio.captions import (
 from pausio.domain import EditPlan, Interval
 from pausio.visual_transitions import compile_dips, MAX_TRANSITIONS
 from pausio.graphic_overlays import validate_graphic, validate_graphics
+from pausio.image_overlays import validate_image_overlay, validate_image_overlays
 from pausio.planner import CUT_PRESETS, validate_cut_settings
 
 FORMAT = "pausio.project"
-VERSION = 6
-PREVIOUS_VERSION = 5
+VERSION = 7
+PREVIOUS_VERSION = 6
+V5_VERSION = 5
 V4_VERSION = 4
 V3_VERSION = 3
 MIGRATION_VERSION = 2
@@ -55,6 +57,9 @@ _TYPES = frozenset({
     "audio.remove",
     "audio.mixer.configure",
     "audio.clip.mix",
+    "image.overlay.add",
+    "image.overlay.update",
+    "image.overlay.remove",
     "graphic.overlay.add",
     "graphic.overlay.update",
     "graphic.overlay.remove",
@@ -363,6 +368,7 @@ class ProjectView:
     video_fx: tuple[dict, ...] = ()
     video_transitions: tuple[dict, ...] = ()
     graphic_overlays: tuple[dict, ...] = ()
+    image_overlays: tuple[dict, ...] = ()
 
 
 def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
@@ -380,6 +386,7 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
     video_fx: list[dict] = []
     video_transitions: list[dict] = []
     graphic_overlays: list[dict] = []
+    image_overlays: list[dict] = []
     used_events: set[str] = set()
 
     for command in commands:
@@ -584,6 +591,40 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
                 raise ProjectFormatError("Transition to remove does not exist")
             video_transitions=[t for t in video_transitions if t["id"]!=identity]
             approved=False
+        elif kind == "image.overlay.add":
+            _object(payload, {"image"}, kind)
+            total = sum(item["end_ms"] - item["start_ms"] for item in current)
+            try:
+                row = validate_image_overlay(payload["image"], total)
+                validate_image_overlays([*image_overlays, row], total)
+            except ValueError as exc:
+                raise ProjectFormatError(str(exc)) from exc
+            image_overlays = [*image_overlays, row]
+            approved = False
+        elif kind == "image.overlay.update":
+            _object(payload, {"image"}, kind)
+            total = sum(item["end_ms"] - item["start_ms"] for item in current)
+            try:
+                row = validate_image_overlay(payload["image"], total)
+            except ValueError as exc:
+                raise ProjectFormatError(str(exc)) from exc
+            if not any(image["id"] == row["id"] for image in image_overlays):
+                raise ProjectFormatError("Immagine PIP da aggiornare inesistente.")
+            updated = [row if image["id"] == row["id"] else image
+                       for image in image_overlays]
+            try:
+                validate_image_overlays(updated, total)
+            except ValueError as exc:
+                raise ProjectFormatError(str(exc)) from exc
+            image_overlays = updated
+            approved = False
+        elif kind == "image.overlay.remove":
+            _object(payload, {"image_id"}, kind)
+            ident = _id(payload["image_id"], "image_id")
+            if not any(image["id"] == ident for image in image_overlays):
+                raise ProjectFormatError("Immagine PIP da rimuovere inesistente.")
+            image_overlays = [image for image in image_overlays if image["id"] != ident]
+            approved = False
         elif kind == "graphic.overlay.add":
             _object(payload, {"graphic"}, kind)
             try:
@@ -648,6 +689,13 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
     _validate_video_transitions(video_transitions,current)
     try:
         validate_graphics(graphic_overlays, current, duration)
+        if current:
+            validate_image_overlays(
+                image_overlays,
+                sum(row["end_ms"]-row["start_ms"] for row in current)
+            )
+        elif image_overlays:
+            raise ValueError("Immagine PIP senza segmenti mantenuti.")
     except ValueError as exc:
         raise ProjectFormatError(str(exc)) from exc
     return ProjectView(
@@ -664,6 +712,7 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
         video_fx=tuple(copy.deepcopy(video_fx)),
         video_transitions=tuple(copy.deepcopy(video_transitions)),
         graphic_overlays=tuple(copy.deepcopy(graphic_overlays)),
+        image_overlays=tuple(copy.deepcopy(image_overlays)),
     )
 
 
@@ -784,7 +833,7 @@ class ProjectTape:
             # V1 files are intentionally read-only inputs; exporting always
             # upgrades to V2 with cursor at the end and preserved event IDs.
             return cls(obj["media"], obj["commands"])
-        if version in (MIGRATION_VERSION, V3_VERSION, V4_VERSION, PREVIOUS_VERSION, VERSION):
+        if version in (MIGRATION_VERSION, V3_VERSION, V4_VERSION, V5_VERSION, PREVIOUS_VERSION, VERSION):
             obj = _object(
                 document,
                 {"format", "schema_version", "media", "commands",

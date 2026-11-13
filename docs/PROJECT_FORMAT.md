@@ -4,7 +4,7 @@
 
 **Every editing action is a typed instruction.** The UI never directly owns the final timeline. The pure Python reducer `src/pausio/project_commands.py` validates/replays an ordered command tape and derives the same `EditPlan` used by FFmpeg.
 
-The current format is `pausio.project`, `schema_version: 6` and is documented by [JSON Schema v6](../schemas/pausio-project-v6.schema.json). v5 remains readable through [JSON Schema v5](../schemas/pausio-project-v5.schema.json). v4 remains readable through [JSON Schema v4](../schemas/pausio-project-v4.schema.json). v3 remains readable using [JSON Schema v3](../schemas/pausio-project-v3.schema.json). v2 remains readable using [JSON Schema v2](../schemas/pausio-project-v2.schema.json). **Existing v1 files remain readable** using a strict migration (all commands preserved; history cursor placed at the end). V1 schema: [JSON Schema v1](../schemas/pausio-project-v1.schema.json). JSON Schema checks the *shape*; the reducer additionally checks ordering, interval overlap, valid IDs, existing targets, media duration bounds and command history semantics.
+The current format is `pausio.project`, `schema_version: 7` and is documented by [JSON Schema v7](../schemas/pausio-project-v7.schema.json). v6 remains readable through [JSON Schema v6](../schemas/pausio-project-v6.schema.json). v5 remains readable through [JSON Schema v5](../schemas/pausio-project-v5.schema.json). v4 remains readable through [JSON Schema v4](../schemas/pausio-project-v4.schema.json). v3 remains readable using [JSON Schema v3](../schemas/pausio-project-v3.schema.json). v2 remains readable using [JSON Schema v2](../schemas/pausio-project-v2.schema.json). **Existing v1 files remain readable** using a strict migration (all commands preserved; history cursor placed at the end). V1 schema: [JSON Schema v1](../schemas/pausio-project-v1.schema.json). JSON Schema checks the *shape*; the reducer additionally checks ordering, interval overlap, valid IDs, existing targets, media duration bounds and command history semantics.
 
 ## Example
 
@@ -13,7 +13,7 @@ Below is explanatory sample data, **not a file for importing against your own vi
 ```json
 {
   "format": "pausio.project",
-  "schema_version": 6,
+  "schema_version": 7,
   "media": {
     "filename": "ripresa.mp4",
     "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -179,3 +179,7 @@ The deterministic ASS composer maps source times through KEEP cuts and applies f
 ## Verified word-focus captions — portable v6
 
 `caption.set` may include `words` per cue, each with exact original-source `text`, `start_ms`, `end_ms` from a real word-aligned ASR segment. There are 1–12 ordered, non-overlapping, in-bounds word intervals per cue; the normalized joined words must equal the reviewed cue text. The `word_focus` preset displays the full cue normally and highlights the exact verified word only during its original interval. Cut remapping discards clipped/missing words rather than showing text from a removed pause. When a creator corrects text or retimes a cue, its word alignment is explicitly invalidated (no invented timestamps); selecting `word_focus` then falls back to plain phrase display for that cue. V1–V5 projects are readable; export writes v6.
+
+## Local image PIP/B-roll — portable v7
+
+Native events `image.overlay.add`, `image.overlay.update`, `image.overlay.remove` keep SHA-256 (not image bytes, paths or remote URLs), safe filename, unique ID, output-time `start_ms/duration_ms` (400–12,000ms), `x_pct/y_pct` (0–100) and `width_pct` (20–70). Maximum four simultaneous project image events, all validated against output duration. The local Studio upload accepts only PNG/JPG/WebP files up to 12MB and 12MP, restricted codecs validated by FFprobe; copied to a private hashed workspace path with mode 0600. Reimport the *identical bytes* on a new device to resolve a missing asset. Undo/Redo and the same FFmpeg composite are used for preview/final export; screenshots appear after zoom/crop but under captions and animated text. A future milestone adds video B-roll, animation/keyframe envelopes, thumbnail library and direct asset relinking UI. V1–V6 projects remain readable; exporting writes v7.
