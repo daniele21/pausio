@@ -150,7 +150,7 @@ class TestCaptionPipeline(unittest.TestCase):
         self.assertIn(r"\fscx86\fscy86", document)
         self.assertIn(r"\fad(180,110)", document)
         self.assertIn(r"\t(0,180,\fscx100\fscy100)", document)
-        self.assertNotIn("danger", document)
+        self.assertIn("danger", document)  # Escaping preserves words, strips ASS tags.
         self.assertNotIn(r"\danger", document)
         self.assertIn("Don't ask", document)
 
