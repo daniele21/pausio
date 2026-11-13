@@ -527,6 +527,7 @@ function update(next){
   window.pausioVideoTransitions?.update(next);
   window.pausioGraphics?.update(next);
   window.pausioImages?.update(next);
+  window.pausioEditorial?.update(next);
   updateFxMonitorUI();drawAudioMixer();syncVoicePlayback();syncLiveFx();transport();
   syncDesktopCommands();
   if(has&&next.waveform_status==="ready"&&waveformRequestedFor!==next.media_id){

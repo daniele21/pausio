@@ -616,6 +616,47 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         self.assertEqual(status,200,raw)
         self.assertEqual(json.loads(raw)["video_transitions"],[])
 
+    def test_editorial_proposals_are_readonly_evidenced_and_revision_bound(self):
+        self.import_clip()
+        state=self.get_state()
+        self.assertEqual(self.post("/api/command",{
+            "revision":state["project_revision"],"type":"timeline.keep_all",
+            "payload":{}
+        })[0],200)
+        state=self.get_state()
+        cue={"id":"a"*32,"start_ms":50,"end_ms":1250,
+             "text":"Sono stati rilevati 1.379 segreti"}
+        self.assertEqual(self.post("/api/command",{
+            "revision":state["project_revision"],"type":"caption.set",
+            "payload":{"cues":[cue],"style":"social"}
+        })[0],200)
+        ready=self.get_state()
+        before=ready["project_revision"]
+        request={"revision":before,"preset":"educational"}
+        status,_,raw=self.post("/api/editorial/suggest",request)
+        self.assertEqual(status,200,raw)
+        data=json.loads(raw)
+        self.assertEqual(data["base_revision"],before)
+        self.assertEqual(data["engine"],"pausio-editorial-v1")
+        self.assertTrue(data["approval_required"])
+        cards=[x for x in data["candidates"]
+               if x["command_type"]=="graphic.overlay.add"]
+        self.assertTrue(cards,data)
+        self.assertIn("1.379",cards[0]["payload"]["graphic"]["text"])
+        self.assertEqual(self.get_state()["project_revision"],before)
+        self.assertEqual(self.get_state()["graphic_overlays"],[])
+        self.assertEqual(self.post("/api/editorial/suggest",{
+            "revision":before,"preset":"unknown"})[0],400)
+        self.assertEqual(self.post("/api/editorial/suggest",{
+            "revision":before,"preset":"educational","arbitrary":True})[0],400)
+        status,_,updated=self.post("/api/command",{
+            "revision":before,"type":cards[0]["command_type"],
+            "payload":cards[0]["payload"]
+        })
+        self.assertEqual(status,200,updated)
+        self.assertEqual(len(json.loads(updated)["graphic_overlays"]),1)
+        self.assertEqual(self.post("/api/editorial/suggest",request)[0],409)
+
     def test_visual_fx_readonly_suggestions_then_typed_preview_and_export(self):
         self.import_clip()
         initial=self.get_state()

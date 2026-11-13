@@ -13,6 +13,7 @@
   <script src="/face_reframe_ui.js" defer></script>
   <script src="/visual_transition_ui.js" defer></script>
   <script src="/graphic_overlay_ui.js" defer></script>
+  <script src="/editorial_ui.js" defer></script>
   <script src="/image_overlay_ui.js" defer></script>
 </head>
 <body>
@@ -326,6 +327,24 @@
               <button type="button" class="text-button" id="restore-suggested">Ripristina suggerimenti</button>
               <button type="button" class="text-button" id="restore-all">Mantieni tutto</button>
             </div>
+            <section class="visual-fx-panel" id="editorial-plan-panel" aria-labelledby="editorial-plan-heading">
+              <header class="visual-fx-heading">
+                <h3 id="editorial-plan-heading">Regia assistita · proposte da verificare</h3>
+                <p>Numeri, file e passaggi pratici vengono riconosciuti dai sottotitoli già revisionati. Gli zoom usano solo segnali tecnici esistenti. Nessuna modifica è applicata senza consenso.</p>
+              </header>
+              <div class="visual-fx-controls">
+                <label for="editorial-preset">Profilo editoriale
+                  <select id="editorial-preset">
+                    <option value="clean_tech">Clean Tech · essenziale</option>
+                    <option value="educational">Educational · spiegazioni</option>
+                    <option value="dynamic_social">Dynamic Social · ritmo maggiore</option>
+                  </select>
+                </label>
+                <button type="button" class="button button-outline button-full" id="editorial-suggest" disabled>✦ Proponi regia</button>
+                <p class="visual-fx-status" id="editorial-status" role="status" aria-live="polite">Prima analizza il video, poi crea o rivedi i sottotitoli.</p>
+                <div id="editorial-proposals" class="visual-fx-proposals" aria-label="Proposte editoriali da accettare o ignorare"></div>
+              </div>
+            </section>
             <section class="visual-fx-panel" id="visual-fx-panel" aria-labelledby="visual-fx-heading">
               <header class="visual-fx-heading">
                 <h3 id="visual-fx-heading">Video FX <span class="fx-pill">NUOVO</span></h3>
