@@ -333,6 +333,7 @@ class StudioSessionStore:
             if path.is_file() and (
                 MEDIA_FILE_PATTERN.fullmatch(path.name)
                 or re.fullmatch(r"fx-[0-9a-f]{64}", path.name)
+                or re.fullmatch(r"pip-[0-9a-f]{64}\.(?:png|jpe?g|webp)", path.name)
                 or path.name.startswith("incoming-")
                 or path.name == "export.mp4"
                 or path.name.startswith(".pausio-save-")
@@ -362,6 +363,7 @@ class StudioSessionStore:
             if (
                 MEDIA_FILE_PATTERN.fullmatch(path.name)
                 or re.fullmatch(r"incoming-[0-9a-f]{32}\.(?:mp4|mov|m4v|mkv|webm)", path.name)
+                or re.fullmatch(r"incoming-pip-[0-9a-f]{32}\.(?:png|jpe?g|webp)", path.name)
                 or path.name.startswith(".pausio-save-")
             ):
                 path.unlink(missing_ok=True)
