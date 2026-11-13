@@ -28,17 +28,28 @@ This is the **first proof of tool control**, not a shipped autonomous editor. It
 
 3. Restart the client if necessary, grant tool permissions, and ask it to call `pausio_get_project`, then `pausio_get_transcript`. A running Studio with an imported video is required for a useful transcript. Do not mistake a successful tool handshake for full video-understanding capability.
 
-## Tool inventory (MVP)
+## Tool inventory (MVP extended)
 
-- `pausio_get_project`: read active project snapshot (without transcript).
-- `pausio_get_transcript`: request transcript only when needed.
-- `pausio_get_job_status`: read current async job and preview status.
-- `pausio_start_pause_analysis`: start the existing conservative FFmpeg pause proposal, not semantic video understanding.
-- `pausio_apply_command`: allowlisted `segment.update`, `caption.correct`, `caption.configure`, `video.transform.add`, `video.transform.update`, `video.transform.remove`; must include current `project_revision` and an exact typed payload. The Video FX operation is checked by the shared v3 project reducer, and cannot access arbitrary FFmpeg filters.
-- `pausio_suggest_visual_fx`: requires exact `{revision,preset}`; read-only, source-bound technical zoom candidates, no auto-apply. Use `pausio_apply_command` explicitly for an approved candidate.
-- `pausio_render_preview`: start FFmpeg preview, then poll the status tool.
+Call `pausio_get_capabilities` before editing; it returns the exact current
+allowlist, which is intentionally smaller than all Studio features.
 
-No tool approves the final timeline, overwrites a source, posts to the internet, imports arbitrary files, executes a command, or renders the **final** export. Existing editor still requires human approval and final export. Tool writes are tracked by the same project command tape as UI edits.
+- Observe: `pausio_get_project`, `pausio_get_transcript`,
+  `pausio_get_job_status`, `pausio_get_capabilities`.
+- Propose: `pausio_start_pause_analysis`,
+  `pausio_suggest_visual_fx`, `pausio_suggest_editorial`,
+  `pausio_start_transcription` (cached local model only).
+- Modify: `pausio_apply_command`, with validated typed cuts/captions/camera/
+  transition/graphic/image-placement/audio-mix operations. Requires exact
+  current project revision; no automatic approval.
+- Verify: `pausio_render_preview` or `pausio_preview_range`.
+- Final render: `pausio_render_approved_video`, **only after a manual approval
+  in Pausio Studio**; rendered MP4 is downloaded from Studio, not from MCP.
+
+New image/audio media files still enter via Studio UI; MCP edits only existing
+asset references. No screenshot/video pixel observation tools yet.
+
+See [ChatGPT trial guide](CHATGPT_EDITOR_TRIAL.md) for a reproducible local
+handshake, tool test, client integration, safety boundaries and prompt.
 
 ## Limitations and next gate
 

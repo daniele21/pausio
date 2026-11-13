@@ -206,3 +206,9 @@ pausio studio
 ~~~
 
 Restart Studio from the same terminal after changing PATH. With this fix, doctor reports captions_ass and a useful warning; subtitle render checks the actual executable before invoking FFmpeg. Video without subtitles is unaffected.
+
+## Controllare Pausio da ChatGPT o da un client MCP
+
+Il bridge `pausio mcp --studio-port 8765` espone un insieme verificabile di strumenti del progetto locale: lettura trascrizione, editing di tagli/sottotitoli/grafiche/Video FX/mixer e immagini già importate, preview e rendering finale **solo dopo approvazione manuale in Studio**. Non espone ancora upload, immagini/frame per analisi visiva, né video B-roll. Non è automaticamente collegato a ChatGPT web e non impiega una chiave di inferenza AI.
+
+**[Guida pratica, tool disponibili e prova del collegamento](docs/CHATGPT_EDITOR_TRIAL.md)**. Per ChatGPT in cloud serve una connessione MCP autorizzata, ad esempio Secure MCP Tunnel quando disponibile, con requisiti di account e autenticazione separati dalla sottoscrizione ChatGPT.
