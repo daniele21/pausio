@@ -172,8 +172,10 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.page.locator("#quick-preview-close").click()
         self.assertFalse(self.page.locator("#quick-preview-dialog").is_visible())
         self.page.keyboard.press("Control+z")
-        self.wait_state("revision",initial["project_revision"]+1)
-        self.assertTrue(self.page.locator("#quick-preview-action").is_enabled())
+        reverted=self.wait_state("revision",initial["project_revision"]+1)
+        # Undo can remove the analyzed KEEP plan itself: no range is available.
+        self.assertFalse(reverted["plan"])
+        self.assertTrue(self.page.locator("#quick-preview-action").is_disabled())
         self.assertFalse(self.errors,self.errors)
 
     def test_visual_fx_has_dedicated_workspace_without_cut_card_scrolling(self):
