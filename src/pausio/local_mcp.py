@@ -16,75 +16,11 @@ import urllib.error
 import urllib.request
 from typing import Any, TextIO
 
+from pausio.mcp_tool_catalog import (EDIT_TYPES, TOOLS, capabilities_report,
+                                      project_projection)
+
 PROTOCOL_VERSION = "2025-03-26"
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
-EDIT_TYPES = frozenset({"segment.update", "caption.correct", "caption.configure",
-                        "video.transform.add", "video.transform.update",
-                        "video.transform.remove",
-                        "video.transition.add", "video.transition.update",
-                        "video.transition.remove"})
-
-TOOLS: list[dict[str, Any]] = [
-    {
-        "name": "pausio_get_project",
-        "description": "Read the selected local Pausio Studio project's media, edit timeline, captions, revision, and job state. Does not include transcript text or source video bytes.",
-        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
-        "annotations": {"readOnlyHint": True},
-    },
-    {
-        "name": "pausio_get_transcript",
-        "description": "Read the existing Pausio local transcript with its real source timestamps. The chat model interprets the words; Pausio does not generate editorial judgments.",
-        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
-        "annotations": {"readOnlyHint": True},
-    },
-    {
-        "name": "pausio_get_job_status",
-        "description": "Check the currently running/completed Studio job and whether a rendered preview is ready.",
-        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
-        "annotations": {"readOnlyHint": True},
-    },
-    {
-        "name": "pausio_suggest_visual_fx",
-        "description": "Generate non-mutating, deterministic zoom proposals from real KEEP cut boundaries and available timestamped ASR phrases; never applies, renders or approves changes. Read-only technical candidates, not creative AI analysis.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "revision": {"type": "integer", "minimum": 0},
-                "preset": {"type": "string", "enum": ["naturale","educativo","dinamico","personalizzato"]},
-            },
-            "required": ["revision","preset"],
-            "additionalProperties": False,
-        },
-        "annotations": {"readOnlyHint": True},
-    },
-    {
-        "name": "pausio_apply_command",
-        "description": "Apply ONE existing, reviewed/typed Pausio edit to the active project at the exact expected revision. MVP allows captions, segment.update and validated video.transform.add/update/remove and video.transition.add/update/remove. All writes use the same Studio reducer; no final export. Invalidates approval/preview. Does NOT authorize final export.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "revision": {"type": "integer", "minimum": 0},
-                "type": {"type": "string", "enum": sorted(EDIT_TYPES)},
-                "payload": {"type": "object"},
-            },
-            "required": ["revision", "type", "payload"],
-            "additionalProperties": False,
-        },
-        "annotations": {"readOnlyHint": False, "destructiveHint": False},
-    },
-    {
-        "name": "pausio_start_pause_analysis",
-        "description": "Ask Pausio to create its existing conservative silence-based cut proposal. This is technical pause detection, NOT creative video analysis; it is never silently approved.",
-        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
-        "annotations": {"readOnlyHint": False},
-    },
-    {
-        "name": "pausio_render_preview",
-        "description": "Start asynchronous FFmpeg preview for the current edit plan. Does not export or approve final MP4; poll pausio_get_job_status.",
-        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
-        "annotations": {"readOnlyHint": False},
-    },
-]
 
 
 class MCPToolError(ValueError):
@@ -101,7 +37,8 @@ class StudioClient:
 
     def request(self, method: str, path: str, payload: dict | None = None) -> dict:
         if method not in {"GET", "POST"} or path not in {
-            "/api/state", "/api/command", "/api/jobs", "/api/visual-fx/suggest"
+            "/api/state", "/api/command", "/api/jobs",
+            "/api/visual-fx/suggest", "/api/editorial/suggest"
         }:
             raise MCPToolError("Unapproved Studio endpoint")
         if method == "GET" and payload is not None:
@@ -142,13 +79,17 @@ class StudioClient:
 def call_tool(name: str, arguments: dict, studio: StudioClient) -> dict:
     if not isinstance(arguments, dict):
         raise MCPToolError("Tool arguments must be an object")
-    if name in {"pausio_get_project", "pausio_get_transcript", "pausio_get_job_status",
-                "pausio_start_pause_analysis", "pausio_render_preview"} and arguments:
+    if name in {"pausio_get_capabilities", "pausio_get_project",
+                "pausio_get_transcript", "pausio_get_job_status",
+                "pausio_start_pause_analysis", "pausio_start_transcription",
+                "pausio_render_preview", "pausio_render_approved_video"} and arguments:
         raise MCPToolError("This tool does not accept arguments")
+    if name == "pausio_get_capabilities":
+        return capabilities_report()
     if name == "pausio_get_project":
         state = studio.request("GET", "/api/state")
         # Deliberately exclude the raw transcript; opt-in via a separate tool.
-        return {key: value for key, value in state.items() if key != "transcript"}
+        return project_projection(state)
     if name == "pausio_get_transcript":
         state = studio.request("GET", "/api/state")
         if state.get("transcript") is None:
@@ -157,6 +98,11 @@ def call_tool(name: str, arguments: dict, studio: StudioClient) -> dict:
     if name == "pausio_get_job_status":
         state = studio.request("GET", "/api/state")
         return {"job": state.get("job"), "preview_ready": state.get("preview_ready"),
+                "preview_range_ready": state.get("preview_range_ready"),
+                "preview_range_window": state.get("preview_range_window"),
+                "export_ready": state.get("export_ready"),
+                "approved": state.get("approved"),
+                "media_id": state.get("media_id"),
                 "project_revision": state.get("project_revision")}
     if name == "pausio_suggest_visual_fx":
         if set(arguments) != {"revision", "preset"}:
@@ -166,6 +112,14 @@ def call_tool(name: str, arguments: dict, studio: StudioClient) -> dict:
             arguments["preset"] not in ("naturale","educativo","dinamico","personalizzato")):
             raise MCPToolError("Invalid visual FX suggestion settings")
         return studio.request("POST", "/api/visual-fx/suggest", arguments)
+    if name == "pausio_suggest_editorial":
+        if set(arguments) != {"revision", "preset"}:
+            raise MCPToolError("Expected revision and editorial preset")
+        if (type(arguments["revision"]) is not int or arguments["revision"] < 0 or
+            type(arguments["preset"]) is not str or
+            arguments["preset"] not in ("clean_tech", "educational", "dynamic_social")):
+            raise MCPToolError("Invalid editorial suggestion settings")
+        return studio.request("POST", "/api/editorial/suggest", arguments)
     if name == "pausio_apply_command":
         if set(arguments) != {"revision", "type", "payload"}:
             raise MCPToolError("Expected exactly revision, type and payload")
@@ -179,9 +133,36 @@ def call_tool(name: str, arguments: dict, studio: StudioClient) -> dict:
     if name == "pausio_start_pause_analysis":
         state = studio.request("POST", "/api/jobs", {"kind": "analyze"})
         return {"job": state.get("job"), "project_revision": state.get("project_revision")}
+    if name == "pausio_start_transcription":
+        # Studio validates defaults: local model cache only; no network opt-in.
+        state = studio.request("POST", "/api/jobs", {"kind": "transcribe"})
+        return {"job": state.get("job"), "project_revision": state.get("project_revision")}
     if name == "pausio_render_preview":
         state = studio.request("POST", "/api/jobs", {"kind": "preview"})
         return {"job": state.get("job"), "preview_ready": state.get("preview_ready")}
+    if name == "pausio_preview_range":
+        if set(arguments) != {"range_start_ms", "range_duration_ms"}:
+            raise MCPToolError("Expected output timeline range in milliseconds")
+        start, duration = arguments["range_start_ms"], arguments["range_duration_ms"]
+        if (type(start) is not int or type(duration) is not int or
+            start < 0 or not 250 <= duration <= 10_000):
+            raise MCPToolError("Range must be 250..10000 ms inside edited output")
+        state = studio.request("POST", "/api/jobs", {
+            "kind": "preview_range", "range_start_ms": start,
+            "range_duration_ms": duration,
+        })
+        return {"job": state.get("job"),
+                "preview_range_ready": state.get("preview_range_ready"),
+                "preview_range_window": state.get("preview_range_window"),
+                "project_revision": state.get("project_revision")}
+    if name == "pausio_render_approved_video":
+        # This is NOT an approval shortcut: Studio start_job requires approved.
+        state = studio.request("GET", "/api/state")
+        if state.get("approved") is not True:
+            raise MCPToolError("Conferma prima il montaggio dentro Pausio Studio.")
+        result = studio.request("POST", "/api/jobs", {"kind": "render"})
+        return {"job": result.get("job"), "export_ready": result.get("export_ready"),
+                "message": "Il file finale resta sul Mac; scaricalo da Pausio Studio."}
     raise MCPToolError("Unknown Pausio tool")
 
 

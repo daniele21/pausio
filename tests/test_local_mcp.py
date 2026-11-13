@@ -3,13 +3,19 @@ from __future__ import annotations
 
 import io
 import json
+import shutil
+import subprocess
+import tempfile
 import threading
+import time
 import unittest
+from pathlib import Path
 
 from pausio.local_mcp import (
     StudioClient, MCPToolError, TOOLS, call_tool, response_for, serve_stdio
 )
 from pausio.studio import StudioWorkspace, create_server
+from pausio.media import probe
 
 
 class FakeStudio:
@@ -18,6 +24,10 @@ class FakeStudio:
 
     def request(self, method, path, payload=None):
         self.requests.append((method, path, payload))
+        if path == "/api/editorial/suggest":
+            return {"engine": "pausio-editorial-v1",
+                    "preset": payload["preset"],
+                    "base_revision": payload["revision"], "candidates": []}
         if path == "/api/visual-fx/suggest":
             return {"engine": "pausio.visualfx.cut-phrase-v1", "preset": payload["preset"],
                     "base_revision": payload["revision"], "candidates": [],
@@ -29,7 +39,11 @@ class FakeStudio:
             return {"job": {"status": "running", "kind": payload["kind"]},
                     "preview_ready": False}
         return {"project_revision": 4, "media_id": "test",
-                "file": "take.mp4", "transcript": {"segments": [{"text": "ciao"}]},
+                "approved": getattr(self, "approved", False),
+                "export_ready": False, "preview_range_ready": False,
+                "file": "take.mp4", "recovery_warning": "/Users/private/path",
+                "secret_local_key": "must-never-be-visible",
+                "transcript": {"segments": [{"text": "ciao"}]},
                 "job": {"status": "idle"}, "preview_ready": False}
 
 
@@ -46,6 +60,10 @@ class LocalMCPProtocolTests(unittest.TestCase):
         tools = {t["name"] for t in listing["result"]["tools"]}
         self.assertIn("pausio_get_project", tools)
         self.assertIn("pausio_render_preview", tools)
+        self.assertIn("pausio_get_capabilities", tools)
+        self.assertIn("pausio_suggest_editorial", tools)
+        self.assertIn("pausio_preview_range", tools)
+        self.assertIn("pausio_render_approved_video", tools)
         self.assertNotIn("pausio_export", tools)
         self.assertNotIn("pausio_approve", tools)
         self.assertEqual(len(tools), len(TOOLS))
@@ -55,6 +73,8 @@ class LocalMCPProtocolTests(unittest.TestCase):
     def test_read_project_omits_transcript_until_requested(self):
         project = call_tool("pausio_get_project", {}, self.studio)
         self.assertNotIn("transcript", project)
+        self.assertNotIn("secret_local_key", project)
+        self.assertNotIn("recovery_warning", project)
         self.assertEqual(project["project_revision"], 4)
         transcript = call_tool("pausio_get_transcript", {}, self.studio)
         self.assertEqual(transcript["transcript"]["segments"][0]["text"], "ciao")
@@ -82,7 +102,12 @@ class LocalMCPProtocolTests(unittest.TestCase):
                           {"revision":4,"preset":"naturale","url":"http://evil.test"}):
             with self.assertRaises(MCPToolError):
                 call_tool("pausio_suggest_visual_fx",candidate,self.studio)
-        for kind in ("video.transform.add","video.transform.update",
+        for kind in ("graphic.overlay.add","graphic.overlay.update",
+                     "graphic.overlay.remove","image.overlay.update",
+                     "image.overlay.remove","audio.mixer.configure",
+                     "audio.clip.mix","caption.retime","caption.clear",
+                     "segment.insert","segment.remove","timeline.keep_all",
+                     "video.transform.add","video.transform.update",
                      "video.transform.remove", "video.transition.add",
                      "video.transition.update", "video.transition.remove"):
             request={"revision":4,"type":kind,"payload":{}}
@@ -93,6 +118,7 @@ class LocalMCPProtocolTests(unittest.TestCase):
 
     def test_agent_cannot_approve_export_or_exfiltrate_via_tools(self):
         for operation in ("timeline.approve", "history.undo", "audio.add",
+                          "image.overlay.add",
                           "project.import", "video.export"):
             with self.assertRaises(MCPToolError):
                 call_tool("pausio_apply_command",
@@ -104,6 +130,53 @@ class LocalMCPProtocolTests(unittest.TestCase):
             call_tool("pausio_unsupported", {}, self.studio)
         with self.assertRaises(ValueError):
             StudioClient(65536)
+
+    def test_capability_report_is_truthful_and_no_implicit_asset_import(self):
+        inventory = call_tool("pausio_get_capabilities", {}, self.studio)
+        self.assertEqual(inventory["transport"], "local_stdio_only")
+        self.assertIn("graphic.overlay.add", inventory["allowed_edit_commands"])
+        self.assertIn("image.overlay.update", inventory["allowed_edit_commands"])
+        self.assertNotIn("timeline.approve", inventory["allowed_edit_commands"])
+        self.assertNotIn("audio.add", inventory["allowed_edit_commands"])
+        self.assertIn("video B-roll files", inventory["unsupported"])
+        self.assertEqual(self.studio.requests, [])
+
+    def test_editorial_preview_range_and_offline_transcription(self):
+        item=call_tool("pausio_suggest_editorial", {
+            "revision":4, "preset":"clean_tech"}, self.studio)
+        self.assertEqual(item["preset"], "clean_tech")
+        self.assertEqual(self.studio.requests[-1], ("POST", "/api/editorial/suggest",
+            {"revision":4, "preset":"clean_tech"}))
+        for settings in ({"revision":True,"preset":"educational"},
+                         {"revision":4,"preset":"nonexistent"},
+                         {"revision":4,"preset":"educational","url":"unsafe"}):
+            with self.assertRaises(MCPToolError):
+                call_tool("pausio_suggest_editorial", settings, self.studio)
+        clip=call_tool("pausio_preview_range", {
+            "range_start_ms":500, "range_duration_ms":2500}, self.studio)
+        self.assertEqual(clip["job"]["kind"], "preview_range")
+        self.assertEqual(self.studio.requests[-1], ("POST", "/api/jobs", {
+            "kind":"preview_range","range_start_ms":500,"range_duration_ms":2500}))
+        for bad in ({"range_start_ms": True,"range_duration_ms":500},
+                    {"range_start_ms":-1,"range_duration_ms":500},
+                    {"range_start_ms":0,"range_duration_ms":10001},
+                    {"range_start_ms":0,"range_duration_ms":500,"extra":0}):
+            with self.assertRaises(MCPToolError):
+                call_tool("pausio_preview_range",bad,self.studio)
+        call_tool("pausio_start_transcription", {}, self.studio)
+        self.assertEqual(self.studio.requests[-1],
+                         ("POST", "/api/jobs", {"kind": "transcribe"}))
+
+    def test_final_render_requires_prior_manual_approval(self):
+        with self.assertRaisesRegex(MCPToolError, "Conferma"):
+            call_tool("pausio_render_approved_video", {}, self.studio)
+        self.assertEqual(self.studio.requests[-1][1],"/api/state")
+        self.studio.approved=True
+        reply=call_tool("pausio_render_approved_video", {}, self.studio)
+        self.assertEqual(reply["job"]["kind"],"render")
+        self.assertEqual(self.studio.requests[-1],
+                         ("POST", "/api/jobs", {"kind": "render"}))
+        self.assertIn("Mac",reply["message"])
 
     def test_stdio_jsonrpc_wire_and_notifications(self):
         lines = [
@@ -143,11 +216,85 @@ class LiveLoopbackMCPTests(unittest.TestCase):
             self.assertIsNone(actual["file"])
             status = call_tool("pausio_get_job_status", {}, client)
             self.assertEqual(status["job"]["status"], "idle")
+            with self.assertRaisesRegex(MCPToolError, "Conferma"):
+                call_tool("pausio_render_approved_video", {}, client)
         finally:
             server.shutdown()
             server.server_close()
             worker.join(timeout=3)
             workspace.close()
+
+
+    @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"),
+                         "FFmpeg/FFprobe not installed")
+    def test_local_mcp_edits_real_studio_previews_and_renders_only_after_approval(self):
+        """Synthetic full path: MCP -> actual Studio reducer -> actual FFmpeg."""
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "speech-test.mp4"
+            subprocess.run([
+                "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+                "-f", "lavfi", "-i", "color=c=blue:s=160x288:r=15:d=1.7",
+                "-f", "lavfi", "-i", "sine=frequency=440:duration=1.7",
+                "-shortest", "-c:v", "mpeg4", "-c:a", "aac", str(source)
+            ], timeout=45, check=True)
+            workspace = StudioWorkspace()
+            server = create_server(port=0, workspace=workspace)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                candidate, label = workspace.begin_import("speech-test.mp4")
+                shutil.copyfile(source, candidate)
+                workspace.finish_import(candidate, label, probe(candidate))
+                client = StudioClient(server.server_port)
+
+                capabilities = call_tool("pausio_get_capabilities", {}, client)
+                self.assertIn("graphic.overlay.add", capabilities["allowed_edit_commands"])
+                call_tool("pausio_start_pause_analysis", {}, client)
+
+                def completed(kind):
+                    for _ in range(300):
+                        status = call_tool("pausio_get_job_status", {}, client)
+                        job = status["job"]
+                        if job["kind"] == kind and job["status"] in {"failed","completed"}:
+                            self.assertEqual(job["status"], "completed",job["error"])
+                            return status
+                        time.sleep(0.1)
+                    self.fail("Timed out waiting for Pausio MCP job "+kind)
+
+                completed("analyze")
+                project = call_tool("pausio_get_project", {}, client)
+                self.assertTrue(project["plan"])
+                revised = call_tool("pausio_apply_command", {
+                    "revision": project["project_revision"],
+                    "type": "timeline.keep_all", "payload": {}
+                }, client)
+                self.assertGreater(revised["project_revision"], project["project_revision"])
+                self.assertFalse(revised["approved"])
+                with self.assertRaises(MCPToolError):
+                    call_tool("pausio_render_approved_video", {}, client)
+
+                clip = call_tool("pausio_preview_range", {
+                    "range_start_ms":0, "range_duration_ms":700
+                }, client)
+                self.assertEqual(clip["job"]["kind"], "preview_range")
+                self.assertTrue(completed("preview_range")["preview_range_ready"])
+                self.assertTrue((workspace.directory / "preview-range.mp4").is_file())
+
+                # Represents the human's explicit UI confirmation, not an MCP tool.
+                state = workspace.snapshot()
+                workspace.command({"revision":state["project_revision"],
+                                   "type":"timeline.approve","payload":{}})
+                render = call_tool("pausio_render_approved_video", {}, client)
+                self.assertEqual(render["job"]["kind"], "render")
+                self.assertTrue(completed("render")["export_ready"])
+                final = workspace.directory / "export.mp4"
+                self.assertTrue(final.is_file())
+                self.assertTrue(probe(final).duration_ms > 500)
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=3)
+                workspace.close()
 
 
 if __name__ == "__main__":
