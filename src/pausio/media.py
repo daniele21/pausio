@@ -257,6 +257,7 @@ def render(
     video_fx: list[dict] | None = None,
     video_transitions: list[dict] | None = None,
     graphic_overlays: list[dict] | None = None,
+    scene_templates: list[dict] | None = None,
     image_overlays: list[tuple[Path, dict]] | None = None,
     output_window: tuple[int, int] | None = None,
 ) -> list[str]:
@@ -301,12 +302,13 @@ def render(
             digest = hashlib.file_digest(data, "sha256").hexdigest()
         if digest != clip["asset_sha256"]:
             raise MediaError("Hash dell'immagine B-roll differente; reimporta l'asset.")
-    has_text = bool(captions) or bool(graphic_overlays)
+    has_text = bool(captions) or bool(graphic_overlays) or bool(scene_templates)
     # Validate subtitle text/style for both preview and final output.
     render_ffmpeg = require_binary("ffmpeg")
     if has_text:
         compose_graphics_ass(captions or [], graphic_overlays or [],
-                             style=caption_style, settings=caption_config)
+                             style=caption_style, settings=caption_config,
+                             scenes=scene_templates, output_ms=output_ms)
         if not dry_run:
             compatible_ffmpeg = select_ffmpeg_for_filter("ass")
             if compatible_ffmpeg is None:
@@ -481,7 +483,8 @@ def render(
                 subtitle_file = Path(subtitle_tmp) / "captions.ass"
                 subtitle_file.write_text(
                     compose_graphics_ass(captions or [], graphic_overlays or [],
-                                         style=caption_style, settings=caption_config),
+                                         style=caption_style, settings=caption_config,
+                                         scenes=scene_templates, output_ms=output_ms),
                     encoding="utf-8"
                 )
                 args = make_args(staged_output, subtitle_file)

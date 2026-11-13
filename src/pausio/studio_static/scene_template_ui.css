@@ -1,0 +1,51 @@
+/* Source of truth remains the project tape; these controls are an inspector. */
+#scene-template-panel .scene-content-fields {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 9px;
+  margin-block: 9px;
+}
+#scene-template-panel .scene-content-fields label,
+#scene-template-panel .scene-card > details > label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  font-size: 11px;
+}
+#scene-template-panel textarea {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+#scene-template-panel .scene-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+#scene-template-panel .scene-range {
+  color: var(--accent-bright);
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+}
+#scene-template-panel .scene-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+#scene-template-panel .scene-card details {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 9px;
+}
+#scene-template-panel .scene-card summary {
+  cursor: pointer;
+  font-size: 11px;
+}
+#scene-template-panel .scene-card summary:focus-visible {
+  outline: 2px solid var(--focus);
+}
+#scene-template-panel .scene-card details > label { margin-top: 9px; }
+#scene-template-panel .scene-card details > button,
+#scene-template-panel .scene-remove { width: 100%; margin-top: 8px; }

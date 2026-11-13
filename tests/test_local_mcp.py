@@ -61,6 +61,7 @@ class LocalMCPProtocolTests(unittest.TestCase):
         self.assertIn("pausio_get_project", tools)
         self.assertIn("pausio_render_preview", tools)
         self.assertIn("pausio_get_capabilities", tools)
+        self.assertIn("pausio_get_scene_templates", tools)
         self.assertIn("pausio_suggest_editorial", tools)
         self.assertIn("pausio_preview_range", tools)
         self.assertIn("pausio_render_approved_video", tools)
@@ -78,6 +79,23 @@ class LocalMCPProtocolTests(unittest.TestCase):
         self.assertEqual(project["project_revision"], 4)
         transcript = call_tool("pausio_get_transcript", {}, self.studio)
         self.assertEqual(transcript["transcript"]["segments"][0]["text"], "ciao")
+
+    def test_scene_template_catalog_and_typed_agent_command(self):
+        tools=call_tool("pausio_get_scene_templates",{},self.studio)
+        self.assertEqual(tools["timebase"],"output")
+        self.assertEqual([x["id"] for x in tools["templates"]],
+                         ["stat_reveal","permission_dialog","code_highlight"])
+        self.assertEqual(self.studio.requests,[])
+        for kind in ("scene.template.add","scene.template.update",
+                     "scene.template.remove"):
+            request={"revision":4,"type":kind,"payload":{"scene":{}}}
+            result=call_tool("pausio_apply_command",request,self.studio)
+            self.assertFalse(result["approved"])
+            self.assertEqual(self.studio.requests[-1],
+                             ("POST","/api/command",request))
+        for invalid in ({"x":0},None,[]):
+            with self.assertRaises(MCPToolError):
+                call_tool("pausio_get_scene_templates",invalid,self.studio)
 
     def test_typed_edit_revision_passthrough_and_preview(self):
         request = {"revision": 4, "type": "caption.correct",

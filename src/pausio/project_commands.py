@@ -21,11 +21,13 @@ from pausio.domain import EditPlan, Interval
 from pausio.visual_transitions import compile_dips, MAX_TRANSITIONS
 from pausio.graphic_overlays import validate_graphic, validate_graphics
 from pausio.image_overlays import validate_image_overlay, validate_image_overlays
+from pausio.scene_templates import validate_scene, validate_scenes
 from pausio.planner import CUT_PRESETS, validate_cut_settings
 
 FORMAT = "pausio.project"
-VERSION = 7
-PREVIOUS_VERSION = 6
+VERSION = 8
+PREVIOUS_VERSION = 7
+V6_VERSION = 6
 V5_VERSION = 5
 V4_VERSION = 4
 V3_VERSION = 3
@@ -63,6 +65,9 @@ _TYPES = frozenset({
     "graphic.overlay.add",
     "graphic.overlay.update",
     "graphic.overlay.remove",
+    "scene.template.add",
+    "scene.template.update",
+    "scene.template.remove",
     "video.transform.add",
     "video.transform.update",
     "video.transform.remove",
@@ -369,6 +374,7 @@ class ProjectView:
     video_transitions: tuple[dict, ...] = ()
     graphic_overlays: tuple[dict, ...] = ()
     image_overlays: tuple[dict, ...] = ()
+    scene_templates: tuple[dict, ...] = ()
 
 
 def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
@@ -387,6 +393,7 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
     video_transitions: list[dict] = []
     graphic_overlays: list[dict] = []
     image_overlays: list[dict] = []
+    scene_templates: list[dict] = []
     used_events: set[str] = set()
 
     for command in commands:
@@ -656,6 +663,41 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
                 raise ProjectFormatError("Grafica da rimuovere inesistente.")
             graphic_overlays = [g for g in graphic_overlays if g["id"] != ident]
             approved = False
+        elif kind == "scene.template.add":
+            _object(payload, {"scene"}, kind)
+            total = sum(item["end_ms"]-item["start_ms"] for item in current)
+            try:
+                row = validate_scene(payload["scene"], total)
+                validate_scenes([*scene_templates, row], total)
+            except ValueError as exc:
+                raise ProjectFormatError(str(exc)) from exc
+            scene_templates = [*scene_templates, row]
+            approved = False
+        elif kind == "scene.template.update":
+            _object(payload, {"scene"}, kind)
+            total = sum(item["end_ms"]-item["start_ms"] for item in current)
+            try:
+                row = validate_scene(payload["scene"], total)
+            except ValueError as exc:
+                raise ProjectFormatError(str(exc)) from exc
+            if not any(scene["id"] == row["id"] for scene in scene_templates):
+                raise ProjectFormatError("Scena da aggiornare inesistente.")
+            updated = [row if scene["id"] == row["id"] else scene
+                       for scene in scene_templates]
+            try:
+                validate_scenes(updated, total)
+            except ValueError as exc:
+                raise ProjectFormatError(str(exc)) from exc
+            scene_templates = updated
+            approved = False
+        elif kind == "scene.template.remove":
+            _object(payload, {"scene_id"}, kind)
+            identity = _id(payload["scene_id"], "scene_id")
+            if not any(scene["id"] == identity for scene in scene_templates):
+                raise ProjectFormatError("Scena da rimuovere inesistente.")
+            scene_templates = [scene for scene in scene_templates
+                               if scene["id"] != identity]
+            approved = False
         elif kind == "video.transform.add":
             _object(payload, {"effect"}, kind)
             effect = _video_transform(payload["effect"], current, duration)
@@ -688,6 +730,8 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
     _validate_video_fx(video_fx, current, duration)
     _validate_video_transitions(video_transitions,current)
     try:
+        validate_scenes(scene_templates, sum(row["end_ms"]-row["start_ms"]
+                                            for row in current))
         validate_graphics(graphic_overlays, current, duration)
         if current:
             validate_image_overlays(
@@ -713,6 +757,7 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
         video_transitions=tuple(copy.deepcopy(video_transitions)),
         graphic_overlays=tuple(copy.deepcopy(graphic_overlays)),
         image_overlays=tuple(copy.deepcopy(image_overlays)),
+        scene_templates=tuple(copy.deepcopy(scene_templates)),
     )
 
 
@@ -833,7 +878,7 @@ class ProjectTape:
             # V1 files are intentionally read-only inputs; exporting always
             # upgrades to V2 with cursor at the end and preserved event IDs.
             return cls(obj["media"], obj["commands"])
-        if version in (MIGRATION_VERSION, V3_VERSION, V4_VERSION, V5_VERSION, PREVIOUS_VERSION, VERSION):
+        if version in (MIGRATION_VERSION, V3_VERSION, V4_VERSION, V5_VERSION, V6_VERSION, PREVIOUS_VERSION, VERSION):
             obj = _object(
                 document,
                 {"format", "schema_version", "media", "commands",

@@ -9,6 +9,7 @@
   <title>Studio · Pausio</title>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/image_overlay_ui.css">
+  <link rel="stylesheet" href="/scene_template_ui.css">
   <script src="/audio_monitor_ui.js" defer></script>
   <script src="/app.js" defer></script>
   <script src="/visual_fx_ui.js" defer></script>
@@ -17,6 +18,7 @@
   <script src="/graphic_overlay_ui.js" defer></script>
   <script src="/editorial_ui.js" defer></script>
   <script src="/image_overlay_ui.js" defer></script>
+  <script src="/scene_template_ui.js" defer></script>
 </head>
 <body>
   <div class="app-shell" id="app">
@@ -453,6 +455,32 @@
                 <p id="graphic-status" class="visual-fx-status" role="status" aria-live="polite"></p>
                 <div id="graphic-list" class="visual-fx-list" aria-label="Schede grafiche applicate"></div>
                 <button type="button" class="button button-ghost button-full" id="graphic-preview" disabled>Genera preview grafica</button>
+              </div>
+            </section>
+            <section class="visual-fx-panel" id="scene-template-panel" aria-labelledby="scene-template-heading">
+              <header class="visual-fx-heading">
+                <h3 id="scene-template-heading">Scene grafiche a schermo intero</h3>
+                <p>Trasforma una parte del video in una statistica animata, un popup illustrativo o una schermata di codice, mantenendo sempre la voce originale. Tutto resta modificabile.</p>
+              </header>
+              <div class="visual-fx-controls">
+                <label>Modello scena
+                  <select id="scene-template-kind" aria-label="Modello scena"></select>
+                </label>
+                <div id="scene-template-fields" class="scene-content-fields"></div>
+                <div class="visual-fx-edit-grid">
+                  <label>Durata (ms)
+                    <input id="scene-template-duration" type="number" min="2500" max="12000" step="100" value="5000">
+                  </label>
+                  <label>Colore
+                    <select id="scene-template-accent">
+                      <option value="mint">Verde acqua</option>
+                      <option value="orange">Arancione</option>
+                    </select>
+                  </label>
+                </div>
+                <button type="button" class="button button-primary button-full" id="scene-template-add" disabled>+ Inserisci scena al cursore</button>
+                <p id="scene-template-status" class="visual-fx-status" role="status" aria-live="polite"></p>
+                <div id="scene-template-list" class="visual-fx-list" aria-label="Scene grafiche del progetto"></div>
               </div>
             </section>
             <section class="visual-fx-panel" id="image-overlay-panel" aria-labelledby="image-overlay-heading">

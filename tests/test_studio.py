@@ -77,6 +77,8 @@ class StudioHttpTests(unittest.TestCase):
             ("/styles.css", b"focus-visible"),
             ("/app.js", b"/api/command"),
             ("/image_overlay_ui.css", b"timeline-broll-track"),
+            ("/scene_template_ui.js", b"scene.template.add"),
+            ("/scene_template_ui.css", b".scene-content-fields"),
             ("/audio_monitor_ui.js", b"function syncLiveFx"),
         ):
             status, headers, content = self.request("GET", path)
@@ -87,6 +89,7 @@ class StudioHttpTests(unittest.TestCase):
             self.assertIn("frame-ancestors 'none'", headers["Content-Security-Policy"])
         self.assertIn(b'role="tablist"', self.request("GET", "/")[2])
         self.assertIn(b'data-workspace-nav="broll"', self.request("GET", "/")[2])
+        self.assertIn(b'id="scene-template-panel"', self.request("GET", "/")[2])
         self.assertIn(b'id="approve-action"', self.request("GET", "/")[2])
 
     def test_browser_favicon_request_is_not_a_spurious_404(self):
@@ -371,7 +374,7 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         self.assertTrue(preview["preview_ready"])
         self.assertEqual(self.request("GET","/api/preview")[0],200)
         export=json.loads(self.request("GET","/api/project/export")[2])
-        self.assertEqual(export["schema_version"],7)
+        self.assertEqual(export["schema_version"],8)
         self.assertNotIn(original[:32].hex(),json.dumps(export))
         digest=row["asset_sha256"]
         stored=self.workspace._image_path(digest,row["filename"])
@@ -660,6 +663,38 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         self.assertEqual(len(json.loads(updated)["graphic_overlays"]),1)
         self.assertEqual(self.post("/api/editorial/suggest",request)[0],409)
 
+    def test_scene_template_http_command_and_catalog_are_current(self):
+        self.import_clip()
+        self.assertEqual(self.post("/api/jobs",{"kind":"analyze"})[0],202)
+        analyzed=self.await_job("analyze")
+        self.assertEqual(
+            [x["id"] for x in analyzed["scene_template_catalog"]],
+            ["stat_reveal","permission_dialog","code_highlight"])
+        from pausio.scene_templates import TEMPLATES
+        total=sum(s["end_ms"]-s["start_ms"] for s in analyzed["editor_segments"])
+        if total < 2500:
+            self.skipTest("Fixture shorter than minimum scene duration")
+        item={"id":"f"*32,"template":"stat_reveal","start_ms":0,
+              "duration_ms":2500,"accent":"orange",
+              "content":{field["key"]:field["default"] for field in
+                         TEMPLATES["stat_reveal"]["fields"]}}
+        revision=analyzed["project_revision"]
+        status,_,body=self.post("/api/command",{
+            "revision":revision,"type":"scene.template.add","payload":{"scene":item}})
+        self.assertEqual(status,200,body)
+        scene=json.loads(body)
+        self.assertEqual(scene["scene_templates"],[item])
+        self.assertFalse(scene["approved"])
+        self.assertEqual(self.post("/api/command",{
+            "revision":revision,"type":"scene.template.remove",
+            "payload":{"scene_id":item["id"]}})[0],409)
+        self.assertEqual(self.post("/api/command",{
+            "revision":scene["project_revision"],"type":"scene.template.update",
+            "payload":{"scene":{**item,"duration_ms":30000}}})[0],400)
+        status,_,body=self.request("GET","/api/project/export")
+        self.assertEqual(status,200,body)
+        self.assertEqual(json.loads(body)["schema_version"],8)
+
     def test_visual_fx_readonly_suggestions_then_typed_preview_and_export(self):
         self.import_clip()
         initial=self.get_state()
@@ -715,7 +750,7 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         status,_,document=self.request("GET","/api/project/export")
         self.assertEqual(status,200)
         self.assertIn("video.transform.add",[e["type"] for e in json.loads(document)["commands"]])
-        self.assertEqual(json.loads(document)["schema_version"],7)
+        self.assertEqual(json.loads(document)["schema_version"],8)
         status,_,raw=self.post("/api/command",{
             "revision":changed["project_revision"],"type":"history.undo","payload":{}
         })
@@ -918,7 +953,7 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         self.assertEqual(status, 200)
         self.assertIn(".pausio.json", headers["Content-Disposition"])
         document = json.loads(serialized)
-        self.assertEqual(document["schema_version"], 7)
+        self.assertEqual(document["schema_version"], 8)
         self.assertEqual(
             [item["type"] for item in document["commands"]],
             ["analysis.propose", "segment.update", "timeline.approve"],
@@ -944,7 +979,7 @@ class StudioMediaWorkflowTests(StudioHttpTests):
 
         wrong = json.loads(json.dumps(document))
         wrong["media"]["sha256"] = "f" * 64
-        for bad in (wrong, {**document, "schema_version": 8},
+        for bad in (wrong, {**document, "schema_version": 9},
                     {**document, "commands": [{"id": "0" * 32,
                                               "type": "execute.code", "payload": {}}]}):
             status, _, _ = self.post("/api/project/import", bad)
@@ -980,7 +1015,7 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         self.assertTrue(undone["can_redo"])
 
         portable = json.loads(self.request("GET", "/api/project/export")[2])
-        self.assertEqual(portable["schema_version"], 7)
+        self.assertEqual(portable["schema_version"], 8)
         self.assertEqual(portable["history_cursor"], 1)
         self.assertEqual(len(portable["commands"]), 2)
         self.assertEqual(portable["revision"], 3)

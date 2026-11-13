@@ -192,6 +192,9 @@ def capabilities_report() -> dict[str, Any]:
                        "Studio UI supports larger images (up to 12 MiB).",
         "graphic_cards": "Typed stat/title/code/tip cards and animations, using "
                          "graphic.overlay.add/update/remove",
+        "scene_templates": "Three full-screen output-timed scene templates via "
+                           "scene.template.add/update/remove; consult "
+                           "pausio_get_scene_templates for validated fields.",
         "audio": "Existing music/FX can be listed, duplicated at another output "
                  "time, mixed or muted. Small licensed/owned/generated audio "
                  "may be imported through bounded base64; large files use Studio UI.",
