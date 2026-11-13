@@ -84,7 +84,7 @@ class LocalMCPProtocolTests(unittest.TestCase):
         tools=call_tool("pausio_get_scene_templates",{},self.studio)
         self.assertEqual(tools["timebase"],"output")
         self.assertEqual([x["id"] for x in tools["templates"]],
-                         ["stat_reveal","permission_dialog","code_highlight"])
+                         ["stat_reveal","permission_dialog","dashboard_split","code_highlight"])
         self.assertEqual(self.studio.requests,[])
         for kind in ("scene.template.add","scene.template.update",
                      "scene.template.remove"):

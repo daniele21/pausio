@@ -17,6 +17,7 @@ from pathlib import Path
 
 from pausio.captions import ass_document
 from pausio.graphic_overlays import compose_graphics_ass
+from pausio.split_dashboard import compile_speaker_splits
 from pausio.image_overlays import validate_image_overlays
 from pausio.domain import Interval
 from pausio.visual_fx import motion_filter, prepare_motion_fx
@@ -368,11 +369,19 @@ def render(
     # B-roll is composed AFTER zoom/crop, but BEFORE subtitles and textual
     # graphics, which remain readable over the PIP. Each image is referenced
     # exclusively by its validated local hash and numeric presentation fields.
+    split_scenes = [s for s in scene_templates or []
+                    if s["template"] == "dashboard_split"]
+    normalized = "[normalv]" if split_scenes else (
+        "[pipbase]" if images else "[basev]" if has_text else "[outv]")
     components.append(
         f"[joinedv]fps=30,scale={size[0]}:{size[1]}:force_original_aspect_ratio=decrease,"
         f"pad={size[0]}:{size[1]}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p"
-        + ("[pipbase]" if images else "[basev]" if has_text else "[outv]")
+        + normalized
     )
+    if split_scenes:
+        speaker = compile_speaker_splits(components, normalized, split_scenes, size)
+        last_label = "[pipbase]" if images else "[basev]" if has_text else "[outv]"
+        components.append(f"{speaker}null{last_label}")
     if images:
         last = "[pipbase]"
         for i, (_, clip) in enumerate(images):

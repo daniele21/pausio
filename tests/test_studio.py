@@ -374,7 +374,7 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         self.assertTrue(preview["preview_ready"])
         self.assertEqual(self.request("GET","/api/preview")[0],200)
         export=json.loads(self.request("GET","/api/project/export")[2])
-        self.assertEqual(export["schema_version"],8)
+        self.assertEqual(export["schema_version"],9)
         self.assertNotIn(original[:32].hex(),json.dumps(export))
         digest=row["asset_sha256"]
         stored=self.workspace._image_path(digest,row["filename"])
@@ -669,7 +669,7 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         analyzed=self.await_job("analyze")
         self.assertEqual(
             [x["id"] for x in analyzed["scene_template_catalog"]],
-            ["stat_reveal","permission_dialog","code_highlight"])
+            ["stat_reveal","permission_dialog","dashboard_split","code_highlight"])
         from pausio.scene_templates import TEMPLATES
         total=sum(s["end_ms"]-s["start_ms"] for s in analyzed["editor_segments"])
         if total < 2500:
@@ -693,7 +693,7 @@ class StudioMediaWorkflowTests(StudioHttpTests):
             "payload":{"scene":{**item,"duration_ms":30000}}})[0],400)
         status,_,body=self.request("GET","/api/project/export")
         self.assertEqual(status,200,body)
-        self.assertEqual(json.loads(body)["schema_version"],8)
+        self.assertEqual(json.loads(body)["schema_version"],9)
 
     def test_visual_fx_readonly_suggestions_then_typed_preview_and_export(self):
         self.import_clip()
@@ -750,7 +750,7 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         status,_,document=self.request("GET","/api/project/export")
         self.assertEqual(status,200)
         self.assertIn("video.transform.add",[e["type"] for e in json.loads(document)["commands"]])
-        self.assertEqual(json.loads(document)["schema_version"],8)
+        self.assertEqual(json.loads(document)["schema_version"],9)
         status,_,raw=self.post("/api/command",{
             "revision":changed["project_revision"],"type":"history.undo","payload":{}
         })
@@ -953,7 +953,7 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         self.assertEqual(status, 200)
         self.assertIn(".pausio.json", headers["Content-Disposition"])
         document = json.loads(serialized)
-        self.assertEqual(document["schema_version"], 8)
+        self.assertEqual(document["schema_version"], 9)
         self.assertEqual(
             [item["type"] for item in document["commands"]],
             ["analysis.propose", "segment.update", "timeline.approve"],
@@ -1015,7 +1015,7 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         self.assertTrue(undone["can_redo"])
 
         portable = json.loads(self.request("GET", "/api/project/export")[2])
-        self.assertEqual(portable["schema_version"], 8)
+        self.assertEqual(portable["schema_version"], 9)
         self.assertEqual(portable["history_cursor"], 1)
         self.assertEqual(len(portable["commands"]), 2)
         self.assertEqual(portable["revision"], 3)

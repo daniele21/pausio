@@ -189,3 +189,11 @@ Native events `image.overlay.add`, `image.overlay.update`, `image.overlay.remove
 Le istruzioni `scene.template.add/update/remove` salvano un `scene` con `id`, `template` (`stat_reveal`/`permission_dialog`/`code_highlight`), `start_ms` **del video montato**, `duration_ms` 2500..12000, `accent` (mint/orange) e un `content` strettamente validato. Un massimo di nove scene non sovrapposte. La rimozione usa `scene_id`. Le scene coprono visivamente il footage, ma mantengono la voce e il mix audio; i sottotitoli sono sul livello superiore. Nessun input di script, HTML o filtro FFmpeg.
 
 Il progetto portabile passa a v8; v1–v7 sono importabili senza riscrivere gli eventi storici. Ogni modifica invalida l'approvazione e la preview; trasporti/import media e asset restano separati da questo documento. Implementazione e MCP [SCENE_TEMPLATES_V1.md](SCENE_TEMPLATES_V1.md).
+
+## Dashboard split-screen — progetto v9
+
+Il formato portabile v9 amplia gli eventi `scene.template.add/update/remove` con
+`dashboard_split`: il creator resta sotto e una dashboard animata occupa la
+fascia alta. `presenter_height_pct` 35–55, `presenter_anchor_pct` 20–80 e
+`progress_pct` 0–100; tempo **output** e parlato originale invariato.
+I progetti precedenti v1–v8 sono importati dal codice v9. [Guida](SPLIT_DASHBOARD_V1.md).

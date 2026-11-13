@@ -47,7 +47,7 @@ class ProjectReplayTests(unittest.TestCase):
                       {"text":"parole","start_ms":700,"end_ms":1300}]}
         start=ProjectTape(media).append("timeline.keep_all",{})
         with_alignment=start.append("caption.set",{"cues":[cue],"style":"word_focus"})
-        self.assertEqual(with_alignment.as_dict()["schema_version"],8)
+        self.assertEqual(with_alignment.as_dict()["schema_version"],9)
         restored=ProjectTape.from_dict(with_alignment.as_dict())
         self.assertEqual(restored.view.captions[0]["words"],cue["words"])
         self.assertEqual(restored.undo().view.captions,())
@@ -387,7 +387,7 @@ class ProjectReplayTests(unittest.TestCase):
         del v1["revision"]
         v1["schema_version"] = 1
         restored = ProjectTape.from_dict(v1)
-        self.assertEqual(restored.as_dict()["schema_version"], 8)
+        self.assertEqual(restored.as_dict()["schema_version"], 9)
         self.assertEqual(restored.commands, original.commands)
         self.assertEqual(restored.view, original.view)
         self.assertEqual(restored.history_cursor, len(original.commands))

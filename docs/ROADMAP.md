@@ -113,3 +113,5 @@ See [detailed agentic editing execution plan](AGENTIC_EDITING_PLAN.md) for depen
 - [x] **OBS-01 (scoped):** FFmpeg still frames from imported source and current preview (full/range), explicit volatile Studio opt-in, 12/min and 4/call, MCP image output with revision and media binding. [Usage & security](VISUAL_OBSERVATION_V1.md). Audio observation and automatic semantic perception are not yet implemented.
 
 - [x] **AUD-OBS-01 (bounded):** short genuine source and FFmpeg-preview audio via MCP `pausio_get_audio_context`, separate volatile user opt-in, strict revision/timebase, <=6s WAV/4 calls per minute, RMS + peak in dBFS. Transport still requires real ChatGPT tunnel audio smoke test; LUFS/ducking remain open. [Audio observation](AUDIO_OBSERVATION_V1.md).
+
+- [x] **SPLIT-01:** `dashboard_split` output-timed scene (v9) with real FFmpeg presenter-bottom crop + libass animated upper dashboard/task/checks/progress/budget, Studio/MCP catalog, voice preserved and no runtime dependencies. [Guide](SPLIT_DASHBOARD_V1.md). General draggable compositor and cursors still future work.

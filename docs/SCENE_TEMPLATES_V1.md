@@ -108,3 +108,5 @@ source voice, Studio HTTP and Playwright edit/preview/undo. User still reviews
 the rendered A56/Mac video for typography and audio before approving.
 
 **Next capability implemented separately:** [Frame observation v1](VISUAL_OBSERVATION_V1.md) for creator-authorized source/preview snapshots. Still does not include audio observation or automatic scene quality scoring.
+
+**Formato v9:** `dashboard_split` integra una dashboard animata e il creator nella fascia inferiore. [Guida](SPLIT_DASHBOARD_V1.md).
