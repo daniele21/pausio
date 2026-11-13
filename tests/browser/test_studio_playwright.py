@@ -186,6 +186,39 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertEqual(self.state()["video_fx"][0]["kind"],"ease_push")
         self.assertFalse(self.errors,self.errors)
 
+    def test_evidence_backed_editorial_plan_acceptance_and_revision_guard(self):
+        initial=self.upload_analyze()
+        kept=max(initial["editor_segments"],key=lambda seg:seg["end_ms"]-seg["start_ms"])
+        start=kept["start_ms"]+50
+        end=min(kept["end_ms"],start+1200)
+        self.assertGreaterEqual(end-start,500)
+        self.workspace.command({
+            "revision":initial["project_revision"],"type":"caption.set",
+            "payload":{"style":"social","cues":[
+                {"id":"a"*32,"start_ms":start,"end_ms":end,
+                 "text":"Sono stati trovati 1.379 segreti"}
+            ]}
+        })
+        next_revision=initial["project_revision"]+1
+        self.page.reload(wait_until="networkidle")
+        self.wait_condition(lambda:self.state()["project_revision"]==next_revision)
+        self.page.locator('[data-workspace-nav="visual"]').click()
+        self.page.locator("#editorial-preset").select_option("educational")
+        self.page.locator("#editorial-suggest").click()
+        self.wait_condition(lambda:self.page.locator(
+            '#editorial-proposals [data-editorial-id]').count()>0)
+        self.assertEqual(self.state()["graphic_overlays"],[])
+        self.assertIn("1.379",self.page.locator("#editorial-proposals").inner_text())
+        self.shot("editorial-plan-reviewed-proposals")
+        self.page.locator('#editorial-proposals [data-editorial-id]').first.get_by_role(
+            "button",name="Accetta").click()
+        applied=self.wait_state("revision",next_revision+1)
+        self.assertEqual(len(applied["graphic_overlays"]),1)
+        self.assertIn("1.379",applied["graphic_overlays"][0]["text"])
+        self.assertEqual(self.page.locator(
+            '#editorial-proposals [data-editorial-id]').count(),0)
+        self.assertFalse(self.errors,self.errors)
+
     def test_local_image_pip_import_typed_edit_and_real_ffmpeg_preview(self):
         initial=self.upload_analyze()
         self.page.locator('[data-workspace-nav="visual"]').click()
