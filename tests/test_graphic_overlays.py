@@ -25,7 +25,7 @@ class TestGraphicOverlayCards(unittest.TestCase):
 
     def test_v5_replay_roundtrip_undo_and_redo(self):
         added = self.tape.append("graphic.overlay.add", {"graphic": self.graphic})
-        self.assertEqual(added.as_dict()["schema_version"], 5)
+        self.assertEqual(added.as_dict()["schema_version"], 6)
         self.assertEqual(added.view.graphic_overlays[0], self.graphic)
         self.assertEqual(added.undo().view.graphic_overlays, ())
         self.assertEqual(added.undo().redo().view.graphic_overlays[0], self.graphic)
