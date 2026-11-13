@@ -243,7 +243,7 @@ def _video_transform(raw: Any, segments: list[dict], duration_ms: int) -> dict:
         raise ProjectFormatError("Video FX must be inside its source KEEP segment")
     if end - start < 250 or end - start > 60_000:
         raise ProjectFormatError("Video FX must last between 250ms and 60 seconds")
-    if type(fx["kind"]) is not str or fx["kind"] not in ("punch", "slow_push", "ease_push", "ratchet"):
+    if type(fx["kind"]) is not str or fx["kind"] not in ("punch", "slow_push", "ease_push", "ratchet", "pulse", "sweep"):
         raise ProjectFormatError("Unsupported video FX kind")
     for key in ("start_scale_pct", "end_scale_pct"):
         value = _integer(fx[key], key)
@@ -251,6 +251,12 @@ def _video_transform(raw: Any, segments: list[dict], duration_ms: int) -> dict:
             raise ProjectFormatError("Video zoom limited to 1.00x-1.30x")
     if fx["kind"] == "ratchet" and end-start < 1200:
         raise ProjectFormatError("Ratchet needs at least 1.2s for three stable steps")
+    if fx["kind"] == "pulse" and end-start < 900:
+        raise ProjectFormatError("Pulse needs 900ms to rise and return smoothly")
+    if fx["kind"] == "sweep" and end-start < 1300:
+        raise ProjectFormatError("Sweep needs 1300ms of source KEEP footage")
+    if fx["kind"] == "pulse" and fx["start_scale_pct"] != 100:
+        raise ProjectFormatError("Pulse must start from 100%; end zoom is its peak")
     if fx["kind"] == "punch" and fx["start_scale_pct"] != fx["end_scale_pct"]:
         raise ProjectFormatError("Punch must have a constant zoom")
     for key in ("anchor_x_pct", "anchor_y_pct"):

@@ -192,6 +192,28 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertEqual(undone["graphic_overlays"],[])
         self.assertFalse(self.errors,self.errors)
 
+    def test_pulse_and_sweep_can_be_added_and_rendered_in_video_fx_workspace(self):
+        initial=self.upload_analyze()
+        self.page.locator("#restore-all").click()
+        changed=self.wait_state("revision",initial["project_revision"]+1)
+        self.page.locator('[data-workspace-nav="visual"]').click()
+        for kind,at in (("pulse",0.12),("sweep",2.05)):
+            self.page.evaluate(
+                "(at)=>{document.querySelector('#preview-video').currentTime=at}",at)
+            self.page.locator("#visual-fx-kind").select_option(kind)
+            self.page.locator("#visual-fx-add").click()
+            expected=changed["project_revision"]+1
+            changed=self.wait_state("revision",expected)
+        self.assertEqual([fx["kind"] for fx in changed["video_fx"]],
+                         ["pulse","sweep"])
+        self.assertEqual(changed["video_fx"][1]["anchor_x_pct"],63)
+        self.page.locator("#visual-fx-preview").click()
+        ready=self.wait_state("preview","completed",timeout=120000)
+        self.assertTrue(ready["preview_ready"],ready["job"])
+        self.wait_condition(lambda: self.page.locator('[data-mode="rendered"]').is_enabled())
+        self.shot("pulse-sweep-rendered-preview")
+        self.assertFalse(self.errors,self.errors)
+
     def test_video_fx_manual_automatic_review_and_real_preview(self):
         """Visible 9:16 zoom editing + evidence-only suggestion + undo/export."""
         initial=self.upload_analyze()
