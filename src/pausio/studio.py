@@ -28,7 +28,7 @@ from pausio.domain import EditPlan, Interval
 from pausio.captions import (
     CAPTION_STYLES, CAPTION_PRESETS, CAPTION_FONTS, propose_captions, remap_captions
 )
-from pausio.media import MediaError, MediaInfo, detect_silences, probe, probe_audio, render, waveform_envelope
+from pausio.media import MediaError, MediaInfo, detect_silences, probe, probe_audio, render, waveform_envelope, extract_preview_range
 from pausio.graphic_overlays import remap_graphics
 from pausio.planner import CUT_PRESETS, validate_cut_settings, policy_from_cut_settings, propose_segments
 from pausio.project_commands import ProjectTape, ProjectFormatError, UI_COMMANDS, default_audio_mix
@@ -87,6 +87,8 @@ class StudioWorkspace:
         self.transcript: dict | None = None
         self.export_ready = False
         self.preview_ready = False
+        self.preview_range_ready = False
+        self.preview_range_window: dict | None = None
         self.waveform: list[int] | None = None
         self.waveform_status = "idle"
         self.waveform_error: str | None = None
@@ -173,6 +175,8 @@ class StudioWorkspace:
                 ) if self.tape and self.plan and self.tape.view.captions else [],
                 "export_ready": self.export_ready,
                 "preview_ready": self.preview_ready,
+                "preview_range_ready": self.preview_range_ready,
+                "preview_range_window": dict(self.preview_range_window) if self.preview_range_ready and self.preview_range_window else None,
                 "waveform_status": self.waveform_status,
                 "waveform_error": self.waveform_error,
                 "importing": self.importing,
@@ -279,6 +283,8 @@ class StudioWorkspace:
                 self.transcript = None
                 self.export_ready = False
                 self.preview_ready = False
+                self.preview_range_ready = False
+                self.preview_range_window = None
                 self.waveform = None
                 self.waveform_status = "idle"
                 self.waveform_error = None
@@ -292,6 +298,7 @@ class StudioWorkspace:
                     old_source.unlink(missing_ok=True)
                 (self.directory / "export.mp4").unlink(missing_ok=True)
                 (self.directory / "preview.mp4").unlink(missing_ok=True)
+                (self.directory / "preview-range.mp4").unlink(missing_ok=True)
             finally:
                 self.importing = False
 
@@ -316,6 +323,9 @@ class StudioWorkspace:
         self.approved = tape.view.approved
         self.export_ready = False
         self.preview_ready = False
+        self.preview_range_ready = False
+        self.preview_range_window = None
+        (self.directory / "preview-range.mp4").unlink(missing_ok=True)
         (self.directory / "export.mp4").unlink(missing_ok=True)
         (self.directory / "preview.mp4").unlink(missing_ok=True)
 
@@ -329,6 +339,7 @@ class StudioWorkspace:
                 self.source.unlink(missing_ok=True)
             (self.directory / "export.mp4").unlink(missing_ok=True)
             (self.directory / "preview.mp4").unlink(missing_ok=True)
+            (self.directory / "preview-range.mp4").unlink(missing_ok=True)
             self.source = None
             self.filename = None
             self.info = None
@@ -341,6 +352,8 @@ class StudioWorkspace:
             self.transcript = None
             self.export_ready = False
             self.preview_ready = False
+            self.preview_range_ready = False
+            self.preview_range_window = None
             self.waveform = None
             self.waveform_status = "idle"
             self.waveform_error = None
