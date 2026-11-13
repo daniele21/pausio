@@ -150,6 +150,22 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertTrue(self.page.locator("#preview-state-note").is_hidden())
         self.assertFalse(self.errors,self.errors)
 
+    def test_visual_fx_has_dedicated_workspace_without_cut_card_scrolling(self):
+        self.upload_analyze()
+        self.page.locator('[data-workspace-nav="visual"]').click()
+        self.assertEqual(self.page.locator("#app").get_attribute("data-workspace"),"visual")
+        self.assertTrue(self.page.locator("#visual-fx-panel").is_visible())
+        self.assertTrue(self.page.locator("#visual-fx-suggest").is_visible())
+        self.assertTrue(self.page.locator("#visual-transition-panel").is_visible())
+        self.assertFalse(self.page.locator("#segment-list").is_visible())
+        self.assertTrue(self.page.locator("#visual-fx-preview").is_enabled())
+        self.shot("video-fx-workspace")
+        self.page.locator("#visual-fx-kind").select_option("ease_push")
+        self.page.locator("#visual-fx-add").click()
+        self.wait_condition(lambda: self.page.locator(".visual-fx-mark").count()==1)
+        self.assertEqual(self.state()["video_fx"][0]["kind"],"ease_push")
+        self.assertFalse(self.errors,self.errors)
+
     def test_video_fx_manual_automatic_review_and_real_preview(self):
         """Visible 9:16 zoom editing + evidence-only suggestion + undo/export."""
         initial=self.upload_analyze()
