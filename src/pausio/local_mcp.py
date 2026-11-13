@@ -14,10 +14,13 @@ import json
 import sys
 import urllib.error
 import urllib.request
+from urllib.parse import quote
 from typing import Any, TextIO
 
 from pausio.mcp_tool_catalog import (EDIT_TYPES, TOOLS, capabilities_report,
                                       project_projection)
+from pausio.mcp_assets import (AssetToolError, MAX_AGENT_BYTES, inventory,
+                               import_media, duplicate_media)
 
 PROTOCOL_VERSION = "2025-03-26"
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
@@ -75,17 +78,66 @@ class StudioClient:
             raise MCPToolError("Unexpected Studio response")
         return result
 
+    def import_binary(self, kind: str, payload: bytes, filename: str,
+                      revision: int, start_ms: int) -> dict:
+        """Only the existing Studio's strictly bounded image/audio endpoints."""
+        if (kind not in {"image", "audio"} or
+            not isinstance(payload, bytes) or not 0 < len(payload) <= MAX_AGENT_BYTES or
+            type(revision) is not int or type(start_ms) is not int):
+            raise MCPToolError("Unsafe media import request")
+        path = "/api/image/import" if kind == "image" else "/api/audio/import"
+        request = urllib.request.Request(
+            self._base + path, data=payload, method="POST",
+            headers={
+                "Content-Type": "application/octet-stream",
+                "Accept": "application/json",
+                "X-Pausio-Client": "studio",
+                "X-Filename": quote(filename, safe=""),
+                "X-Pausio-Revision": str(revision),
+                "X-Pausio-Start-Ms": str(start_ms),
+            })
+        try:
+            with self._opener.open(request, timeout=90) as response:
+                raw = response.read(MAX_RESPONSE_BYTES + 1)
+        except urllib.error.HTTPError as exc:
+            try:
+                message = json.loads(exc.read(4096)).get("error", "")
+            except (ValueError, UnicodeDecodeError, OSError, AttributeError):
+                message = ""
+            raise MCPToolError(str(message)[:300] or "Studio rejected media import") from exc
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            raise MCPToolError("Local Studio media import failed") from exc
+        if len(raw) > MAX_RESPONSE_BYTES:
+            raise MCPToolError("Studio response exceeds MCP safety limit")
+        try:
+            result = json.loads(raw)
+        except (UnicodeDecodeError, ValueError) as exc:
+            raise MCPToolError("Invalid Studio media response") from exc
+        if not isinstance(result, dict):
+            raise MCPToolError("Unexpected Studio media response")
+        return result
+
 
 def call_tool(name: str, arguments: dict, studio: StudioClient) -> dict:
     if not isinstance(arguments, dict):
         raise MCPToolError("Tool arguments must be an object")
-    if name in {"pausio_get_capabilities", "pausio_get_project",
+    if name in {"pausio_list_assets", "pausio_get_capabilities", "pausio_get_project",
                 "pausio_get_transcript", "pausio_get_job_status",
                 "pausio_start_pause_analysis", "pausio_start_transcription",
                 "pausio_render_preview", "pausio_render_approved_video"} and arguments:
         raise MCPToolError("This tool does not accept arguments")
     if name == "pausio_get_capabilities":
         return capabilities_report()
+    if name == "pausio_list_assets":
+        return inventory(studio.request("GET", "/api/state"))
+    if name == "pausio_import_image":
+        return import_media(studio, arguments, "image")
+    if name == "pausio_import_audio":
+        return import_media(studio, arguments, "audio")
+    if name == "pausio_place_existing_image":
+        return duplicate_media(studio, arguments, "image")
+    if name == "pausio_place_existing_audio":
+        return duplicate_media(studio, arguments, "audio")
     if name == "pausio_get_project":
         state = studio.request("GET", "/api/state")
         # Deliberately exclude the raw transcript; opt-in via a separate tool.
@@ -198,7 +250,7 @@ def response_for(message: Any, studio: StudioClient) -> dict | None:
                 "structuredContent": result,
                 "isError": False,
             }}
-        except MCPToolError as exc:
+        except (MCPToolError, AssetToolError) as exc:
             return {"jsonrpc": "2.0", "id": ident, "result": {
                 "content": [{"type": "text", "text": str(exc)}], "isError": True
             }}

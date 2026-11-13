@@ -1,8 +1,8 @@
 """Agent-visible Pausio tool catalog, restricted to implemented Studio operations.
 
 This is a declaration, not a second editor. Everything that changes a video
-passes through the same versioned Studio project command reducer. File uploads
-and human timeline approval deliberately remain in the Studio UI.
+passes through the same versioned Studio project command reducer. Small bounded asset uploads use Studio\'s existing validated media-import API;
+human timeline approval stays in Studio.
 """
 from __future__ import annotations
 
@@ -53,6 +53,67 @@ TOOLS: list[dict[str, Any]] = [
     _tool("pausio_get_capabilities",
           "Discover exactly which local editing operations this MCP connector supports, "
           "what must be prepared in Studio and what is not implemented."),
+    _tool("pausio_list_assets",
+          "List only images and audio clips already attached to the active project. "
+          "Return IDs, digest, start, duration and availability, not local paths, "
+          "image pixels or audio samples."),
+    _tool("pausio_import_image",
+          "Import a small PNG/JPEG/WebP image provided by the chat client as "
+          "base64, insert it at the selected edited OUTPUT time, and create "
+          "the canonical image.overlay.add event. Requires explicit caller "
+          "authorization, declared provenance and revision; <=512 KiB. "
+          "No URLs or local paths; origin is not verified by Pausio.",
+          {"type":"object","properties":{
+              "revision":{"type":"integer","minimum":0},
+              "filename":{"type":"string","maxLength":160},
+              "origin":{"type":"string","enum":[
+                  "created_for_user","user_supplied","licensed_by_user"]},
+              "data_base64":{"type":"string","description":
+                  "Raw base64 media bytes, max decoded 524288 bytes"},
+              "output_start_ms":{"type":"integer","minimum":0}},
+           "required":["revision","filename","origin","data_base64","output_start_ms"],
+           "additionalProperties":False}, read_only=False),
+    _tool("pausio_import_audio",
+          "Import a small user-supplied/licensed/generated MP3/WAV/etc audio "
+          "file via verified local Studio import, with end position on edited "
+          "output timeline. Audio START will be max(0,end-duration). "
+          "The input file must be base64 <=512 KiB; no URL fetching.",
+          {"type":"object","properties":{
+              "revision":{"type":"integer","minimum":0},
+              "filename":{"type":"string","maxLength":160},
+              "origin":{"type":"string","enum":[
+                  "created_for_user","user_supplied","licensed_by_user"]},
+              "data_base64":{"type":"string","description":
+                  "Raw base64 media bytes, max decoded 524288 bytes"},
+              "output_end_ms":{"type":"integer","minimum":0}},
+           "required":["revision","filename","origin","data_base64","output_end_ms"],
+           "additionalProperties":False}, read_only=False),
+    _tool("pausio_place_existing_image",
+          "Reuse an already-imported, available project image at another edited "
+          "OUTPUT timestamp with exact duration and position. New typed "
+          "image.overlay.add instruction, same SHA-256 file, no upload.",
+          {"type":"object","properties":{
+              "revision":{"type":"integer","minimum":0},
+              "source_image_id":{"type":"string"},
+              "output_start_ms":{"type":"integer","minimum":0},
+              "duration_ms":{"type":"integer","minimum":400,"maximum":12000},
+              "x_pct":{"type":"integer","minimum":0,"maximum":100},
+              "y_pct":{"type":"integer","minimum":0,"maximum":100},
+              "width_pct":{"type":"integer","minimum":20,"maximum":70}},
+           "required":["revision","source_image_id","output_start_ms",
+                       "duration_ms","x_pct","y_pct","width_pct"],
+           "additionalProperties":False}, read_only=False),
+    _tool("pausio_place_existing_audio",
+          "Reuse an already-imported, available music/FX asset at another "
+          "OUTPUT timestamp with gain. Adds one deterministic audio.add "
+          "clip referencing the same local bytes; original audio remains.",
+          {"type":"object","properties":{
+              "revision":{"type":"integer","minimum":0},
+              "source_clip_id":{"type":"string"},
+              "output_start_ms":{"type":"integer","minimum":0},
+              "gain_db":{"type":"integer","minimum":-36,"maximum":12}},
+           "required":["revision","source_clip_id","output_start_ms","gain_db"],
+           "additionalProperties":False}, read_only=False),
     _tool("pausio_get_project",
           "Read the current Studio project: source SHA, revision, cuts, captions, "
           "video FX, graphic/image overlays, audio mix, approval and jobs. "
@@ -125,12 +186,15 @@ def capabilities_report() -> dict[str, Any]:
         "tool_names": [item["name"] for item in TOOLS],
         "allowed_edit_commands": sorted(EDIT_TYPES),
         "source_video_import": "Studio UI only",
-        "image_broll": "Existing imported PNG/JPG/WebP can be repositioned or removed "
-                       "through typed commands; upload and relink via Studio UI",
+        "image_broll": "Image overlays can be imported from <=512 KiB base64 "
+                       "provided by the connected client, duplicated from current "
+                       "project assets, repositioned and removed. PNG/JPG/WebP. "
+                       "Studio UI supports larger images (up to 12 MiB).",
         "graphic_cards": "Typed stat/title/code/tip cards and animations, using "
                          "graphic.overlay.add/update/remove",
-        "audio": "Gain, mute and existing clip timing via typed commands; "
-                 "import new music/FX in Studio UI",
+        "audio": "Existing music/FX can be listed, duplicated at another output "
+                 "time, mixed or muted. Small licensed/owned/generated audio "
+                 "may be imported through bounded base64; large files use Studio UI.",
         "preview": "Whole preview or short OUTPUT-timeline range",
         "final_render": "Requires a separate manual timeline approval inside Studio; "
                         "output stays on Mac",
@@ -139,9 +203,12 @@ def capabilities_report() -> dict[str, Any]:
             "video B-roll files",
             "automatic B-roll asset selection",
             "direct raw-video/frame transfer from this connector to ChatGPT",
-            "file upload from chat to Pausio",
+            "automatic retrieval of ChatGPT-generated file bytes or arbitrary URLs",
+            "large (>512 KiB) MCP file import and remote media libraries",
             "unattended final approval",
             "public remote MCP connectivity",
         ],
+        "asset_origin": "Required declaration when importing, not license verification. "
+                        "External material must be cleared for usage rights.",
         "model_inference": "No internal ChatGPT/Claude/API model: client decides edits",
     }
