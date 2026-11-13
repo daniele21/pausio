@@ -244,7 +244,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
         added=self.wait_state("revision",initial["project_revision"]+1)
         self.assertEqual(len(added["image_overlays"]),1)
         self.assertTrue(added["image_overlays"][0]["available"])
-        self.assertTrue(self.page.locator("[data-pip-id]").is_visible())
+        self.assertTrue(self.page.locator(".pip-card[data-pip-id]").is_visible())
         self.assertIn("Nel video finale:",self.page.locator("#pip-image-list").inner_text())
         # The 3.2s image intersects two KEEP regions separated by a real cut;
         # one output-time command must project into two source-ruler markers.
@@ -255,7 +255,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertTrue(self.page.locator(".pip-card details").evaluate("(node)=>node.open"))
         self.assertEqual(self.page.locator("#app").get_attribute("data-workspace"),"broll")
         self.assertEqual(len(self.state()["image_overlays"]),1)
-        item=self.page.locator("[data-pip-id]").first
+        item=self.page.locator(".pip-card[data-pip-id]").first
         item.locator('input[aria-label="Larghezza (%) immagine PIP"]').fill("60")
         item.get_by_role("button",name="Salva modifiche").click()
         revised=self.wait_state("revision",added["project_revision"]+1)
