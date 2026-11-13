@@ -150,6 +150,26 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertTrue(self.page.locator("#preview-state-note").is_hidden())
         self.assertFalse(self.errors,self.errors)
 
+    def test_five_second_quick_preview_in_modal_and_invalidation(self):
+        initial=self.upload_analyze()
+        self.assertTrue(self.page.locator("#quick-preview-action").is_disabled())
+        self.page.locator("#preview-action").click()
+        ready=self.wait_state("preview","completed",timeout=120000)
+        self.assertTrue(ready["preview_ready"])
+        self.wait_condition(lambda:self.page.locator("#quick-preview-action").is_enabled())
+        self.page.locator("#quick-preview-action").click()
+        clipped=self.wait_state("preview_range","completed",timeout=60000)
+        self.assertTrue(clipped["preview_range_ready"],clipped["job"])
+        self.wait_condition(lambda:self.page.locator("#quick-preview-dialog").is_visible())
+        self.assertTrue(self.page.locator("#quick-preview-video").is_visible())
+        self.shot("quick-preview-dialog")
+        self.page.locator("#quick-preview-close").click()
+        self.assertFalse(self.page.locator("#quick-preview-dialog").is_visible())
+        self.page.keyboard.press("Control+z")
+        self.wait_state("revision",initial["project_revision"]+1)
+        self.assertTrue(self.page.locator("#quick-preview-action").is_disabled())
+        self.assertFalse(self.errors,self.errors)
+
     def test_visual_fx_has_dedicated_workspace_without_cut_card_scrolling(self):
         self.upload_analyze()
         self.page.locator('[data-workspace-nav="visual"]').click()
