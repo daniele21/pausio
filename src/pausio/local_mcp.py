@@ -21,6 +21,8 @@ from pausio.mcp_tool_catalog import (EDIT_TYPES, TOOLS, capabilities_report,
                                       project_projection)
 from pausio.scene_templates import catalog as scene_template_catalog
 from pausio.mcp_observation import VisualContextError, observe, mcp_image_result
+from pausio.mcp_audio_observation import AudioContextError, observe_audio, mcp_audio_result
+from pausio.audio_observation import MAX_WAV_BYTES
 from pausio.mcp_assets import (AssetToolError, MAX_AGENT_BYTES, inventory,
                                import_media, duplicate_media)
 
@@ -150,6 +152,36 @@ class StudioClient:
             raise MCPToolError("Studio returned an invalid or oversized JPEG")
         return raw
 
+    def read_audio(self, *, scope: str, start_ms: int, duration_ms: int,
+                   revision: int, media_id: str) -> bytes:
+        """Read only one bounded PCM WAV excerpt, never arbitrary media."""
+        query=urlencode({"scope":scope,"start_ms":start_ms,
+                         "duration_ms":duration_ms,"revision":revision,
+                         "media_id":media_id})
+        req=urllib.request.Request(
+            self._base + "/api/observation/audio?" + query,
+            headers={"X-Pausio-Client":"studio","Accept":"audio/wav"},
+            method="GET")
+        try:
+            with self._opener.open(req,timeout=40) as response:
+                if response.headers.get("Content-Type")!="audio/wav":
+                    raise MCPToolError("Studio did not return WAV")
+                raw=response.read(MAX_WAV_BYTES+1)
+        except urllib.error.HTTPError as exc:
+            msg="Studio refused this audio request"
+            try:
+                detail=json.loads(exc.read(4096))
+                if isinstance(detail,dict) and isinstance(detail.get("error"),str):
+                    msg=detail["error"][:200]
+            except (ValueError,UnicodeDecodeError,OSError):
+                pass
+            raise MCPToolError(msg) from exc
+        except (urllib.error.URLError,TimeoutError,OSError) as exc:
+            raise MCPToolError("Pausio audio observation failed") from exc
+        if not raw.startswith(b"RIFF") or raw[8:12]!=b"WAVE" or len(raw)>MAX_WAV_BYTES:
+            raise MCPToolError("Studio returned invalid or oversized WAV")
+        return raw
+
 
 def call_tool(name: str, arguments: dict, studio: StudioClient) -> dict:
     if not isinstance(arguments, dict):
@@ -169,6 +201,8 @@ def call_tool(name: str, arguments: dict, studio: StudioClient) -> dict:
         return inventory(studio.request("GET", "/api/state"))
     if name == "pausio_get_visual_context":
         return observe(studio, arguments)
+    if name == "pausio_get_audio_context":
+        return observe_audio(studio, arguments)
     if name == "pausio_import_image":
         return import_media(studio, arguments, "image")
     if name == "pausio_import_audio":
@@ -287,12 +321,15 @@ def response_for(message: Any, studio: StudioClient) -> dict | None:
             if name == "pausio_get_visual_context":
                 return {"jsonrpc": "2.0", "id": ident,
                         "result": mcp_image_result(result)}
+            if name == "pausio_get_audio_context":
+                return {"jsonrpc": "2.0", "id": ident,
+                        "result": mcp_audio_result(result)}
             return {"jsonrpc": "2.0", "id": ident, "result": {
                 "content": [{"type": "text", "text": json.dumps(result, ensure_ascii=False)}],
                 "structuredContent": result,
                 "isError": False,
             }}
-        except (MCPToolError, AssetToolError, VisualContextError) as exc:
+        except (MCPToolError, AssetToolError, VisualContextError, AudioContextError) as exc:
             return {"jsonrpc": "2.0", "id": ident, "result": {
                 "content": [{"type": "text", "text": str(exc)}], "isError": True
             }}

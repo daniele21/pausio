@@ -1,32 +1,43 @@
 "use strict";
-/* Local, per-session human opt-in for sending selected still frames to ChatGPT.
-   The checkbox never persists to localStorage or portable project JSON. */
+/* Volatile local creator opt-ins; visual and audio are independent.
+   Neither permission persists in the exported project or browser storage. */
 (() => {
-  const input = document.getElementById("visual-sharing-enabled");
-  const note = document.getElementById("visual-sharing-status");
-  if (!input || !note) return;
-  input.addEventListener("change", () => run(async () => {
-    const value = input.checked;
-    input.disabled = true;
-    try {
-      const next = await post("/api/observation/consent", {enabled: value});
-      update(next);
-    } catch (error) {
-      input.checked = !!project?.visual_sharing_enabled;
-      throw error;
-    } finally {
-      input.disabled = !project?.file;
-    }
-  }));
+  const bindings = [
+    ["visual-sharing-enabled","visual-sharing-status",
+     "visual_sharing_enabled","/api/observation/consent","fotogrammi","immagini"],
+    ["audio-sharing-enabled","audio-sharing-status",
+     "audio_sharing_enabled","/api/observation/audio-consent","audio","audio"],
+  ];
   function draw(state) {
-    input.disabled = !state?.file;
-    input.checked = state?.visual_sharing_enabled === true;
-    note.textContent = !state?.file
-      ? "Importa un video per abilitare la condivisione."
-      : input.checked
-      ? "Attivo solo per questa sessione e questo video. Revoca qui in qualsiasi momento."
-      : "Disattivato: ChatGPT non può ottenere immagini del video tramite MCP.";
+    for (const [id,status,key,,label,noun] of bindings) {
+      const checkbox=document.getElementById(id);
+      const message=document.getElementById(status);
+      if (!checkbox || !message) continue;
+      checkbox.disabled=!state?.file;
+      checkbox.checked=state?.[key]===true;
+      message.textContent=!state?.file
+        ? "Importa un video per abilitare la condivisione."
+        : checkbox.checked
+        ? "Attivo soltanto in questa sessione. Puoi revocare il consenso qui."
+        : "Disattivato: ChatGPT non può ottenere "+noun+" tramite MCP.";
+    }
   }
-  window.pausioVisualObservation = {update: draw};
-  if (project) draw(project);
+  for (const [id,,key,url] of bindings) {
+    const checkbox=document.getElementById(id);
+    if (!checkbox) continue;
+    checkbox.addEventListener("change",()=>run(async()=>{
+      const enabled=checkbox.checked;
+      checkbox.disabled=true;
+      try {
+        update(await post(url,{enabled}));
+      } catch (error) {
+        checkbox.checked=project?.[key]===true;
+        throw error;
+      } finally {
+        checkbox.disabled=!project?.file;
+      }
+    }));
+  }
+  window.pausioVisualObservation={update:draw};
+  if(project)draw(project);
 })();

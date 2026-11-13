@@ -220,3 +220,5 @@ Il bridge `pausio mcp --studio-port 8765` espone un insieme verificabile di stru
 In **Video FX → Scene grafiche a schermo intero** ora puoi aggiungere una statistica animata, un popup di autorizzazione chiaramente illustrativo o una scheda codice con riga evidenziata. La voce originale prosegue sotto la scena e la preview/export usano lo stesso FFmpeg/libass. Le istruzioni `scene.template.add/update/remove` sono versionate (progetto v8), esportabili e accessibili anche via MCP dopo `pausio_get_scene_templates`. [Guida e limiti](docs/SCENE_TEMPLATES_V1.md).
 
 **[Frame reali per ChatGPT](docs/VISUAL_OBSERVATION_V1.md)**: l'MCP può vedere 1–4 JPEG reali del video originale o della preview FFmpeg. L'utente deve abilitare esplicitamente la condivisione in Video FX; nessuna immagine è inviata automaticamente.
+
+**[Audio reale per ChatGPT](docs/AUDIO_OBSERVATION_V1.md)**: con il consenso esplicito separato in Video FX, Pausio può restituire via MCP brevi estratti WAV del video originale o montato, più picco e RMS in dBFS (non LUFS). Nessun trasferimento automatico della voce.
