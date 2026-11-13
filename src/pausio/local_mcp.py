@@ -14,12 +14,13 @@ import json
 import sys
 import urllib.error
 import urllib.request
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 from typing import Any, TextIO
 
 from pausio.mcp_tool_catalog import (EDIT_TYPES, TOOLS, capabilities_report,
                                       project_projection)
 from pausio.scene_templates import catalog as scene_template_catalog
+from pausio.mcp_observation import VisualContextError, observe, mcp_image_result
 from pausio.mcp_assets import (AssetToolError, MAX_AGENT_BYTES, inventory,
                                import_media, duplicate_media)
 
@@ -118,6 +119,37 @@ class StudioClient:
             raise MCPToolError("Unexpected Studio media response")
         return result
 
+    def read_frame(self, *, scope: str, at_ms: int, revision: int,
+                   media_id: str) -> bytes:
+        """Only one strictly validated JPEG observation URL, no arbitrary GET."""
+        query = urlencode({"scope":scope, "at_ms":at_ms,
+                           "revision":revision, "media_id":media_id})
+        req = urllib.request.Request(
+            self._base + "/api/observation/frame?" + query,
+            headers={"X-Pausio-Client":"studio", "Accept":"image/jpeg"},
+            method="GET",
+        )
+        try:
+            with self._opener.open(req, timeout=35) as response:
+                if response.headers.get("Content-Type") != "image/jpeg":
+                    raise MCPToolError("Studio did not return a JPEG image")
+                raw = response.read(256*1024+1)
+        except urllib.error.HTTPError as exc:
+            msg = "Studio refused this frame request"
+            try:
+                detail = json.loads(exc.read(4096))
+                if isinstance(detail,dict) and isinstance(detail.get("error"),str):
+                    msg = detail["error"][:200]
+            except (ValueError,UnicodeDecodeError,OSError):
+                pass
+            raise MCPToolError(msg) from exc
+        except (urllib.error.URLError,TimeoutError,OSError) as exc:
+            raise MCPToolError("Pausio frame observation failed") from exc
+        if (not raw.startswith(b"\xff\xd8") or
+            not raw.endswith(b"\xff\xd9") or len(raw)>256*1024):
+            raise MCPToolError("Studio returned an invalid or oversized JPEG")
+        return raw
+
 
 def call_tool(name: str, arguments: dict, studio: StudioClient) -> dict:
     if not isinstance(arguments, dict):
@@ -135,6 +167,8 @@ def call_tool(name: str, arguments: dict, studio: StudioClient) -> dict:
                 "max_scenes": 9, "audio": "Original voice and existing mix remain."}
     if name == "pausio_list_assets":
         return inventory(studio.request("GET", "/api/state"))
+    if name == "pausio_get_visual_context":
+        return observe(studio, arguments)
     if name == "pausio_import_image":
         return import_media(studio, arguments, "image")
     if name == "pausio_import_audio":
@@ -250,12 +284,15 @@ def response_for(message: Any, studio: StudioClient) -> dict | None:
         name, args = params.get("name"), params.get("arguments", {})
         try:
             result = call_tool(name, args, studio)
+            if name == "pausio_get_visual_context":
+                return {"jsonrpc": "2.0", "id": ident,
+                        "result": mcp_image_result(result)}
             return {"jsonrpc": "2.0", "id": ident, "result": {
                 "content": [{"type": "text", "text": json.dumps(result, ensure_ascii=False)}],
                 "structuredContent": result,
                 "isError": False,
             }}
-        except (MCPToolError, AssetToolError) as exc:
+        except (MCPToolError, AssetToolError, VisualContextError) as exc:
             return {"jsonrpc": "2.0", "id": ident, "result": {
                 "content": [{"type": "text", "text": str(exc)}], "isError": True
             }}

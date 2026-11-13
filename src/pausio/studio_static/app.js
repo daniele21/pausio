@@ -297,6 +297,7 @@ function update(next){
   window.pausioVideoTransitions?.update(next);
   window.pausioGraphics?.update(next);
   window.pausioSceneTemplates?.update(next);
+  window.pausioVisualObservation?.update(next);
   window.pausioImages?.update(next);
   window.pausioEditorial?.update(next);
   updateFxMonitorUI();drawAudioMixer();syncVoicePlayback();syncLiveFx();transport();

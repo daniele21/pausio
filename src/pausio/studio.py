@@ -16,11 +16,12 @@ import re
 import shutil
 import tempfile
 import threading
+import time
 import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote, urlsplit
+from urllib.parse import unquote, urlsplit, parse_qs
 
 from pausio import __version__
 from pausio.local_asr import transcribe_video_local, validate_asr_settings
@@ -29,6 +30,7 @@ from pausio.captions import (
     CAPTION_STYLES, CAPTION_PRESETS, CAPTION_FONTS, propose_captions, remap_captions
 )
 from pausio.media import MediaError, MediaInfo, detect_silences, probe, probe_audio, probe_image, render, waveform_envelope, extract_preview_range
+from pausio.media_observation import ObservationError, frame_jpeg
 from pausio.graphic_overlays import remap_graphics
 from pausio.scene_templates import catalog as scene_template_catalog
 from pausio.image_overlays import MAX_IMAGE_BYTES, IMAGE_EXTENSIONS
@@ -60,6 +62,7 @@ ASSETS = {
     "/visual_transition_ui.js": ("visual_transition_ui.js", "text/javascript; charset=utf-8"),
     "/graphic_overlay_ui.js": ("graphic_overlay_ui.js", "text/javascript; charset=utf-8"),
     "/scene_template_ui.js": ("scene_template_ui.js", "text/javascript; charset=utf-8"),
+    "/visual_observation_ui.js": ("visual_observation_ui.js", "text/javascript; charset=utf-8"),
     "/scene_template_ui.css": ("scene_template_ui.css", "text/css; charset=utf-8"),
     "/editorial_ui.js": ("editorial_ui.js", "text/javascript; charset=utf-8"),
     "/image_overlay_ui.js": ("image_overlay_ui.js", "text/javascript; charset=utf-8"),
@@ -73,6 +76,10 @@ STATIC_DIR = Path(__file__).resolve().parent / "studio_static"
 
 class StudioError(ValueError):
     """A user-recoverable Studio action error."""
+
+
+class VisualConsentRequired(StudioError):
+    """The user must enable frame sharing in the running Studio UI."""
 
 
 class StudioWorkspace:
@@ -98,6 +105,11 @@ class StudioWorkspace:
         self.preview_ready = False
         self.preview_range_ready = False
         self.preview_range_window: dict | None = None
+        # Volatile opt-in: not in the portable project or recovery checkpoint.
+        # Never silently re-enable when Studio/preview/source changes.
+        self.visual_sharing_enabled = False
+        self._observation_times: list[float] = []
+        self._observation_slot = threading.BoundedSemaphore(1)
         self.waveform: list[int] | None = None
         self.waveform_status = "idle"
         self.waveform_error: str | None = None
@@ -192,6 +204,7 @@ class StudioWorkspace:
                 ) if self.tape and self.plan and self.tape.view.captions else [],
                 "export_ready": self.export_ready,
                 "preview_ready": self.preview_ready,
+                "visual_sharing_enabled": self.visual_sharing_enabled,
                 "preview_range_ready": self.preview_range_ready,
                 "preview_range_window": dict(self.preview_range_window) if self.preview_range_ready and self.preview_range_window else None,
                 "waveform_status": self.waveform_status,
@@ -355,6 +368,8 @@ class StudioWorkspace:
                 self.source = new_source
                 self.filename = label
                 self.media_id = uuid.uuid4().hex
+                self.visual_sharing_enabled = False
+                self._observation_times.clear()
                 self.media_sha256 = sha256
                 self.info = info
                 self.tape = tape
@@ -424,6 +439,8 @@ class StudioWorkspace:
             for image in self.directory.glob("pip-*"):
                 if image.is_file() or image.is_symlink():
                     image.unlink(missing_ok=True)
+            self.visual_sharing_enabled = False
+            self._observation_times.clear()
             self.source = None
             self.filename = None
             self.info = None
@@ -477,6 +494,76 @@ class StudioWorkspace:
                         self.waveform_status = "ready"
 
         threading.Thread(target=worker, name="pausio-waveform", daemon=True).start()
+
+    def set_visual_consent(self, enabled: bool) -> None:
+        """Only invoked by a deliberate local Studio checkbox action."""
+        if type(enabled) is not bool:
+            raise StudioError("Consenso visuale non valido.")
+        with self.lock:
+            if self.source is None or self.media_id is None:
+                raise StudioError("Importa un video per gestire la condivisione.")
+            self.visual_sharing_enabled = enabled
+            if not enabled:
+                self._observation_times.clear()
+
+    def observe_frame(self, *, scope: str, at_ms: int, revision: int,
+                      media_id: str) -> bytes:
+        """Bounded FFmpeg extraction, bound to the current media and revision."""
+        if (scope not in ("source", "preview", "range") or
+            type(at_ms) is not int or type(revision) is not int or
+            type(media_id) is not str):
+            raise StudioError("Richiesta frame non valida.")
+        if not self._observation_slot.acquire(blocking=False):
+            raise StudioError("Un'altra osservazione è in corso.")
+        try:
+            with self.lock:
+                if not self.visual_sharing_enabled:
+                    raise VisualConsentRequired(
+                        "Attiva «Condividi fotogrammi con ChatGPT» in Video FX.")
+                self._ensure_unlocked()
+                if (self.tape is None or self.source is None or
+                    self.media_id != media_id or self.tape.revision != revision):
+                    raise StudioError("Media o revisione superati: aggiorna il progetto.")
+                if scope == "source":
+                    path = self.source
+                    total = self.info.duration_ms if self.info else 0
+                    relative = at_ms
+                else:
+                    if self.plan is None:
+                        raise StudioError("Prepara prima il montaggio.")
+                    total = sum(x.end_ms-x.start_ms for x in self.plan.segments)
+                    if scope == "preview":
+                        if not self.preview_ready:
+                            raise StudioError("Genera prima una preview FFmpeg aggiornata.")
+                        path = self.directory / "preview.mp4"
+                        relative = at_ms
+                    else:
+                        window = self.preview_range_window
+                        if not self.preview_range_ready or window is None:
+                            raise StudioError("Genera prima una clip FFmpeg aggiornata.")
+                        begin = window["start_ms"]
+                        if not begin <= at_ms < begin + window["duration_ms"]:
+                            raise StudioError("Frame fuori dall'intervallo della clip.")
+                        path = self.directory / "preview-range.mp4"
+                        relative = at_ms - begin
+                if not 0 <= at_ms < total or path.is_symlink() or not path.is_file():
+                    raise StudioError("Frame fuori dal video o media non disponibile.")
+                now = time.monotonic()
+                self._observation_times = [
+                    t for t in self._observation_times if now-t < 60]
+                if len(self._observation_times) >= 12:
+                    raise StudioError("Limite di 12 fotogrammi al minuto raggiunto.")
+                self._observation_times.append(now)
+            data = frame_jpeg(path, relative)
+            with self.lock:
+                if (not self.visual_sharing_enabled or self.media_id != media_id
+                    or self.tape is None or self.tape.revision != revision
+                    or (scope == "preview" and not self.preview_ready)
+                    or (scope == "range" and not self.preview_range_ready)):
+                    raise StudioError("Consenso o progetto modificato durante l'estrazione.")
+            return data
+        finally:
+            self._observation_slot.release()
 
     def get_waveform(self) -> dict:
         with self.lock:
@@ -1055,6 +1142,17 @@ class StudioHandler(BaseHTTPRequestHandler):
             if path == "/api/image/import":
                 self._import_image()
                 return
+            if path == "/api/observation/consent":
+                # Consent is a human Studio action: unlike generic Studio
+                # writes, this endpoint requires a real same-origin request.
+                if self.headers.get("Origin") != "http://" + self.headers["Host"]:
+                    raise StudioError("Condivisione consentita solo dalla UI locale.")
+                body = self._read_json()
+                if set(body) != {"enabled"} or type(body["enabled"]) is not bool:
+                    raise StudioError("Parametro consenso non valido.")
+                self.server.workspace.set_visual_consent(body["enabled"])
+                self._json(200, self.server.workspace.snapshot())
+                return
             if path == "/api/plan":
                 self.server.workspace.save_plan(self._read_json().get("segments"))
                 self._json(200, self.server.workspace.snapshot())
@@ -1230,6 +1328,29 @@ class StudioHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/state":
             self._json(200, self.server.workspace.snapshot())
+            return
+        if path == "/api/observation/frame":
+            if self.headers.get("X-Pausio-Client") != "studio":
+                self._failed(403, "Endpoint di osservazione non autorizzato.")
+                return
+            try:
+                raw = parse_qs(urlsplit(self.path).query, strict_parsing=True)
+                if (set(raw) != {"scope", "at_ms", "revision", "media_id"} or
+                    any(len(v) != 1 for v in raw.values()) or
+                    len(urlsplit(self.path).query) > 210):
+                    raise ValueError("Invalid query")
+                frame = self.server.workspace.observe_frame(
+                    scope=raw["scope"][0],
+                    at_ms=int(raw["at_ms"][0]),
+                    revision=int(raw["revision"][0]),
+                    media_id=raw["media_id"][0])
+                self._send_bytes(200, frame, "image/jpeg")
+            except VisualConsentRequired as exc:
+                self._failed(403, str(exc))
+            except (ValueError, ObservationError, MediaError) as exc:
+                # Do not expose private filenames or FFmpeg stderr.
+                self._failed(409, str(exc)[:200] if isinstance(exc, StudioError)
+                             else "Frame non disponibile.")
             return
         if path == "/api/waveform":
             try:
