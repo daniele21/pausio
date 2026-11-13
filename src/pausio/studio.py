@@ -51,6 +51,7 @@ ALLOWED_VIDEO_EXTENSIONS = frozenset({".mp4", ".mov", ".m4v", ".mkv", ".webm"})
 ASSETS = {
     "/": ("index.html", "text/html; charset=utf-8"),
     "/styles.css": ("styles.css", "text/css; charset=utf-8"),
+    "/audio_monitor_ui.js": ("audio_monitor_ui.js", "text/javascript; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
     "/visual_fx_ui.js": ("visual_fx_ui.js", "text/javascript; charset=utf-8"),
     "/face_reframe_ui.js": ("face_reframe_ui.js", "text/javascript; charset=utf-8"),
