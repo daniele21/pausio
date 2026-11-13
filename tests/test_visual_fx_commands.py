@@ -33,7 +33,7 @@ class VideoFxCommandsTests(unittest.TestCase):
         added = self.tape.append("video.transform.add", {"effect": fx})
         self.assertEqual(added.view.video_fx[0], fx)
         self.assertEqual(added.as_dict()["schema_version"], VERSION)
-        self.assertEqual(VERSION, 8)
+        self.assertEqual(VERSION, 9)
         self.assertFalse(added.view.approved)
         replacement = {**fx, "start_scale_pct": 122, "end_scale_pct": 122,
                        "anchor_x_pct": 54}
@@ -51,7 +51,7 @@ class VideoFxCommandsTests(unittest.TestCase):
         old["schema_version"] = 2
         restored = ProjectTape.from_dict(old)
         self.assertEqual(restored.view.video_fx, ())
-        self.assertEqual(restored.as_dict()["schema_version"], 8)
+        self.assertEqual(restored.as_dict()["schema_version"], 9)
         fx = effect(self.a)
         self.assertEqual(restored.append("video.transform.add", {"effect": fx}).view.video_fx, (fx,))
 
@@ -77,7 +77,7 @@ class VideoFxCommandsTests(unittest.TestCase):
                 self.assertEqual(copy_.undo().view.video_fx,())
         old=self.tape.as_dict()
         old["schema_version"]=3
-        self.assertEqual(ProjectTape.from_dict(old).as_dict()["schema_version"],8)
+        self.assertEqual(ProjectTape.from_dict(old).as_dict()["schema_version"],9)
 
     def test_pulse_and_sweep_replay_v5_and_reject_short_source_windows(self):
         for kind in ("pulse", "sweep"):

@@ -131,6 +131,13 @@
     const remove=button("Rimuovi scena",()=>edit(
       "scene.template.remove",{scene_id:scene.id}));
     remove.classList.add("scene-remove");
+    if(fmt.layout==="split_vertical"){
+      const hint=document.createElement("p");
+      hint.className="visual-fx-status";
+      hint.textContent="Dashboard sopra e volto sotto: la voce rimane originale. "
+        +"La posizione del volto si regola in «Modifica testo e durata».";
+      card.append(hint);
+    }
     card.append(header,range,actions,details,remove);
     return card;
   }
@@ -171,7 +178,7 @@
     el("scene-template-add").disabled=!ready||scenes().length>=9;
     const status=el("scene-template-status");
     status.textContent=project?.plan
-      ? scenes().length+"/9 scene · sfondo a schermo intero; la voce originale continua. "
+      ? scenes().length+"/9 scene · layout intero o split-screen; la voce originale continua. "
         +"Per vedere il risultato usa «Guarda 5 s»."
       : "Importa un video e prepara un montaggio per aggiungere scene.";
     const list=el("scene-template-list");list.replaceChildren();

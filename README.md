@@ -222,3 +222,5 @@ In **Video FX → Scene grafiche a schermo intero** ora puoi aggiungere una stat
 **[Frame reali per ChatGPT](docs/VISUAL_OBSERVATION_V1.md)**: l'MCP può vedere 1–4 JPEG reali del video originale o della preview FFmpeg. L'utente deve abilitare esplicitamente la condivisione in Video FX; nessuna immagine è inviata automaticamente.
 
 **[Audio reale per ChatGPT](docs/AUDIO_OBSERVATION_V1.md)**: con il consenso esplicito separato in Video FX, Pausio può restituire via MCP brevi estratti WAV del video originale o montato, più picco e RMS in dBFS (non LUFS). Nessun trasferimento automatico della voce.
+
+**[Split-screen dashboard](docs/SPLIT_DASHBOARD_V1.md)** — quarto template in Video FX: volto del creator in basso, task progressivi, barra e budget sopra. FFmpeg + libass esistenti; modificabile da Studio e MCP, voce invariata.

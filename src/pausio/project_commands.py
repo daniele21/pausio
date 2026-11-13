@@ -25,8 +25,9 @@ from pausio.scene_templates import validate_scene, validate_scenes
 from pausio.planner import CUT_PRESETS, validate_cut_settings
 
 FORMAT = "pausio.project"
-VERSION = 8
-PREVIOUS_VERSION = 7
+VERSION = 9
+PREVIOUS_VERSION = 8
+V7_VERSION = 7
 V6_VERSION = 6
 V5_VERSION = 5
 V4_VERSION = 4
@@ -878,7 +879,7 @@ class ProjectTape:
             # V1 files are intentionally read-only inputs; exporting always
             # upgrades to V2 with cursor at the end and preserved event IDs.
             return cls(obj["media"], obj["commands"])
-        if version in (MIGRATION_VERSION, V3_VERSION, V4_VERSION, V5_VERSION, V6_VERSION, PREVIOUS_VERSION, VERSION):
+        if version in (MIGRATION_VERSION, V3_VERSION, V4_VERSION, V5_VERSION, V6_VERSION, V7_VERSION, PREVIOUS_VERSION, VERSION):
             obj = _object(
                 document,
                 {"format", "schema_version", "media", "commands",

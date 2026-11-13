@@ -10,6 +10,7 @@ import re
 from typing import Any
 
 from pausio.captions import _ass_color, _ass_text, _ass_time
+from pausio.split_dashboard import compose_dashboard
 
 MAX_SCENES = 9
 SCENE_FIELDS = frozenset({"id", "template", "start_ms", "duration_ms", "accent", "content"})
@@ -50,6 +51,30 @@ TEMPLATES = {
              "max_length": 60, "default": "Una scelta apparentemente innocua"},
         ],
     },
+    "dashboard_split": {
+        "label": "01 · Dashboard + creator",
+        "layout": "split_vertical",
+        "fields": [
+            {"key": "title", "label": "Titolo", "type": "text",
+             "max_length": 35, "default": "COME FUNZIONA DAVVERO"},
+            {"key": "task_one", "label": "Prima attività", "type": "text",
+             "max_length": 30, "default": "Apri il progetto"},
+            {"key": "task_two", "label": "Seconda attività", "type": "text",
+             "max_length": 30, "default": "Analizza i risultati"},
+            {"key": "task_three", "label": "Terza attività", "type": "text",
+             "max_length": 30, "default": "Controlla il budget"},
+            {"key": "progress_label", "label": "Etichetta avanzamento",
+             "type": "text", "max_length": 27, "default": "Avanzamento"},
+            {"key": "progress_pct", "label": "Avanzamento (%)",
+             "type": "integer", "minimum": 0, "maximum": 100, "default": 70},
+            {"key": "budget", "label": "Testo finale / budget",
+             "type": "text", "max_length": 36, "default": "Budget: sotto controllo"},
+            {"key": "presenter_height_pct", "label": "Altezza creator (%)",
+             "type": "integer", "minimum": 35, "maximum": 55, "default": 45},
+            {"key": "presenter_anchor_pct", "label": "Inquadratura verticale (%)",
+             "type": "integer", "minimum": 20, "maximum": 80, "default": 42},
+        ],
+    },
     "code_highlight": {
         "label": "05 · Codice evidenziato",
         "fields": [
@@ -72,6 +97,7 @@ TEMPLATES = {
 def catalog() -> list[dict]:
     """Return display metadata without exporting internal render expressions."""
     return [{"id": name, "label": spec["label"],
+             "layout": spec.get("layout", "fullscreen"),
              "fields": [dict(field) for field in spec["fields"]]}
             for name, spec in TEMPLATES.items()]
 
@@ -174,6 +200,9 @@ def compose_scene_events(rows: list[dict], total_ms: int) -> str:
         end = a + scene["duration_ms"]
         data = scene["content"]
         accent = _COLORS[scene["accent"]]
+        if scene["template"] == "dashboard_split":
+            out.append(compose_dashboard(scene, _rect, _label))
+            continue
         out.append(_rect(a, end, 0, 0, 1080, 1920, _BACKGROUND))
         out.append(_rect(a + 150, end, 92, 135, 896, 7, accent))
         if scene["template"] == "stat_reveal":
