@@ -3,13 +3,19 @@ from __future__ import annotations
 
 import io
 import json
+import shutil
+import subprocess
+import tempfile
 import threading
+import time
 import unittest
+from pathlib import Path
 
 from pausio.local_mcp import (
     StudioClient, MCPToolError, TOOLS, call_tool, response_for, serve_stdio
 )
 from pausio.studio import StudioWorkspace, create_server
+from pausio.media import probe
 
 
 class FakeStudio:
@@ -217,6 +223,78 @@ class LiveLoopbackMCPTests(unittest.TestCase):
             server.server_close()
             worker.join(timeout=3)
             workspace.close()
+
+
+    @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"),
+                         "FFmpeg/FFprobe not installed")
+    def test_local_mcp_edits_real_studio_previews_and_renders_only_after_approval(self):
+        """Synthetic full path: MCP -> actual Studio reducer -> actual FFmpeg."""
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "speech-test.mp4"
+            subprocess.run([
+                "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+                "-f", "lavfi", "-i", "color=c=blue:s=160x288:r=15:d=1.7",
+                "-f", "lavfi", "-i", "sine=frequency=440:duration=1.7",
+                "-shortest", "-c:v", "mpeg4", "-c:a", "aac", str(source)
+            ], timeout=45, check=True)
+            workspace = StudioWorkspace()
+            server = create_server(port=0, workspace=workspace)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                candidate, label = workspace.begin_import("speech-test.mp4")
+                shutil.copyfile(source, candidate)
+                workspace.finish_import(candidate, label, probe(candidate))
+                client = StudioClient(server.server_port)
+
+                capabilities = call_tool("pausio_get_capabilities", {}, client)
+                self.assertIn("graphic.overlay.add", capabilities["allowed_edit_commands"])
+                call_tool("pausio_start_pause_analysis", {}, client)
+
+                def completed(kind):
+                    for _ in range(300):
+                        status = call_tool("pausio_get_job_status", {}, client)
+                        job = status["job"]
+                        if job["kind"] == kind and job["status"] in {"failed","completed"}:
+                            self.assertEqual(job["status"], "completed",job["error"])
+                            return status
+                        time.sleep(0.1)
+                    self.fail("Timed out waiting for Pausio MCP job "+kind)
+
+                completed("analyze")
+                project = call_tool("pausio_get_project", {}, client)
+                self.assertTrue(project["plan"])
+                revised = call_tool("pausio_apply_command", {
+                    "revision": project["project_revision"],
+                    "type": "timeline.keep_all", "payload": {}
+                }, client)
+                self.assertGreater(revised["project_revision"], project["project_revision"])
+                self.assertFalse(revised["approved"])
+                with self.assertRaises(MCPToolError):
+                    call_tool("pausio_render_approved_video", {}, client)
+
+                clip = call_tool("pausio_preview_range", {
+                    "range_start_ms":0, "range_duration_ms":700
+                }, client)
+                self.assertEqual(clip["job"]["kind"], "preview_range")
+                self.assertTrue(completed("preview_range")["preview_range_ready"])
+                self.assertTrue((workspace.directory / "preview-range.mp4").is_file())
+
+                # Represents the human's explicit UI confirmation, not an MCP tool.
+                state = workspace.snapshot()
+                workspace.command({"revision":state["project_revision"],
+                                   "type":"timeline.approve","payload":{}})
+                render = call_tool("pausio_render_approved_video", {}, client)
+                self.assertEqual(render["job"]["kind"], "render")
+                self.assertTrue(completed("render")["export_ready"])
+                final = workspace.directory / "export.mp4"
+                self.assertTrue(final.is_file())
+                self.assertTrue(probe(final).duration_ms > 500)
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=3)
+                workspace.close()
 
 
 if __name__ == "__main__":
