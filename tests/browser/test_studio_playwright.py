@@ -180,6 +180,18 @@ class StudioPlaywrightAudit(unittest.TestCase):
         added=self.wait_state("revision",initial["project_revision"]+1)
         self.assertEqual(len(added["graphic_overlays"]),1)
         self.assertEqual(added["graphic_overlays"][0]["text"],"1.379 segreti")
+        item=self.page.locator("[data-graphic-id]").first
+        item.locator('select[aria-label="Stile grafica"]').select_option("code")
+        item.locator('select[aria-label="Animazione grafica"]').select_option("pop")
+        item.locator('input[aria-label="Colore grafica"]').fill("#00ccff")
+        item.locator('input[aria-label="Durata grafica (ms)"]').fill("400")
+        item.get_by_role("button",name="Salva modifiche").click()
+        updated=self.wait_state("revision",added["project_revision"]+1)
+        self.assertEqual(updated["graphic_overlays"][0]["kind"],"code")
+        self.assertEqual(updated["graphic_overlays"][0]["animation"],"pop")
+        self.assertEqual(updated["graphic_overlays"][0]["color"],"#00CCFF")
+        self.assertEqual(updated["graphic_overlays"][0]["end_ms"]-
+                         updated["graphic_overlays"][0]["start_ms"],400)
         self.page.locator("#graphic-preview").click()
         preview=self.wait_state("preview","completed",timeout=120000)
         self.assertTrue(preview["preview_ready"])
@@ -188,8 +200,11 @@ class StudioPlaywrightAudit(unittest.TestCase):
         # The dedicated Video FX workspace hides the legacy left project rail.
         # Use its supported global Undo shortcut, as creators do on desktop.
         self.page.keyboard.press("Control+z")
-        undone=self.wait_state("revision",added["project_revision"]+1)
-        self.assertEqual(undone["graphic_overlays"],[])
+        undone=self.wait_state("revision",updated["project_revision"]+1)
+        self.assertEqual(undone["graphic_overlays"][0]["kind"],"stat")
+        self.page.keyboard.press("Control+z")
+        empty=self.wait_state("revision",undone["project_revision"]+1)
+        self.assertEqual(empty["graphic_overlays"],[])
         self.assertFalse(self.errors,self.errors)
 
     def test_pulse_and_sweep_can_be_added_and_rendered_in_video_fx_workspace(self):
