@@ -41,7 +41,7 @@
     actions.append(
       button("Accetta",()=>run(async()=>{
         if(!proposal||proposal.base_revision!==current().project_revision||
-           proposal.media_sha256!==current().media?.sha256)
+           forMedia!==current().media_id)
           throw Error("Proposta scaduta: ricalcola la regia.");
         await edit(candidate.command_type,candidate.payload);
         proposal=null;ignored.clear();
