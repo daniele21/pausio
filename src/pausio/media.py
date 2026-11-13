@@ -15,6 +15,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from pausio.captions import ass_document
+from pausio.graphic_overlays import compose_graphics_ass
 from pausio.domain import Interval
 from pausio.visual_fx import motion_filter, prepare_motion_fx
 from pausio.visual_transitions import compile_dips
@@ -213,6 +214,7 @@ def render(
     audio_mix: dict | None = None,
     video_fx: list[dict] | None = None,
     video_transitions: list[dict] | None = None,
+    graphic_overlays: list[dict] | None = None,
 ) -> list[str]:
     """Render ordered intervals in one re-encode; preserve aspect ratio with padding.
 
@@ -235,10 +237,14 @@ def render(
     mix = validate_audio_mix(audio_mix) if audio_mix is not None else default_audio_mix()
     if captions is not None and not isinstance(captions, list):
         raise MediaError("captions must be a list or None")
+    if graphic_overlays is not None and not isinstance(graphic_overlays, list):
+        raise MediaError("graphic_overlays must be a list or None")
+    has_text = bool(captions) or bool(graphic_overlays)
     # Validate subtitle text/style for both preview and final output.
     render_ffmpeg = require_binary("ffmpeg")
-    if captions:
-        ass_document(captions, style=caption_style, settings=caption_config)
+    if has_text:
+        compose_graphics_ass(captions or [], graphic_overlays or [],
+                             style=caption_style, settings=caption_config)
         if not dry_run:
             compatible_ffmpeg = select_ffmpeg_for_filter("ass")
             if compatible_ffmpeg is None:
@@ -298,11 +304,11 @@ def render(
     components.append(
         f"[joinedv]fps=30,scale={size[0]}:{size[1]}:force_original_aspect_ratio=decrease,"
         f"pad={size[0]}:{size[1]}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p"
-        + ("[basev]" if captions else "[outv]")
+        + ("[basev]" if has_text else "[outv]")
     )
     def make_args(destination: Path, subtitle_file: Path | None = None) -> list[str]:
         filters = list(components)
-        if captions:
+        if has_text:
             # This name is intentionally created in a private ASCII-only /tmp
             # directory; FFmpeg filtergraphs are not shell commands. Use a
             # placeholder for the dry-run command (nothing is executed).
@@ -368,13 +374,15 @@ def render(
     # A failed encoder cannot corrupt a previous approved export.
     with TemporaryDirectory(prefix=".pausio-", dir=output.parent) as tmp:
         staged_output = Path(tmp) / "render.mp4"
-        if captions:
+        if has_text:
             # /tmp exists on macOS and Linux and has no path quoting hazards.
             # The dedicated 0700 directory is removed after FFmpeg returns.
             with TemporaryDirectory(prefix="pausio-ass-", dir="/tmp") as subtitle_tmp:
                 subtitle_file = Path(subtitle_tmp) / "captions.ass"
                 subtitle_file.write_text(
-                    ass_document(captions, style=caption_style, settings=caption_config), encoding="utf-8"
+                    compose_graphics_ass(captions or [], graphic_overlays or [],
+                                         style=caption_style, settings=caption_config),
+                    encoding="utf-8"
                 )
                 args = make_args(staged_output, subtitle_file)
                 _run(args, timeout_s=1200)
