@@ -150,6 +150,30 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertTrue(self.page.locator("#preview-state-note").is_hidden())
         self.assertFalse(self.errors,self.errors)
 
+    def test_graphic_overlay_typed_edit_and_real_ffmpeg_preview(self):
+        """Add source-bound graphic card, render actual ASS and undo/import."""
+        initial=self.upload_analyze()
+        self.page.locator('[data-workspace-nav="cuts"]').click()
+        start=initial["editor_segments"][0]["start_ms"]/1000
+        self.page.evaluate("(at)=>{document.querySelector('#preview-video').currentTime=at}",start+0.15)
+        self.page.locator("#graphic-text").fill("1.379 segreti")
+        self.page.locator("#graphic-kind").select_option("stat")
+        self.page.locator("#graphic-animation").select_option("slide")
+        self.assertTrue(self.page.locator("#graphic-add").is_enabled())
+        self.page.locator("#graphic-add").click()
+        added=self.wait_state("revision",initial["project_revision"]+1)
+        self.assertEqual(len(added["graphic_overlays"]),1)
+        self.assertEqual(added["graphic_overlays"][0]["text"],"1.379 segreti")
+        self.page.locator("#graphic-preview").click()
+        preview=self.wait_state("preview","completed",timeout=120000)
+        self.assertTrue(preview["preview_ready"])
+        self.wait_condition(lambda: self.page.locator('[data-mode="rendered"]').is_enabled())
+        self.shot("graphic-overlay-preview")
+        self.page.locator("#undo-action").click()
+        undone=self.wait_state("revision",added["project_revision"]+1)
+        self.assertEqual(undone["graphic_overlays"],[])
+        self.assertFalse(self.errors,self.errors)
+
     def test_video_fx_manual_automatic_review_and_real_preview(self):
         """Visible 9:16 zoom editing + evidence-only suggestion + undo/export."""
         initial=self.upload_analyze()
