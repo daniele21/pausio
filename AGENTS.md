@@ -4,6 +4,7 @@ Pausio is a local-first, reviewable editor for natural talking-head videos. Read
 
 ## Non-negotiable product contracts
 
+- **Keep frontend code focused:** new audio monitor/mixer functionality belongs in `studio_static/audio_monitor_ui.js`, not the existing `app.js`. Load classic deferred scripts in the declared HTML order; no npm, bundler, global duplicate controllers or second edit state. See `docs/STUDIO_FRONTEND_MODULES.md`.
 - **UI tests must exercise real behavior:** import, analyze, edit KEEP spans, approve explicitly, render and download—never decorative mock controls. For UI changes, run `tests/browser/` via Playwright; review generated screenshots and 320px/390px layout measurements, not merely Python unit tests.
 - **Undo/Redo are typed history operations with an exported active cursor and monotonic revision**; a new edit after Undo must truncate the redo tail, with v1 import compatibility. Tests must cover crash-safe disk writes and session recovery.
 - **Every output-affecting UI edit MUST be a typed, deterministic, importable/exportable command** in `project_commands.py`, with stable IDs, integer millisecond units, strict schema validation and replay tests. The UI cannot own an untracked authoritative timeline; unknown command versions must fail closed. Read `docs/PROJECT_FORMAT.md`.

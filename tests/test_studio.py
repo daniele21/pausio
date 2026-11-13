@@ -76,6 +76,7 @@ class StudioHttpTests(unittest.TestCase):
             ("/", b"Studio"),
             ("/styles.css", b"focus-visible"),
             ("/app.js", b"/api/command"),
+            ("/audio_monitor_ui.js", b"function syncLiveFx"),
         ):
             status, headers, content = self.request("GET", path)
             self.assertEqual(status, 200)
