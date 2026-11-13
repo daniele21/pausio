@@ -11,7 +11,7 @@ from typing import Any
 
 from pausio.domain import Interval
 
-CAPTION_STYLES = ("social", "minimal", "boxed", "kinetic")
+CAPTION_STYLES = ("social", "minimal", "boxed", "kinetic", "word_focus")
 # Explicit allowlist is shared by the Studio UI and ASS renderer. Model/ASR
 # cannot inject arbitrary ASS font-name delimiters or escape sequences.
 # FFmpeg/libass resolves these families from fonts installed on the device.
@@ -37,6 +37,10 @@ CAPTION_PRESETS = {
                 "font_family": DEFAULT_CAPTION_FONT,
                 "text_color": "#FFFFFF", "outline_color": "#000000",
                 "outline_size": 4, "background": False, "background_color": "#000000"},
+    "word_focus": {"preset": "word_focus", "x_pct": 50, "y_pct": 78, "font_size": 68,
+                   "font_family": DEFAULT_CAPTION_FONT,
+                   "text_color": "#FFFFFF", "outline_color": "#000000",
+                   "outline_size": 4, "background": False, "background_color": "#000000"},
 }
 CAPTION_CONFIG_FIELDS = frozenset(CAPTION_PRESETS["social"])
 CAPTION_CONFIG_RANGES = {
@@ -124,8 +128,17 @@ def propose_captions(
                     "start_ms": chunk[0]["start_ms"],
                     "end_ms": chunk[-1]["end_ms"],
                     "text": _text([w["text"] for w in chunk]),
+                    "words": [dict(w) for w in chunk],
                 }
                 if cue["text"] and cue["end_ms"] > cue["start_ms"]:
+                    # Some ASR engines emit overlapping word clocks. Preserve
+                    # the caption text but never certify ambiguous alignment.
+                    previous = cue["start_ms"]
+                    for word in cue["words"]:
+                        if word["start_ms"] < previous or word["end_ms"] > cue["end_ms"]:
+                            cue.pop("words", None)
+                            break
+                        previous = word["end_ms"]
                     proposed.append(cue)
                 chunk.clear()
 
@@ -171,7 +184,15 @@ def propose_captions(
             continue
         if len(cue["text"]) > MAX_CAPTION_LENGTH:
             raise ValueError("Un sottotitolo è troppo lungo: correggi la trascrizione.")
-        cleaned.append({**cue, "start_ms": begin})
+        aligned = cue.get("words")
+        if aligned and begin > cue["start_ms"]:
+            # A clipped ASR segment has no complete verified word coverage;
+            # never publish timings outside the actual display cue.
+            aligned = None
+        item = {**cue, "start_ms": begin}
+        if aligned is None:
+            item.pop("words", None)
+        cleaned.append(item)
     return cleaned
 
 
@@ -197,11 +218,28 @@ def remap_captions(
                 mapped_start = output[-1]["end_ms"]
             if mapped_end - mapped_start < 80:
                 continue
-            output.append({
-                "id": cue["id"],
-                "start_ms": mapped_start, "end_ms": mapped_end,
-                "text": cue["text"],
-            })
+            aligned = cue.get("words")
+            clipped_words = []
+            if aligned:
+                for word in aligned:
+                    # A clipped partial word must not become a fabricated
+                    # full-word highlight in the output timeline.
+                    if start <= word["start_ms"] and word["end_ms"] <= end:
+                        clipped_words.append({
+                            "start_ms": offset + word["start_ms"]-segment.start_ms,
+                            "end_ms": offset + word["end_ms"]-segment.start_ms,
+                            "text": word["text"]
+                        })
+            if aligned and not clipped_words:
+                continue
+            mapped = {
+                "id": cue["id"], "start_ms": mapped_start, "end_ms": mapped_end,
+                "text": _text([w["text"] for w in clipped_words])
+                        if aligned else cue["text"],
+            }
+            if clipped_words:
+                mapped["words"] = clipped_words
+            output.append(mapped)
         offset += segment.end_ms - segment.start_ms
     return output
 
@@ -281,4 +319,29 @@ def ass_document(
                 f"Dialogue: 0,{_ass_time(start)},{_ass_time(end)},"
                 f"Caption,,0,0,0,,{{\\an5\\pos({x},{y}){motion}}}{value}\n"
             )
+            if config["preset"] == "word_focus" and cue.get("words"):
+                # Highlight only timed, verified words. Full-phrase base text
+                # remains stable in gaps; overlays use a fixed local ASS
+                # template and exact word starts/ends, never estimated timing.
+                cursor = 0
+                for word in cue["words"]:
+                    token = _ass_text(word["text"])
+                    position = value.find(token, cursor)
+                    if not token or position < 0:
+                        continue
+                    cursor = position + len(token)
+                    word_start = max(start, word["start_ms"])
+                    word_end = min(end, word["end_ms"])
+                    if word_end - word_start < 50:
+                        continue
+                    normal = foreground
+                    emphasis = _ass_color("#FFCD65")
+                    prefix = value[:position]
+                    suffix = value[cursor:]
+                    highlighted = (prefix + "{\\c" + emphasis + "}" + token +
+                                   "{\\c" + normal + "}" + suffix)
+                    events.append(
+                        f"Dialogue: 1,{_ass_time(word_start)},{_ass_time(word_end)},"
+                        f"Caption,,0,0,0,,{{\\an5\\pos({x},{y})}}{highlighted}\\n"
+                    )
     return header + "".join(events)
