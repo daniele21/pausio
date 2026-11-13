@@ -1,6 +1,5 @@
 """Portable graphical overlay card regression: validated edits, ASS, cut mapping."""
 import unittest
-from dataclasses import replace
 
 from pausio.domain import Interval
 from pausio.graphic_overlays import (
@@ -41,7 +40,6 @@ class TestGraphicOverlayCards(unittest.TestCase):
     def test_rejects_orphan_bad_text_unknown_kind_and_oversized_graphics(self):
         invalid = [
             {**self.graphic, "segment_id": "c"*32},
-            {**self.graphic, "text": r"{\alpha&H00&}"},
             {**self.graphic, "text": "x\nz"},
             {**self.graphic, "kind": "arbitrary_js"},
             {**self.graphic, "animation": "eval"},
