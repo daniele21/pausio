@@ -549,6 +549,32 @@ function update(next){
     button.classList.toggle("active",button.dataset.mode===mode);
     button.setAttribute("aria-pressed",String(button.dataset.mode===mode));
   }
+  // An unavailable FFmpeg preview is not a mystery or a transient toast:
+  // show why this mode is disabled until a successful render or new import.
+  const previewNote=el("preview-state-note");
+  const previewFailed=next.job?.kind==="preview"&&next.job.status==="failed";
+  const previewRunning=next.job?.kind==="preview"&&next.job.status==="running";
+  const previewInvalidated=next.job?.kind==="preview"&&next.job.status==="completed";
+  previewNote.hidden=!has||!plan||next.preview_ready;
+  previewNote.classList.toggle("is-error",previewFailed);
+  if(!previewNote.hidden){
+    previewNote.textContent=previewFailed
+      ? "Anteprima FFmpeg non disponibile. Rendering fallito: "+
+        (next.job.error||"Errore non specificato.")+" Premi «Genera preview» per riprovare."
+      : previewRunning
+      ? "Rendering preview FFmpeg in corso. Al termine potrai vedere gli zoom e le transizioni."
+      : previewInvalidated
+      ? "Il montaggio è cambiato dopo l'ultima preview. Premi «Genera preview» per aggiornarla."
+      : "La simulazione mostra solo i tagli, non gli zoom. Premi «Genera preview» per vedere gli effetti.";
+  }
+  const renderedButton=document.querySelector('[data-mode="rendered"]');
+  renderedButton.title=next.preview_ready
+    ? "Riproduci il video renderizzato con zoom, transizioni e sottotitoli."
+    : previewFailed
+    ? "Preview non disponibile: leggi l'errore sotto il player e riprova."
+    : previewRunning
+    ? "Il video FFmpeg è ancora in rendering."
+    : "Prima genera una preview FFmpeg per vedere gli effetti.";
   el("canvas-badge").textContent=mode==="edited"?"SIMULAZIONE TAGLI":
     mode==="rendered"?"ANTEPRIMA FFmpeg":"ORIGINALE";
   el("job-banner").hidden=!busy;
