@@ -138,6 +138,31 @@ class TestCaptionPipeline(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_caption_config({**legacy, "preset": "social", "x_pct": 61})
 
+    def test_kinetic_caption_is_real_ass_animation_and_escape_safe(self):
+        from pausio.captions import default_caption_config, validate_caption_config
+        cfg = default_caption_config("kinetic")
+        self.assertEqual(validate_caption_config(cfg), cfg)
+        document = ass_document(
+            [{"id": "a" * 32, "start_ms": 100, "end_ms": 2100,
+              "text": r"Don't ask {\danger} again"}],
+            style="kinetic",
+        )
+        self.assertIn(r"\fscx86\fscy86", document)
+        self.assertIn(r"\fad(180,110)", document)
+        self.assertIn(r"\t(0,180,\fscx100\fscy100)", document)
+        self.assertIn("danger", document)  # Escaping preserves words, strips ASS tags.
+        self.assertNotIn(r"\danger", document)
+        self.assertIn("Don't ask", document)
+
+    def test_kinetic_short_cue_uses_bounded_motion_durations(self):
+        document = ass_document(
+            [{"id": "a" * 32, "start_ms": 100, "end_ms": 220,
+              "text": "CIAO"}],
+            style="kinetic",
+        )
+        self.assertIn(r"\fad(50,30)", document)
+        self.assertIn(r"\t(0,50,", document)
+
     def test_no_guessing_or_silent_caption_drops_for_malformed_asr(self):
         for value in (-1, True, 5000):
             with self.subTest(value=value):
