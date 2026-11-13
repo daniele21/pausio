@@ -19,11 +19,13 @@ from pausio.captions import (
 )
 from pausio.domain import EditPlan, Interval
 from pausio.visual_transitions import compile_dips, MAX_TRANSITIONS
+from pausio.graphic_overlays import validate_graphic, validate_graphics
 from pausio.planner import CUT_PRESETS, validate_cut_settings
 
 FORMAT = "pausio.project"
-VERSION = 4
-PREVIOUS_VERSION = 3
+VERSION = 5
+PREVIOUS_VERSION = 4
+V3_VERSION = 3
 MIGRATION_VERSION = 2
 LEGACY_VERSION = 1
 MAX_COMMANDS = 2000
@@ -52,6 +54,9 @@ _TYPES = frozenset({
     "audio.remove",
     "audio.mixer.configure",
     "audio.clip.mix",
+    "graphic.overlay.add",
+    "graphic.overlay.update",
+    "graphic.overlay.remove",
     "video.transform.add",
     "video.transform.update",
     "video.transform.remove",
@@ -326,6 +331,7 @@ class ProjectView:
     audio_mix: dict | None = None
     video_fx: tuple[dict, ...] = ()
     video_transitions: tuple[dict, ...] = ()
+    graphic_overlays: tuple[dict, ...] = ()
 
 
 def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
@@ -342,6 +348,7 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
     audio_mix = default_audio_mix()
     video_fx: list[dict] = []
     video_transitions: list[dict] = []
+    graphic_overlays: list[dict] = []
     used_events: set[str] = set()
 
     for command in commands:
@@ -543,6 +550,37 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
                 raise ProjectFormatError("Transition to remove does not exist")
             video_transitions=[t for t in video_transitions if t["id"]!=identity]
             approved=False
+        elif kind == "graphic.overlay.add":
+            _object(payload, {"graphic"}, kind)
+            try:
+                item = validate_graphic(payload["graphic"], current, duration)
+                validate_graphics([*graphic_overlays, item], current, duration)
+            except ValueError as exc:
+                raise ProjectFormatError(str(exc)) from exc
+            graphic_overlays = [*graphic_overlays, item]
+            approved = False
+        elif kind == "graphic.overlay.update":
+            _object(payload, {"graphic"}, kind)
+            try:
+                item = validate_graphic(payload["graphic"], current, duration)
+            except ValueError as exc:
+                raise ProjectFormatError(str(exc)) from exc
+            if not any(g["id"] == item["id"] for g in graphic_overlays):
+                raise ProjectFormatError("Grafica da modificare inesistente.")
+            updated = [item if g["id"] == item["id"] else g for g in graphic_overlays]
+            try:
+                validate_graphics(updated, current, duration)
+            except ValueError as exc:
+                raise ProjectFormatError(str(exc)) from exc
+            graphic_overlays = updated
+            approved = False
+        elif kind == "graphic.overlay.remove":
+            _object(payload, {"graphic_id"}, kind)
+            ident = _id(payload["graphic_id"], "graphic_id")
+            if not any(g["id"] == ident for g in graphic_overlays):
+                raise ProjectFormatError("Grafica da rimuovere inesistente.")
+            graphic_overlays = [g for g in graphic_overlays if g["id"] != ident]
+            approved = False
         elif kind == "video.transform.add":
             _object(payload, {"effect"}, kind)
             effect = _video_transform(payload["effect"], current, duration)
@@ -574,6 +612,10 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
 
     _validate_video_fx(video_fx, current, duration)
     _validate_video_transitions(video_transitions,current)
+    try:
+        validate_graphics(graphic_overlays, current, duration)
+    except ValueError as exc:
+        raise ProjectFormatError(str(exc)) from exc
     return ProjectView(
         segments=tuple(copy.deepcopy(current)),
         suggested=tuple(copy.deepcopy(suggestion)) if suggestion is not None else None,
@@ -587,6 +629,7 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
         audio_mix=copy.deepcopy(audio_mix),
         video_fx=tuple(copy.deepcopy(video_fx)),
         video_transitions=tuple(copy.deepcopy(video_transitions)),
+        graphic_overlays=tuple(copy.deepcopy(graphic_overlays)),
     )
 
 
@@ -707,7 +750,7 @@ class ProjectTape:
             # V1 files are intentionally read-only inputs; exporting always
             # upgrades to V2 with cursor at the end and preserved event IDs.
             return cls(obj["media"], obj["commands"])
-        if version in (MIGRATION_VERSION, PREVIOUS_VERSION, VERSION):
+        if version in (MIGRATION_VERSION, V3_VERSION, PREVIOUS_VERSION, VERSION):
             obj = _object(
                 document,
                 {"format", "schema_version", "media", "commands",
