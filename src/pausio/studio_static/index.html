@@ -286,7 +286,7 @@
             <h2 id="quick-preview-title">Anteprima rapida · 5 secondi</h2>
             <button type="button" id="quick-preview-close" class="button button-outline">Chiudi</button>
           </div>
-          <p id="quick-preview-description">Intervallo montato: rendering FFmpeg originale, senza ricalcolare gli effetti.</p>
+          <p id="quick-preview-description">Intervallo montato: rendering FFmpeg degli effetti, senza modificare il progetto.</p>
           <video id="quick-preview-video" controls playsinline preload="metadata" aria-label="Riproduzione della preview rapida"></video>
         </dialog>
       </main>
@@ -605,7 +605,7 @@
             Genera preview
           </button>
           <button class="button button-outline timeline-preview-action" id="quick-preview-action" type="button" disabled
-            title="Rivedi cinque secondi dal cursore senza rigenerare tutto il video; richiede una preview FFmpeg aggiornata">
+            title="Renderizza cinque secondi dal cursore; se disponibile, riutilizza la preview FFmpeg aggiornata">
             Clip 5 s
           </button>
           <button class="button button-export" id="export-action" type="button" disabled>

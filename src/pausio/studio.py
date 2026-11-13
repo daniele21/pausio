@@ -739,8 +739,8 @@ class StudioWorkspace:
                 raise StudioError("Analizza o prepara un montaggio prima dell'anteprima.")
             selection = None
             if kind == "preview_range":
-                if self.plan is None or not self.preview_ready:
-                    raise StudioError("Genera prima una preview FFmpeg completa.")
+                if self.plan is None:
+                    raise StudioError("Prepara prima un montaggio per la preview rapida.")
                 total = sum(seg.end_ms-seg.start_ms for seg in self.plan.segments)
                 if (type(range_start_ms) is not int or type(range_duration_ms) is not int
                     or range_start_ms < 0 or range_start_ms >= total
@@ -756,7 +756,7 @@ class StudioWorkspace:
                 self.preview_range_ready = False
                 self.preview_range_window = None
             active_fx = []
-            if kind in {"render", "preview"} and self.tape is not None:
+            if kind in {"render", "preview", "preview_range"} and self.tape is not None and (kind != "preview_range" or not self.preview_ready):
                 for clip in self.tape.view.audio_clips:
                     path = self._audio_path(clip["asset_sha256"])
                     if path.is_symlink() or not path.is_file():
@@ -821,7 +821,7 @@ class StudioWorkspace:
                             assert self.tape is not None and self.source is not None
                             self.store.save(self.tape, self.source, transcript=result)
                         self.transcript = result
-                elif kind == "preview_range":
+                elif kind == "preview_range" and self.preview_ready:
                     assert selection is not None
                     extract_preview_range(
                         self.directory / "preview.mp4",
@@ -832,7 +832,7 @@ class StudioWorkspace:
                     with self.lock:
                         self.preview_range_window = dict(selection)
                         self.preview_range_ready = True
-                elif kind in {"render", "preview"}:
+                elif kind in {"render", "preview", "preview_range"}:
                     assert plan is not None
                     with self.lock:
                         assert self.tape is not None
@@ -861,9 +861,12 @@ class StudioWorkspace:
                     mapped = remap_captions(current_captions, plan.segments)
                     graphics = remap_graphics(self.tape.view.graphic_overlays, plan.segments)
                     render(
-                        source, self.directory / ("preview.mp4" if kind == "preview" else "export.mp4"),
+                        source, self.directory / (
+                            "preview-range.mp4" if kind == "preview_range" else
+                            "preview.mp4" if kind == "preview" else "export.mp4"
+                        ),
                         plan.segments, has_audio=plan.has_audio, overwrite=True,
-                        size=(540, 960) if kind == "preview" else (1080, 1920),
+                        size=(540, 960) if kind != "render" else (1080, 1920),
                         captions=mapped, caption_style=current_style,
                         caption_config=current_config,
                         graphic_overlays=graphics,
@@ -871,9 +874,14 @@ class StudioWorkspace:
                         audio_fx=active_fx, audio_mix=current_audio_mix,
                         video_fx=current_visual_fx,
                         video_transitions=current_transitions,
+                        output_window=(selection["start_ms"], selection["duration_ms"])
+                        if kind == "preview_range" and selection else None,
                     )
                     with self.lock:
-                        if kind == "preview":
+                        if kind == "preview_range":
+                            self.preview_range_window = dict(selection)
+                            self.preview_range_ready = True
+                        elif kind == "preview":
                             self.preview_ready = True
                         else:
                             self.export_ready = True

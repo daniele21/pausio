@@ -471,7 +471,7 @@ function update(next){
   el("restore-suggested").disabled=!next.suggested_plan||busy;
   el("restore-all").disabled=!plan||busy;el("add-segment").disabled=!plan||busy;
   el("preview-action").disabled=!plan||busy;
-  el("quick-preview-action").disabled=!next.preview_ready||busy;
+  el("quick-preview-action").disabled=!plan||busy;
   el("preview-action").textContent=next.preview_ready?"Rigenera preview":"Genera preview";
   if(mode==="rendered"&&!next.preview_ready){
     // Editing invalidated the cached FFmpeg preview: return to original safely.
@@ -2092,7 +2092,7 @@ function openQuickPreview(snapshot){
   el("quick-preview-description").textContent=
     "Timeline montata: da "+msFormat(range.start_ms)+" per "+
     (range.duration_ms/1000).toFixed(2).replace(".",",")+" s. "+
-    "Audio, testo ed effetti provengono dalla preview FFmpeg originale.";
+    "Audio, testo ed effetti sono renderizzati con lo stesso motore FFmpeg dell’export.";
   if(!dialog.open)dialog.showModal();
 }
 el("quick-preview-close").addEventListener("click",()=>el("quick-preview-dialog").close());
@@ -2101,8 +2101,8 @@ el("quick-preview-dialog").addEventListener("close",()=>{
   player.removeAttribute("src");player.load();
 });
 el("quick-preview-action").addEventListener("click",()=>run(async()=>{
-  if(!project?.preview_ready||!project.plan)
-    throw Error("Genera prima una preview FFmpeg aggiornata.");
+  if(!project?.plan)
+    throw Error("Prepara prima un montaggio.");
   const total=editedDuration();
   const duration=Math.min(5000,total);
   if(duration<250)throw Error("La parte mantenuta è troppo breve.");

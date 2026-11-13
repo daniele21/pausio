@@ -1,17 +1,13 @@
-# Pausio Studio — preview rapida della regione montata
+# Pausio Studio — anteprima rapida dell'intervallo montato
 
-## Primo incremento funzionante
+Pausa il video sul punto da controllare e premi **Clip 5 s** dopo aver preparato il montaggio. Non serve più renderizzare prima tutta la preview.
 
-Apri un video, genera una preview FFmpeg completa dal progetto **corrente**, posiziona il playhead e clicca **Clip 5 s**. Pausio ritaglia fino a cinque secondi attorno al cursore (timeline output, non sorgente) dalla preview già verificata; apre un player separato, con audio e tutti gli effetti realmente presenti nel video. La clip ha un endpoint locale `GET/HEAD /api/preview/range`, con richieste HTTP Range supportate.
+- Se una preview FFmpeg completa è aggiornata, il clip viene estratto dal file già renderizzato: percorso più veloce.
+- Altrimenti Pausio renderizza direttamente **solo l'intervallo output richiesto** dalla stessa composizione FFmpeg di export e preview, inclusi KEEP, movimenti camera, transizioni, grafiche, sottotitoli, immagini PIP e audio. La composizione è tagliata in uscita, così non viene creato un MP4 completo. Per clip vicini alla fine del video, FFmpeg può comunque dover elaborare i frame precedenti; questa versione non fa ancora seeking anticipato sui singoli segmenti sorgente.
+- I parametri sono in millisecondi di **timeline montata**, non di sorgente. Il range è 250 ms–10 s; niente sovrascrittura dell'originale e nessun upload.
+- Un unico job locale alla volta, 300 s di timeout per il rendering diretto, publish atomico e cache per intervallo del progetto corrente. Le modifiche al progetto invalidano il file range e la preview completa.
+- Endpoint `POST /api/jobs` con `kind=preview_range`, `range_start_ms` e `range_duration_ms`; la stessa protezione Host/Origin del resto di Studio.
 
-Il clip usa FFmpeg con seeking sul MP4 *già renderizzato*, dunque non deve rifare tagli, motion, transizioni, sottotitoli o mix. La codifica breve è atomica, senza shell e limitata a 0,25–10 secondi. L'intervallo è validato contro la durata totale output. Un'identica richiesta sfrutta la cache locale; cambiare video o qualsiasi comando del progetto invalida cache e URL, e blocca nuove richieste finché non viene prodotta una preview completa della nuova revisione.
+Il player del dialog è separato dal player principale. Le azioni non alterano il tape di comandi o l'approvazione del montaggio.
 
-**Limite dichiarato:** questo incremento ottimizza la revisione *successiva alla prima preview completa*. Non è ancora un render parziale diretto da sorgente per un progetto che non dispone di una preview valida. Questa seconda fase, più complessa per i confini di KEEP, zoom, musiche e dissolvenze, rimane tracciata in [#65](https://github.com/daniele21/pausio/issues/65); non deve sacrificare la parità con il render completo.
-
-## Sicurezza e UX
-
-- `POST /api/jobs` con `kind=preview_range`, `range_start_ms`, `range_duration_ms` validati, sempre con `X-Pausio-Client` e protezione same-origin.
-- Server solo localhost; l'utente non può scegliere path/URL o comandi FFmpeg.
-- Il player clip è separato da preview/editor originale, che resta la sorgente di verità.
-- Modifiche o reimport invalidano il file. Nessun nuovo artefatto nel JSON portabile; si tratta di un cache di revisione.
-- Test: input invalidi, FFmpeg reale, output 540×960, byte-range, HEAD, cache-identical e invalidazione; Playwright dialog e keyboard undo.
+**Verifica**: test Python dry-run e FFmpeg con audio, HTTP prima/dopo render completo, cache e invalidazione; Playwright di apertura e chiusura su Studio. I test sintetici non sostituiscono la revisione di un vero video registrato su smartphone.

@@ -152,7 +152,13 @@ class StudioPlaywrightAudit(unittest.TestCase):
 
     def test_five_second_quick_preview_in_modal_and_invalidation(self):
         initial=self.upload_analyze()
-        self.assertTrue(self.page.locator("#quick-preview-action").is_disabled())
+        self.assertTrue(self.page.locator("#quick-preview-action").is_enabled())
+        self.page.locator("#quick-preview-action").click()
+        direct=self.wait_state("preview_range","completed",timeout=120000)
+        self.assertTrue(direct["preview_range_ready"])
+        self.assertFalse(direct["preview_ready"])
+        self.wait_condition(lambda:self.page.locator("#quick-preview-dialog").is_visible())
+        self.page.locator("#quick-preview-close").click()
         self.page.locator("#preview-action").click()
         ready=self.wait_state("preview","completed",timeout=120000)
         self.assertTrue(ready["preview_ready"])
@@ -167,7 +173,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertFalse(self.page.locator("#quick-preview-dialog").is_visible())
         self.page.keyboard.press("Control+z")
         self.wait_state("revision",initial["project_revision"]+1)
-        self.assertTrue(self.page.locator("#quick-preview-action").is_disabled())
+        self.assertTrue(self.page.locator("#quick-preview-action").is_enabled())
         self.assertFalse(self.errors,self.errors)
 
     def test_visual_fx_has_dedicated_workspace_without_cut_card_scrolling(self):
