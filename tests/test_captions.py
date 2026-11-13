@@ -10,6 +10,26 @@ from pausio.domain import Interval
 
 
 class TestCaptionPipeline(unittest.TestCase):
+    def test_verified_word_focus_keeps_only_real_alignments_through_cuts(self):
+        cue={"id":"f"*32,"start_ms":0,"end_ms":3000,
+             "text":"Ciao utenti segreti","words":[
+               {"text":"Ciao","start_ms":0,"end_ms":500},
+               {"text":"utenti","start_ms":1000,"end_ms":1500},
+               {"text":"segreti","start_ms":2000,"end_ms":2500}]}
+        mapped=remap_captions([cue],(Interval(0,800),Interval(1800,3000)))
+        self.assertEqual([x["text"] for x in mapped],["Ciao","segreti"])
+        self.assertEqual(mapped[0]["words"][0]["start_ms"],0)
+        self.assertEqual(mapped[1]["words"][0]["start_ms"],1000)
+        ass=ass_document(mapped,style="word_focus")
+        self.assertEqual(ass.count("Dialogue: 0,"),2)
+        self.assertEqual(ass.count("Dialogue: 1,"),2)
+        self.assertIn(r"{\c&H0065CDFF}",ass)
+        self.assertNotIn("utenti",ass)
+        # No verified word timestamps -> phrase-level only, not guessed karaoke.
+        fallback=ass_document([{"id":"a"*32,"start_ms":0,"end_ms":500,
+                                "text":"Nessun allineamento"}],style="word_focus")
+        self.assertNotIn("Dialogue: 1,",fallback)
+
     def test_real_word_alignment_creates_short_readable_cues(self):
         source = {
             "word_timestamps_available": True,
