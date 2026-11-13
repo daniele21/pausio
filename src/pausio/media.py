@@ -21,6 +21,7 @@ from pausio.image_overlays import validate_image_overlays
 from pausio.domain import Interval
 from pausio.visual_fx import motion_filter, prepare_motion_fx
 from pausio.visual_transitions import compile_dips
+from pausio.preview_window import validate_window, append_window_filters
 
 
 class MediaError(RuntimeError):
@@ -257,6 +258,7 @@ def render(
     video_transitions: list[dict] | None = None,
     graphic_overlays: list[dict] | None = None,
     image_overlays: list[tuple[Path, dict]] | None = None,
+    output_window: tuple[int, int] | None = None,
 ) -> list[str]:
     """Render ordered intervals in one re-encode; preserve aspect ratio with padding.
 
@@ -283,6 +285,10 @@ def render(
         raise MediaError("graphic_overlays must be a list or None")
     images = image_overlays or []
     output_ms = sum(s.end_ms - s.start_ms for s in segments)
+    try:
+        validate_window(output_window, output_ms)
+    except ValueError as exc:
+        raise MediaError(str(exc)) from exc
     try:
         validate_image_overlays([clip for _, clip in images], output_ms)
     except ValueError as exc:
@@ -445,9 +451,14 @@ def render(
             args.extend(["-i", str(path)])
         for path, _ in images:
             args.extend(["-loop", "1", "-framerate", "30", "-i", str(path)])
-        args.extend(["-filter_complex", ";".join(filters), "-map", "[outv]"])
-        if has_audio or effects:
-            args.extend(["-map", "[outa]" if mixing else "[joineda]",
+        video_label, audio_label = append_window_filters(
+            filters, output_window,
+            audio_label=("[outa]" if mixing else "[joineda]")
+            if has_audio or effects else None,
+        )
+        args.extend(["-filter_complex", ";".join(filters), "-map", video_label])
+        if audio_label:
+            args.extend(["-map", audio_label,
                          "-c:a", "aac", "-b:a", "160k"])
         args.extend([
             "-c:v", "libx264", "-preset", "veryfast", "-crf", "22",
@@ -474,10 +485,10 @@ def render(
                     encoding="utf-8"
                 )
                 args = make_args(staged_output, subtitle_file)
-                _run(args, timeout_s=1200)
+                _run(args, timeout_s=300 if output_window else 1200)
         else:
             args = make_args(staged_output)
-            _run(args, timeout_s=1200)
+            _run(args, timeout_s=300 if output_window else 1200)
         if output.exists() and not overwrite:
             # Another process may have written the destination during rendering.
             raise MediaError(f"output appeared during rendering: {output}")

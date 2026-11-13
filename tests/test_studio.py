@@ -789,7 +789,16 @@ class StudioMediaWorkflowTests(StudioHttpTests):
             "range_start_ms":0,"range_duration_ms":600})[0],400)
         status,_,_=self.post("/api/jobs",{"kind":"analyze"})
         self.assertEqual(status,202)
-        self.await_job("analyze")
+        analyzed=self.await_job("analyze")
+        self.assertFalse(analyzed["preview_ready"])
+        # Direct render: no full preview exists, yet the selected output clip
+        # still contains the current KEEP and audio graph.
+        self.assertEqual(self.post("/api/jobs",{"kind":"preview_range",
+            "range_start_ms":0,"range_duration_ms":650})[0],202)
+        direct=self.await_job("preview_range")
+        self.assertTrue(direct["preview_range_ready"])
+        self.assertFalse(direct["preview_ready"])
+        self.assertTrue((self.workspace.directory/"preview-range.mp4").is_file())
         self.assertEqual(self.post("/api/jobs",{"kind":"preview"})[0],202)
         ready=self.await_job("preview")
         self.assertTrue(ready["preview_ready"])
