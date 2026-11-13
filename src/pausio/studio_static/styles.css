@@ -1631,3 +1631,13 @@ a { color: inherit; text-decoration: none; }
 .transition-mark:focus-visible { outline:2px solid #fff; outline-offset:2px; }
 #visual-transition-panel { margin-top:16px; }
 #transition-list .visual-fx-entry-actions select { flex:1; min-width:0; }
+
+/* Graphic cards share native Video FX inspector components and typed controls. */
+#graphic-overlay-panel input:not([type="color"]), #graphic-overlay-panel select {
+  min-width: 0; width: 100%; padding: 8px;
+  color: var(--ink); background: var(--surface-raised);
+  border: 1px solid var(--border); border-radius: 6px;
+}
+#graphic-overlay-panel input[type="color"] { width: 100%; height: 36px; padding: 3px; }
+#graphic-list .visual-fx-entry { display: grid; gap: 8px; }
+#graphic-list .visual-fx-entry-actions { display: flex; flex-wrap: wrap; gap: 5px; }
