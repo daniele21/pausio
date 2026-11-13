@@ -56,6 +56,23 @@ class VisualFxRendererTests(unittest.TestCase):
                 self.assertNotIn("system",graph)
                 self.assertIn("format=yuv420p",graph)
 
+    def test_pulse_and_sweep_safe_bounded_motion_curves(self):
+        for kind, token in (("pulse", "if(lt("), ("sweep", "0.5+(")):
+            with self.subTest(kind=kind):
+                fx=entry(start=250,end=2200,kind=kind,amount=122)
+                if kind=="sweep":
+                    fx["anchor_x_pct"]=68
+                    fx["anchor_y_pct"]=39
+                checked=prepare_motion_fx((Interval(0,2400),),[fx])
+                graph=motion_filter(checked[0],0,(540,960))
+                self.assertIn(token,graph)
+                self.assertIn("zoompan=z=",graph)
+                self.assertEqual(graph,motion_filter(checked[0],0,(540,960)))
+        for kind,duration in (("pulse",850),("sweep",1250)):
+            with self.subTest(kind=kind), self.assertRaises(ValueError):
+                prepare_motion_fx((Interval(0,2500),),[
+                    entry(start=200,end=200+duration,kind=kind,amount=120)])
+
     def test_overlapping_events_rejected(self):
         s=(Interval(0,3000),)
         with self.assertRaises(ValueError):
