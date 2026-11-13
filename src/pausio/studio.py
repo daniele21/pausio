@@ -53,6 +53,7 @@ ASSETS = {
     "/visual_fx_ui.js": ("visual_fx_ui.js", "text/javascript; charset=utf-8"),
     "/face_reframe_ui.js": ("face_reframe_ui.js", "text/javascript; charset=utf-8"),
     "/visual_transition_ui.js": ("visual_transition_ui.js", "text/javascript; charset=utf-8"),
+    "/graphic_overlay_ui.js": ("graphic_overlay_ui.js", "text/javascript; charset=utf-8"),
     "/capture": ("capture.html", "text/html; charset=utf-8"),
     "/capture.html": ("capture.html", "text/html; charset=utf-8"),
     "/capture.css": ("capture.css", "text/css; charset=utf-8"),
