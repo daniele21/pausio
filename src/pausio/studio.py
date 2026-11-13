@@ -28,7 +28,7 @@ from pausio.domain import EditPlan, Interval
 from pausio.captions import (
     CAPTION_STYLES, CAPTION_PRESETS, CAPTION_FONTS, propose_captions, remap_captions
 )
-from pausio.media import MediaError, MediaInfo, detect_silences, probe, probe_audio, render, waveform_envelope
+from pausio.media import MediaError, MediaInfo, detect_silences, probe, probe_audio, render, waveform_envelope, extract_preview_range
 from pausio.graphic_overlays import remap_graphics
 from pausio.planner import CUT_PRESETS, validate_cut_settings, policy_from_cut_settings, propose_segments
 from pausio.project_commands import ProjectTape, ProjectFormatError, UI_COMMANDS, default_audio_mix
@@ -87,6 +87,8 @@ class StudioWorkspace:
         self.transcript: dict | None = None
         self.export_ready = False
         self.preview_ready = False
+        self.preview_range_ready = False
+        self.preview_range_window: dict | None = None
         self.waveform: list[int] | None = None
         self.waveform_status = "idle"
         self.waveform_error: str | None = None
@@ -173,6 +175,8 @@ class StudioWorkspace:
                 ) if self.tape and self.plan and self.tape.view.captions else [],
                 "export_ready": self.export_ready,
                 "preview_ready": self.preview_ready,
+                "preview_range_ready": self.preview_range_ready,
+                "preview_range_window": dict(self.preview_range_window) if self.preview_range_ready and self.preview_range_window else None,
                 "waveform_status": self.waveform_status,
                 "waveform_error": self.waveform_error,
                 "importing": self.importing,
@@ -279,6 +283,8 @@ class StudioWorkspace:
                 self.transcript = None
                 self.export_ready = False
                 self.preview_ready = False
+                self.preview_range_ready = False
+                self.preview_range_window = None
                 self.waveform = None
                 self.waveform_status = "idle"
                 self.waveform_error = None
@@ -292,6 +298,7 @@ class StudioWorkspace:
                     old_source.unlink(missing_ok=True)
                 (self.directory / "export.mp4").unlink(missing_ok=True)
                 (self.directory / "preview.mp4").unlink(missing_ok=True)
+                (self.directory / "preview-range.mp4").unlink(missing_ok=True)
             finally:
                 self.importing = False
 
@@ -316,6 +323,9 @@ class StudioWorkspace:
         self.approved = tape.view.approved
         self.export_ready = False
         self.preview_ready = False
+        self.preview_range_ready = False
+        self.preview_range_window = None
+        (self.directory / "preview-range.mp4").unlink(missing_ok=True)
         (self.directory / "export.mp4").unlink(missing_ok=True)
         (self.directory / "preview.mp4").unlink(missing_ok=True)
 
@@ -329,6 +339,7 @@ class StudioWorkspace:
                 self.source.unlink(missing_ok=True)
             (self.directory / "export.mp4").unlink(missing_ok=True)
             (self.directory / "preview.mp4").unlink(missing_ok=True)
+            (self.directory / "preview-range.mp4").unlink(missing_ok=True)
             self.source = None
             self.filename = None
             self.info = None
@@ -341,6 +352,8 @@ class StudioWorkspace:
             self.transcript = None
             self.export_ready = False
             self.preview_ready = False
+            self.preview_range_ready = False
+            self.preview_range_window = None
             self.waveform = None
             self.waveform_status = "idle"
             self.waveform_error = None
@@ -596,14 +609,19 @@ class StudioWorkspace:
             self._install_tape(incoming)
 
     def start_job(
-        self, kind: str, *, settings: object | None = None, asr: object | None = None
+        self, kind: str, *, settings: object | None = None, asr: object | None = None,
+        range_start_ms: object | None = None, range_duration_ms: object | None = None
     ) -> None:
-        if kind not in {"analyze", "render", "transcribe", "preview"}:
+        if kind not in {"analyze", "render", "transcribe", "preview", "preview_range"}:
             raise StudioError("Operazione sconosciuta.")
         if kind != "analyze" and settings is not None:
             raise StudioError("Le impostazioni di taglio sono valide solo per Analizza.")
         if kind != "transcribe" and asr is not None:
             raise StudioError("Le impostazioni ASR sono valide solo per Trascrivi.")
+        if kind != "preview_range" and (
+            range_start_ms is not None or range_duration_ms is not None
+        ):
+            raise StudioError("Intervallo valido solo per la preview rapida.")
         try:
             cut_settings = validate_cut_settings(settings) if kind == "analyze" else None
             asr_options = validate_asr_settings(asr) if kind == "transcribe" else None
@@ -617,6 +635,24 @@ class StudioWorkspace:
                 raise StudioError("Conferma il montaggio prima dell'esportazione.")
             if kind == "preview" and self.plan is None:
                 raise StudioError("Analizza o prepara un montaggio prima dell'anteprima.")
+            selection = None
+            if kind == "preview_range":
+                if self.plan is None or not self.preview_ready:
+                    raise StudioError("Genera prima una preview FFmpeg completa.")
+                total = sum(seg.end_ms-seg.start_ms for seg in self.plan.segments)
+                if (type(range_start_ms) is not int or type(range_duration_ms) is not int
+                    or range_start_ms < 0 or range_start_ms >= total
+                    or not 250 <= range_duration_ms <= 10_000
+                    or range_start_ms + range_duration_ms > total):
+                    raise StudioError("Intervallo output non valido: scegli 0,25–10 secondi.")
+                selection = {"start_ms": range_start_ms, "duration_ms": range_duration_ms}
+                cache_path = self.directory / "preview-range.mp4"
+                if (self.preview_range_ready and self.preview_range_window == selection
+                    and cache_path.is_file() and not cache_path.is_symlink()):
+                    self.job = {"status": "completed", "kind": "preview_range", "error": None}
+                    return
+                self.preview_range_ready = False
+                self.preview_range_window = None
             active_fx = []
             if kind in {"render", "preview"} and self.tape is not None:
                 for clip in self.tape.view.audio_clips:
@@ -634,6 +670,11 @@ class StudioWorkspace:
                 self.export_ready = False
             if kind == "preview":
                 self.preview_ready = False
+                self.preview_range_ready = False
+                self.preview_range_window = None
+                (self.directory / "preview-range.mp4").unlink(missing_ok=True)
+            if kind == "preview_range":
+                (self.directory / "preview-range.mp4").unlink(missing_ok=True)
             self.job = {"status": "running", "kind": kind, "error": None}
 
         def worker() -> None:
@@ -678,6 +719,17 @@ class StudioWorkspace:
                             assert self.tape is not None and self.source is not None
                             self.store.save(self.tape, self.source, transcript=result)
                         self.transcript = result
+                elif kind == "preview_range":
+                    assert selection is not None
+                    extract_preview_range(
+                        self.directory / "preview.mp4",
+                        self.directory / "preview-range.mp4",
+                        start_ms=selection["start_ms"],
+                        duration_ms=selection["duration_ms"],
+                    )
+                    with self.lock:
+                        self.preview_range_window = dict(selection)
+                        self.preview_range_ready = True
                 elif kind in {"render", "preview"}:
                     assert plan is not None
                     with self.lock:
@@ -909,11 +961,13 @@ class StudioHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/jobs":
                 request = self._read_json()
-                if set(request) - {"kind", "settings", "asr"}:
+                if set(request) - {"kind", "settings", "asr", "range_start_ms", "range_duration_ms"}:
                     raise StudioError("Parametri job sconosciuti.")
                 self.server.workspace.start_job(
                     request.get("kind", ""), settings=request.get("settings"),
-                    asr=request.get("asr")
+                    asr=request.get("asr"),
+                    range_start_ms=request.get("range_start_ms"),
+                    range_duration_ms=request.get("range_duration_ms")
                 )
                 self._json(202, self.server.workspace.snapshot())
                 return
@@ -1046,6 +1100,9 @@ class StudioHandler(BaseHTTPRequestHandler):
         if path == "/api/export":
             self._media(True, False)
             return
+        if path == "/api/preview/range":
+            self._media(False, False, preview_range=True)
+            return
         if path == "/api/preview":
             self._media(False, False, preview=True)
             return
@@ -1061,14 +1118,17 @@ class StudioHandler(BaseHTTPRequestHandler):
             return
         if path.startswith("/api/audio/"):
             self._media(False, True, audio_sha=path.removeprefix("/api/audio/"))
-        elif path in {"/api/media", "/api/export", "/api/preview"}:
-            self._media(path == "/api/export", True, preview=path == "/api/preview")
+        elif path in {"/api/media", "/api/export", "/api/preview", "/api/preview/range"}:
+            self._media(path == "/api/export", True,
+                        preview=path == "/api/preview",
+                        preview_range=path == "/api/preview/range")
         else:
             self._failed(404, "Risorsa non trovata.")
 
     def _media(
         self, exported: bool, headers_only: bool, *,
-        preview: bool = False, audio_sha: str | None = None
+        preview: bool = False, preview_range: bool = False,
+        audio_sha: str | None = None
     ) -> None:
         audio_mime = None
         with self.server.workspace.lock:
@@ -1089,13 +1149,14 @@ class StudioHandler(BaseHTTPRequestHandler):
                 }.get(Path(clip["filename"]).suffix.lower(), "application/octet-stream")
             else:
                 path = (
-                    self.server.workspace.directory / "preview.mp4" if preview
+                    self.server.workspace.directory / "preview-range.mp4" if preview_range
+                    else self.server.workspace.directory / "preview.mp4" if preview
                     else self.server.workspace.directory / "export.mp4" if exported
                     else self.server.workspace.source
                 )
             if audio_sha is None and ((exported and not self.server.workspace.export_ready) or (
                 preview and not self.server.workspace.preview_ready
-            )):
+            ) or (preview_range and not self.server.workspace.preview_range_ready)):
                 path = None
             if path is None or path.is_symlink() or not path.is_file():
                 self._failed(404, "Video non disponibile.")
@@ -1126,7 +1187,7 @@ class StudioHandler(BaseHTTPRequestHandler):
                 return
             end = min(end, total - 1)
         size = end - begin + 1
-        mime = audio_mime or ("video/mp4" if preview or exported or path.suffix.lower() in {".mp4", ".m4v", ".mov"} else "video/webm")
+        mime = audio_mime or ("video/mp4" if preview or preview_range or exported or path.suffix.lower() in {".mp4", ".m4v", ".mov"} else "video/webm")
         self._headers(206 if requested else 200, size, mime)
         self.send_header("Accept-Ranges", "bytes")
         if requested:

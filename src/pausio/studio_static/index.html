@@ -279,6 +279,14 @@
           <div class="time-readout"><span id="current-time">00:00</span><span class="time-divider">/</span><span id="total-time">00:00</span></div>
         </div>
         <p class="preview-state-note" id="preview-state-note" role="status" aria-live="polite" hidden></p>
+        <dialog id="quick-preview-dialog" class="quick-preview-dialog" aria-labelledby="quick-preview-title">
+          <div class="quick-preview-header">
+            <h2 id="quick-preview-title">Anteprima rapida · 5 secondi</h2>
+            <button type="button" id="quick-preview-close" class="button button-outline">Chiudi</button>
+          </div>
+          <p id="quick-preview-description">Intervallo montato: rendering FFmpeg originale, senza ricalcolare gli effetti.</p>
+          <video id="quick-preview-video" controls playsinline preload="metadata" aria-label="Riproduzione della preview rapida"></video>
+        </dialog>
       </main>
 
       <aside class="inspector" aria-label="Revisione delle decisioni">
@@ -562,6 +570,10 @@
           <button class="button button-outline timeline-preview-action" id="preview-action" type="button" disabled
             title="Renderizza la timeline attuale con FFmpeg in bassa risoluzione, senza confermare il montaggio">
             Genera preview
+          </button>
+          <button class="button button-outline timeline-preview-action" id="quick-preview-action" type="button" disabled
+            title="Rivedi cinque secondi dal cursore senza rigenerare tutto il video; richiede una preview FFmpeg aggiornata">
+            Clip 5 s
           </button>
           <button class="button button-export" id="export-action" type="button" disabled>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v3h16v-3"/></svg>
