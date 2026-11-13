@@ -12,7 +12,7 @@ from tempfile import TemporaryDirectory
 from pausio import __version__
 from pausio.local_asr import LocalASRError, DEFAULT_ASR_MODEL, transcribe_video_local
 from pausio.domain import EditPlan, Interval
-from pausio.media import MediaError, detect_silences, ffmpeg_has_filter, probe, render
+from pausio.media import MediaError, detect_silences, probe, render, select_ffmpeg_for_filter
 from pausio.planner import AI_NATURAL, propose_segments
 from pausio.studio import run_studio
 from pausio.local_mcp import serve_stdio
@@ -82,22 +82,19 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "doctor":
             found = {name: shutil.which(name) for name in ("ffmpeg", "ffprobe")}
-            subtitles_ready = False
             details = []
-            if found["ffmpeg"]:
-                try:
-                    subtitles_ready = ffmpeg_has_filter("ass")
-                except MediaError as exc:
-                    details.append(str(exc))
+            captions_binary = select_ffmpeg_for_filter("ass") if found["ffmpeg"] else None
+            subtitles_ready = captions_binary is not None
             if not subtitles_ready:
                 details.append(
-                    "Il filtro ass manca: su macOS usa 'brew install ffmpeg-full', "
-                    "poi 'export PATH=\"$(brew --prefix ffmpeg-full)/bin:$PATH\"' "
-                    "e riavvia Pausio. libass da sola non basta."
+                    "Il filtro ass manca: su macOS usa 'brew install ffmpeg-full' "
+                    "e riavvia Pausio. Verificheremo automaticamente la build libass "
+                    "di Homebrew anche se non è la prima nel PATH. libass da sola non basta."
                 )
             ready = all(found.values()) and subtitles_ready
             print(_json({
                 "version": __version__, "binaries": found,
+                "captions_ffmpeg": captions_binary,
                 "captions_ass": subtitles_ready, "ready": ready,
                 "warnings": details,
             }), end="")
