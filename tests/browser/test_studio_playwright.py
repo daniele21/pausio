@@ -483,6 +483,9 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.page.locator('.fx-item input[aria-label^="Inizio"]').dispatch_event("change")
         positioned=self.wait_state("revision",moved["project_revision"]+1,timeout=12000)
         self.assertEqual(positioned["audio_clips"][0]["start_ms"],100)
+        # Waveform polling redraws the lane; wait until the state settles
+        # before locating a drag handle so the element cannot detach mid-scroll.
+        self.wait_condition(lambda: self.state()["waveform_status"]!="running")
         fx_mark=self.page.locator("#fx-lane .fx-clip-mark").first
         fx_mark.scroll_into_view_if_needed()
         self.assertFalse(fx_mark.is_disabled())
