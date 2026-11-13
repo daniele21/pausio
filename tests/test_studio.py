@@ -655,7 +655,7 @@ class StudioMediaWorkflowTests(StudioHttpTests):
         })
         self.assertEqual(status,200,updated)
         self.assertEqual(len(json.loads(updated)["graphic_overlays"]),1)
-        self.assertEqual(self.post("/api/editorial/suggest",request)[0],400)
+        self.assertEqual(self.post("/api/editorial/suggest",request)[0],409)
 
     def test_visual_fx_readonly_suggestions_then_typed_preview_and_export(self):
         self.import_clip()
