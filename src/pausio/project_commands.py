@@ -23,8 +23,9 @@ from pausio.graphic_overlays import validate_graphic, validate_graphics
 from pausio.planner import CUT_PRESETS, validate_cut_settings
 
 FORMAT = "pausio.project"
-VERSION = 5
-PREVIOUS_VERSION = 4
+VERSION = 6
+PREVIOUS_VERSION = 5
+V4_VERSION = 4
 V3_VERSION = 3
 MIGRATION_VERSION = 2
 LEGACY_VERSION = 1
@@ -158,7 +159,12 @@ def _captions(raw: Any, duration_ms: int) -> list[dict]:
     ids = set()
     result = []
     for row in raw:
-        cue = _object(row, {"id", "start_ms", "end_ms", "text"}, "caption")
+        if not isinstance(row, dict) or set(row) not in (
+            {"id", "start_ms", "end_ms", "text"},
+            {"id", "start_ms", "end_ms", "text", "words"}
+        ):
+            raise ProjectFormatError("caption: campi non validi.")
+        cue = row
         ident = _id(cue["id"], "caption.id")
         start = _integer(cue["start_ms"], "caption.start_ms")
         end = _integer(cue["end_ms"], "caption.end_ms")
@@ -166,10 +172,29 @@ def _captions(raw: Any, duration_ms: int) -> list[dict]:
             raise ProjectFormatError("Sottotitoli sovrapposti, duplicati o fuori dal video.")
         ids.add(ident)
         last_end = end
-        result.append({
-            "id": ident, "start_ms": start, "end_ms": end,
-            "text": _caption_text(cue["text"])
-        })
+        caption = {"id": ident, "start_ms": start, "end_ms": end,
+                   "text": _caption_text(cue["text"])}
+        if "words" in cue:
+            words = cue["words"]
+            if not isinstance(words, list) or not 1 <= len(words) <= 12:
+                raise ProjectFormatError("Allineamento: servono da 1 a 12 parole.")
+            verified = []
+            prior_end = start
+            for raw_word in words:
+                word = _object(raw_word, {"text", "start_ms", "end_ms"}, "caption word")
+                a = _integer(word["start_ms"], "word.start_ms")
+                b = _integer(word["end_ms"], "word.end_ms")
+                value = _caption_text(word["text"])
+                if not prior_end <= a < b <= end:
+                    raise ProjectFormatError("Allineamento parola fuori dal sottotitolo.")
+                verified.append({"text": value, "start_ms": a, "end_ms": b})
+                prior_end = b
+            joined = re.sub(r"\\s+([,.;:!?%])", r"\\1",
+                            " ".join(w["text"] for w in verified))
+            if joined != caption["text"]:
+                raise ProjectFormatError("Parole allineate diverse dal sottotitolo.")
+            caption["words"] = verified
+        result.append(caption)
     return result
 
 
@@ -457,9 +482,11 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
             text = _caption_text(payload["text"])
             if not any(c["id"] == ident for c in captions):
                 raise ProjectFormatError("Sottotitolo non trovato.")
+            # Once edited, the ASR word text no longer proves individual
+            # timestamps. Invalidate word alignment instead of guessing.
             captions = [
-                {**c, "text": text} if c["id"] == ident else c
-                for c in captions
+                {**{k:v for k,v in c.items() if k != "words"}, "text": text}
+                if c["id"] == ident else c for c in captions
             ]
             approved = False
         elif kind == "caption.retime":
@@ -472,8 +499,9 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
             # Validate the COMPLETE proposed cue sequence, not just its target:
             # editing one cue must never create overlaps or leave source bounds.
             proposed = [
-                {**cue, "start_ms": start, "end_ms": end} if cue["id"] == ident else cue
-                for cue in captions
+                {**{k:v for k,v in cue.items() if k != "words"},
+                 "start_ms": start, "end_ms": end}
+                if cue["id"] == ident else cue for cue in captions
             ]
             captions = _captions(proposed, duration)
             approved = False
@@ -756,7 +784,7 @@ class ProjectTape:
             # V1 files are intentionally read-only inputs; exporting always
             # upgrades to V2 with cursor at the end and preserved event IDs.
             return cls(obj["media"], obj["commands"])
-        if version in (MIGRATION_VERSION, V3_VERSION, PREVIOUS_VERSION, VERSION):
+        if version in (MIGRATION_VERSION, V3_VERSION, V4_VERSION, PREVIOUS_VERSION, VERSION):
             obj = _object(
                 document,
                 {"format", "schema_version", "media", "commands",
