@@ -1660,3 +1660,19 @@ a { color: inherit; text-decoration: none; }
   .app-shell[data-workspace="visual"] .editor-dock { grid-template-columns: 0 minmax(0,1fr); }
   .app-shell[data-workspace="visual"] .editor-dock .audio-mixer { display: none !important; }
 }
+
+/* Accessible short-clip review: responsive modal with native playback controls. */
+.quick-preview-dialog {
+  border: 1px solid var(--border); border-radius: 12px;
+  background: #111923; color: var(--ink); padding: 16px;
+  width: min(96vw, 520px); max-height: 96vh;
+  box-shadow: 0 22px 80px #0009;
+}
+.quick-preview-dialog::backdrop { background: rgba(0,0,0,.83); }
+.quick-preview-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.quick-preview-header h2 { font-size: 17px; margin: 0; }
+.quick-preview-dialog p { font-size: 12px; line-height: 1.5; color: var(--ink-secondary); }
+.quick-preview-dialog video {
+  display: block; height: min(68vh, 530px); max-width: 100%; width: 100%;
+  background: #000; object-fit: contain; border-radius: 6px;
+}
