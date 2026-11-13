@@ -96,7 +96,7 @@ def compose_graphics_ass(cues: list[dict], graphics: list[dict], *,
         return (
             f"Style: {name},{font},64,&H00FFFFFF,&H00FFFFFF,&H00000000,"
             f"{back_color},-1,0,0,0,100,100,0,0,"
-            f"{border},{outline},0,5,40,40,0,1\\n"
+            f"{border},{outline},0,5,40,40,0,1\n"
         )
     overlay_style = (
         style_line("Graphic", "Arial", 1, 5, "&H70000000")
