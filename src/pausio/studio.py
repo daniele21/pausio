@@ -55,6 +55,7 @@ ASSETS = {
     "/face_reframe_ui.js": ("face_reframe_ui.js", "text/javascript; charset=utf-8"),
     "/visual_transition_ui.js": ("visual_transition_ui.js", "text/javascript; charset=utf-8"),
     "/graphic_overlay_ui.js": ("graphic_overlay_ui.js", "text/javascript; charset=utf-8"),
+    "/image_overlay_ui.js": ("image_overlay_ui.js", "text/javascript; charset=utf-8"),
     "/capture": ("capture.html", "text/html; charset=utf-8"),
     "/capture.html": ("capture.html", "text/html; charset=utf-8"),
     "/capture.css": ("capture.css", "text/css; charset=utf-8"),
@@ -950,6 +951,9 @@ class StudioHandler(BaseHTTPRequestHandler):
             if path == "/api/audio/import":
                 self._import_audio()
                 return
+            if path == "/api/image/import":
+                self._import_image()
+                return
             if path == "/api/plan":
                 self.server.workspace.save_plan(self._read_json().get("segments"))
                 self._json(200, self.server.workspace.snapshot())
@@ -997,6 +1001,42 @@ class StudioHandler(BaseHTTPRequestHandler):
             self._failed(409 if "in corso" in str(exc) or "Versione" in str(exc) else 400, str(exc))
         except Exception:
             self._failed(500, "Errore interno. Controlla il terminale di Pausio.")
+
+    def _import_image(self) -> None:
+        if self.headers.get("Content-Type") != "application/octet-stream":
+            raise StudioError("Caricamento immagine non valido.")
+        size = self._content_length(MAX_IMAGE_BYTES)
+        filename = unquote(self.headers.get("X-Filename", ""))
+        try:
+            revision = int(self.headers.get("X-Pausio-Revision", ""))
+            anchor_ms = int(self.headers.get("X-Pausio-Start-Ms", ""))
+        except ValueError as exc:
+            raise StudioError("Cursore o versione progetto non validi.") from exc
+        destination, label = self.server.workspace.begin_image_import(filename, revision)
+        completed = False
+        digest = hashlib.sha256()
+        try:
+            fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "wb") as target:
+                remaining = size
+                while remaining:
+                    chunk = self.rfile.read(min(1024 * 1024, remaining))
+                    if not chunk:
+                        raise StudioError("Caricamento immagine interrotto.")
+                    target.write(chunk)
+                    digest.update(chunk)
+                    remaining -= len(chunk)
+                target.flush()
+                os.fsync(target.fileno())
+            probe_image(destination)
+            self.server.workspace.finish_image_import(
+                destination, label, digest.hexdigest(), revision, anchor_ms
+            )
+            completed = True
+            self._json(200, self.server.workspace.snapshot())
+        finally:
+            if not completed:
+                self.server.workspace.abort_import(destination)
 
     def _import_audio(self) -> None:
         if self.headers.get("Content-Type") != "application/octet-stream":
