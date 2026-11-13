@@ -201,9 +201,9 @@ class StudioWorkspace:
         return self.directory / ("pip-" + digest + suffix)
 
     def begin_image_import(self, name: str, revision: int) -> tuple[Path, str]:
-        label = Path(name).name.strip()
+        label = name.strip()
         suffix = Path(label).suffix.lower()
-        if (not label or len(label) > 160 or "\\\\" in label or
+        if (not label or len(label) > 160 or "/" in label or "\\" in label or
             any(ord(ch)<32 or ord(ch)==127 for ch in label) or
             suffix not in IMAGE_EXTENSIONS):
             raise StudioError("Immagine PIP: usa PNG, JPG oppure WebP.")
@@ -227,15 +227,21 @@ class StudioWorkspace:
                 total = sum(s.end_ms-s.start_ms for s in self.plan.segments)
                 if type(anchor_ms) is not int or not 0 <= anchor_ms < total:
                     raise StudioError("Cursore fuori dal montaggio.")
-                target = self._image_path(digest, label)
+                previous = next(
+                    (row for row in self.tape.view.image_overlays
+                     if row["asset_sha256"] == digest), None
+                )
+                # A reimport of the identical image may have a different
+                # upload filename. Restore the exact portable asset reference.
+                target = self._image_path(
+                    digest, previous["filename"] if previous else label
+                )
                 if target.is_symlink() or (target.exists() and not target.is_file()):
                     raise StudioError("Asset immagine non sicuro.")
                 os.replace(candidate, target)
                 if os.name == "posix":
                     target.chmod(0o600)
-                existing = any(item["asset_sha256"] == digest
-                               for item in self.tape.view.image_overlays)
-                if not existing:
+                if previous is None:
                     duration = min(3200, total)
                     if duration < 400:
                         raise StudioError("Il montaggio deve durare almeno 400 ms.")
