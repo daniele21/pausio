@@ -8,6 +8,7 @@
   <meta name="description" content="Pausio Studio: analizza, rivedi ed esporta tagli video naturali, sul tuo Mac.">
   <title>Studio · Pausio</title>
   <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/image_overlay_ui.css">
   <script src="/audio_monitor_ui.js" defer></script>
   <script src="/app.js" defer></script>
   <script src="/visual_fx_ui.js" defer></script>
@@ -48,6 +49,7 @@
         <button type="button" class="studio-nav-item" data-workspace-nav="transcript"><span aria-hidden="true">≡</span>Trascrizione</button>
         <button type="button" class="studio-nav-item" data-workspace-nav="captions"><span aria-hidden="true">▤</span>Sottotitoli</button>
         <button type="button" class="studio-nav-item" data-workspace-nav="visual"><span aria-hidden="true">◇</span>Video FX</button>
+        <button type="button" class="studio-nav-item" data-workspace-nav="broll"><span aria-hidden="true">▧</span>B-roll</button>
         <button type="button" class="studio-nav-item" data-workspace-nav="audio"><span aria-hidden="true">♫</span>Audio</button>
         <button type="button" class="studio-nav-item studio-nav-settings" data-workspace-nav="settings"><span aria-hidden="true">⚙</span>Impostazioni</button>
       </nav>
@@ -455,15 +457,15 @@
             </section>
             <section class="visual-fx-panel" id="image-overlay-panel" aria-labelledby="image-overlay-heading">
               <header class="visual-fx-heading">
-                <h3 id="image-overlay-heading">B-roll · immagini PIP</h3>
-                <p>Importa uno screenshot locale (PNG, JPG, WebP). Sarà sovrapposto al video con durata e posizione modificabili, senza cloud.</p>
+                <h3 id="image-overlay-heading">Immagini sopra il video</h3>
+                <p>Aggiungi una schermata o una foto in un punto del video. La voce continua sotto. Per ora sono supportate immagini PNG, JPG e WebP, non clip video.</p>
               </header>
               <div class="visual-fx-controls">
                 <input id="pip-image-input" type="file" accept="image/png,image/jpeg,image/webp" hidden aria-label="Immagine locale B-roll">
-                <button type="button" class="button button-outline button-full" id="pip-image-import" disabled>+ Importa immagine al cursore</button>
+                <button type="button" class="button button-primary button-full" id="pip-image-import" disabled>+ Aggiungi immagine al cursore</button>
                 <p id="pip-image-status" class="visual-fx-status" role="status" aria-live="polite"></p>
-                <div id="pip-image-list" class="visual-fx-list" aria-label="Immagini PIP del progetto"></div>
-                <button type="button" class="button button-ghost button-full" id="pip-image-preview" disabled>Genera preview FFmpeg con PIP</button>
+                <p id="pip-image-playhead-note" class="pip-playhead-note" role="status" aria-live="off"></p>
+                <div id="pip-image-list" class="visual-fx-list" aria-label="Immagini B-roll del progetto"></div>
               </div>
             </section>
           </div>
@@ -643,6 +645,11 @@
                aria-label="Zoom visivi ancorati alla sorgente" hidden>
             <div id="visual-fx-lane" class="visual-fx-lane"></div>
             <span id="visual-fx-lane-empty" class="visual-fx-lane-empty">VIDEO FX · Usa “Aggiungi effetto” o “Suggerisci effetti”</span>
+          </div>
+          <div class="timeline-broll-track" id="timeline-broll-track" role="group"
+               aria-label="B-roll proiettato sulla timeline originale" hidden>
+            <div id="broll-lane" class="broll-lane"></div>
+            <span id="broll-lane-empty" class="broll-lane-empty">B-ROLL · Aggiungi un'immagine dal pannello B-roll</span>
           </div>
           <div class="playhead" id="playhead"><span></span></div>
         </div>

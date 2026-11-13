@@ -76,6 +76,7 @@ class StudioHttpTests(unittest.TestCase):
             ("/", b"Studio"),
             ("/styles.css", b"focus-visible"),
             ("/app.js", b"/api/command"),
+            ("/image_overlay_ui.css", b"timeline-broll-track"),
             ("/audio_monitor_ui.js", b"function syncLiveFx"),
         ):
             status, headers, content = self.request("GET", path)
@@ -85,6 +86,7 @@ class StudioHttpTests(unittest.TestCase):
             self.assertEqual(headers["Cross-Origin-Resource-Policy"], "same-origin")
             self.assertIn("frame-ancestors 'none'", headers["Content-Security-Policy"])
         self.assertIn(b'role="tablist"', self.request("GET", "/")[2])
+        self.assertIn(b'data-workspace-nav="broll"', self.request("GET", "/")[2])
         self.assertIn(b'id="approve-action"', self.request("GET", "/")[2])
 
     def test_browser_favicon_request_is_not_a_spurious_404(self):
