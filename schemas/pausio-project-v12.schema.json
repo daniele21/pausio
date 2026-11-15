@@ -772,6 +772,14 @@
                     "highlight_color": {
                       "type": "string",
                       "pattern": "^#[0-9A-F]{6}$"
+                    },
+                    "motion_mode": {
+                      "type": "string",
+                      "enum": [
+                        "none",
+                        "kinetic",
+                        "word_focus"
+                      ]
                     }
                   }
                 }
