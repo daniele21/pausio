@@ -566,6 +566,13 @@
                     </select>
                   </label>
                   <p class="caption-font-hint">Font del sistema: per verificare la resa esatta nell'MP4 usa «Genera preview». Se il font non è installato, FFmpeg può sostituirlo.</p>
+                   <label>Animazione del sottotitolo
+                     <select data-caption-setting="motion_mode" aria-label="Animazione dei sottotitoli">
+                       <option value="none">Fermo · senza animazioni</option>
+                       <option value="kinetic">Kinetic · pop morbido della frase</option>
+                       <option value="word_focus">Focus parola · segue il parlato se allineato</option>
+                     </select>
+                   </label>
                   <label>Orizzontale <output id="caption-x-output">50%</output>
                     <input type="range" data-caption-setting="x_pct" min="15" max="85" step="1" value="50">
                   </label>
