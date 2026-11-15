@@ -24,23 +24,23 @@ CAPTION_PRESETS = {
     "social": {"preset": "social", "x_pct": 50, "y_pct": 80, "font_size": 64,
                "font_family": DEFAULT_CAPTION_FONT,
                "text_color": "#FFFFFF", "outline_color": "#000000",
-               "outline_size": 4, "background": False, "background_color": "#000000", "highlight_color": "#FFCD65"},
+               "outline_size": 4, "background": False, "background_color": "#000000", "highlight_color": "#FFCD65", "motion_mode": "none"},
     "minimal": {"preset": "minimal", "x_pct": 50, "y_pct": 82, "font_size": 48,
                 "font_family": DEFAULT_CAPTION_FONT,
                 "text_color": "#FFFFFF", "outline_color": "#000000",
-                "outline_size": 3, "background": False, "background_color": "#000000", "highlight_color": "#FFCD65"},
+                "outline_size": 3, "background": False, "background_color": "#000000", "highlight_color": "#FFCD65", "motion_mode": "none"},
     "boxed": {"preset": "boxed", "x_pct": 50, "y_pct": 76, "font_size": 56,
               "font_family": DEFAULT_CAPTION_FONT,
               "text_color": "#FFFFFF", "outline_color": "#000000",
-              "outline_size": 3, "background": True, "background_color": "#161616", "highlight_color": "#FFCD65"},
+              "outline_size": 3, "background": True, "background_color": "#161616", "highlight_color": "#FFCD65", "motion_mode": "none"},
     "kinetic": {"preset": "kinetic", "x_pct": 50, "y_pct": 78, "font_size": 72,
                 "font_family": DEFAULT_CAPTION_FONT,
                 "text_color": "#FFFFFF", "outline_color": "#000000",
-                "outline_size": 4, "background": False, "background_color": "#000000", "highlight_color": "#FFCD65"},
+                "outline_size": 4, "background": False, "background_color": "#000000", "highlight_color": "#FFCD65", "motion_mode": "kinetic"},
     "word_focus": {"preset": "word_focus", "x_pct": 50, "y_pct": 78, "font_size": 68,
                    "font_family": DEFAULT_CAPTION_FONT,
                    "text_color": "#FFFFFF", "outline_color": "#000000",
-                   "outline_size": 4, "background": False, "background_color": "#000000", "highlight_color": "#FFCD65"},
+                   "outline_size": 4, "background": False, "background_color": "#000000", "highlight_color": "#FFCD65", "motion_mode": "word_focus"},
 }
 CAPTION_CONFIG_FIELDS = frozenset(CAPTION_PRESETS["social"])
 CAPTION_CONFIG_RANGES = {
@@ -55,16 +55,19 @@ def validate_caption_config(raw: object) -> dict[str, Any]:
     # Projects created before font selection did not contain font_family.
     # Normalize only this known legacy omission. Other unknown/missing fields
     # remain rejected; replay of older .pausio.json stays deterministic.
-    legacy_keys = (
-        CAPTION_CONFIG_FIELDS,
-        CAPTION_CONFIG_FIELDS - {"font_family"},
-        CAPTION_CONFIG_FIELDS - {"highlight_color"},
-        CAPTION_CONFIG_FIELDS - {"font_family", "highlight_color"},
-    )
-    if not isinstance(raw, dict) or set(raw) not in legacy_keys:
+    optional = ("font_family", "highlight_color", "motion_mode")
+    accepted = {
+        CAPTION_CONFIG_FIELDS - {optional[i] for i in range(3) if mask & (1 << i)}
+        for mask in range(8)
+    }
+    if not isinstance(raw, dict) or set(raw) not in accepted:
         raise ValueError("Configurazione sottotitoli incompleta o non valida.")
+    default_motion = {
+        "kinetic": "kinetic", "word_focus": "word_focus",
+    }.get(raw.get("preset"), "none")
     config = {"font_family": DEFAULT_CAPTION_FONT,
-              "highlight_color": "#FFCD65", **raw}
+              "highlight_color": "#FFCD65", "motion_mode": default_motion,
+              **raw}
     preset = config["preset"]
     if not isinstance(preset, str) or preset not in (*CAPTION_STYLES, "custom"):
         raise ValueError("Preset sottotitoli sconosciuto.")
@@ -74,6 +77,8 @@ def validate_caption_config(raw: object) -> dict[str, Any]:
     for key in ("text_color", "outline_color", "background_color", "highlight_color"):
         if not isinstance(config[key], str) or not _COLOR_RE.fullmatch(config[key]):
             raise ValueError(f"{key}: usa un colore esadecimale #RRGGBB.")
+    if config["motion_mode"] not in {"none", "kinetic", "word_focus"} or type(config["motion_mode"]) is not str:
+        raise ValueError("Modalità animazione sottotitoli non supportata.")
     if type(config["background"]) is not bool:
         raise ValueError("Il valore di sfondo deve essere vero o falso.")
     if not isinstance(config["font_family"], str) or config["font_family"] not in CAPTION_FONTS:
@@ -358,7 +363,7 @@ def ass_document(
                                      cue.get("words"))
             # This is a phrase entrance, not synthesized per-word alignment.
             # Source times remain authoritative and ASS tags are allowlisted.
-            if config["preset"] == "kinetic":
+            if config["motion_mode"] == "kinetic":
                 up = min(180, max(50, (end - start) // 3))
                 down = min(110, max(30, (end - start) // 5))
                 motion = (f"\\fscx86\\fscy86\\fad({up},{down})"
@@ -369,7 +374,7 @@ def ass_document(
                 f"Dialogue: 0,{_ass_time(start)},{_ass_time(end)},"
                 f"Caption,,0,0,0,,{{\\an5\\pos({x},{y}){motion}}}{colored}\n"
             )
-            if config["preset"] == "word_focus" and cue.get("words"):
+            if config["motion_mode"] == "word_focus" and cue.get("words"):
                 # Highlight only timed, verified words. Full-phrase base text
                 # remains stable in gaps; overlays use a fixed local ASS
                 # template and exact word starts/ends, never estimated timing.
