@@ -31,7 +31,9 @@ def media():
 class SplitDashboardTests(unittest.TestCase):
     def test_catalog_and_replay_v10_undo_legacy(self):
         self.assertEqual([r["id"] for r in catalog()], [
-            "stat_reveal","permission_dialog","dashboard_split","code_highlight"
+            "floating_insight","permission_mock","code_inspector",
+            "metric_spotlight","stat_reveal","permission_dialog",
+            "dashboard_split","code_highlight"
         ])
         self.assertEqual(next(r["layout"] for r in catalog()
                               if r["id"]=="dashboard_split"),"split_vertical")
@@ -43,7 +45,7 @@ class SplitDashboardTests(unittest.TestCase):
         self.assertEqual(edited.undo().view.scene_templates,())
         self.assertEqual(edited.undo().redo().view.scene_templates,(scene,))
         self.assertEqual(ProjectTape.from_dict(edited.as_dict()).view,edited.view)
-        # v8 projects containing older scene types still import into v9.
+        # v8 projects containing older scene types still import into v10.
         old=ProjectTape(media()).append("timeline.keep_all",{}).as_dict()
         old["schema_version"]=8
         self.assertEqual(ProjectTape.from_dict(old).as_dict()["schema_version"],10)
