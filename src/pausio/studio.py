@@ -239,6 +239,70 @@ class StudioWorkspace:
             raise StudioError("Formato immagine non supportato.")
         return self.directory / ("pip-" + digest + suffix)
 
+    def _video_path(self, digest: str, filename: str) -> Path:
+        if not re.fullmatch(r"[0-9a-f]{64}", digest):
+            raise StudioError("Video B-roll: digest non valido.")
+        suffix = Path(filename).suffix.lower()
+        if suffix not in VIDEO_EXTENSIONS:
+            raise StudioError("Video B-roll: formato non supportato.")
+        return self.directory / ("roll-" + digest + suffix)
+
+    def begin_video_broll_import(self, name: str, revision: int) -> tuple[Path, str]:
+        label = name.strip()
+        if (not label or len(label) > 160 or "/" in label or "\\" in label
+            or any(ord(c) < 32 or ord(c) == 127 for c in label)
+            or Path(label).suffix.lower() not in VIDEO_EXTENSIONS):
+            raise StudioError("B-roll video: scegli MP4, MOV, MKV o WebM.")
+        with self.lock:
+            self._ensure_unlocked()
+            if (self.tape is None or self.plan is None
+                or type(revision) is not int or revision != self.tape.revision):
+                raise StudioError("Prepara un montaggio e aggiorna la versione del progetto.")
+            self.importing = True
+        return self.directory / f"incoming-roll-{uuid.uuid4().hex}{Path(label).suffix.lower()}", label
+
+    def finish_video_broll_import(
+        self, candidate: Path, label: str, digest: str, revision: int,
+        anchor_ms: int, info: MediaInfo
+    ) -> None:
+        with self.lock:
+            try:
+                if (self.tape is None or self.plan is None
+                    or revision != self.tape.revision):
+                    raise StudioError("Progetto cambiato durante l'import B-roll.")
+                total = sum(s.end_ms - s.start_ms for s in self.plan.segments)
+                if type(anchor_ms) is not int or not 0 <= anchor_ms < total:
+                    raise StudioError("Cursore fuori dal montaggio.")
+                if info.width > 3840 or info.height > 2160 or info.duration_ms < 400:
+                    raise StudioError("B-roll video: durata o risoluzione non supportata.")
+                previous = next(
+                    (clip for clip in self.tape.view.video_broll
+                     if clip["asset_sha256"] == digest), None
+                )
+                target = self._video_path(
+                    digest, previous["filename"] if previous else label
+                )
+                if target.is_symlink() or (target.exists() and not target.is_file()):
+                    raise StudioError("Asset B-roll non sicuro.")
+                os.replace(candidate, target)
+                if os.name == "posix":
+                    target.chmod(0o600)
+                if previous is None:
+                    duration = min(3200, info.duration_ms, total)
+                    if duration < 400:
+                        raise StudioError("Il montaggio deve durare almeno 400 ms.")
+                    start = max(0, min(anchor_ms, total - duration))
+                    clip = {
+                        "id": uuid.uuid4().hex, "asset_sha256": digest,
+                        "filename": label, "start_ms": start,
+                        "duration_ms": duration, "media_in_ms": 0,
+                        "mode": "fullscreen", "x_pct": 50,
+                        "y_pct": 20, "width_pct": 55,
+                    }
+                    self._install_tape(self.tape.append("video.broll.add", {"video": clip}))
+            finally:
+                self.importing = False
+
     def begin_image_import(self, name: str, revision: int) -> tuple[Path, str]:
         label = name.strip()
         suffix = Path(label).suffix.lower()
