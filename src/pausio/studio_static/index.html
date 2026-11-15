@@ -18,6 +18,7 @@
   <script src="/graphic_overlay_ui.js" defer></script>
   <script src="/editorial_ui.js" defer></script>
   <script src="/image_overlay_ui.js" defer></script>
+  <script src="/video_broll_ui.js" defer></script>
   <script src="/scene_template_ui.js" defer></script>
   <script src="/visual_observation_ui.js" defer></script>
 </head>
@@ -505,10 +506,22 @@
                 <div id="scene-template-list" class="visual-fx-list" aria-label="Scene grafiche del progetto"></div>
               </div>
             </section>
+            <section class="visual-fx-panel" id="video-broll-panel" aria-labelledby="video-broll-heading">
+              <header class="visual-fx-heading">
+                <h3 id="video-broll-heading">Clip video B-roll</h3>
+                <p>Inserisci un video nel montaggio, a schermo intero o come PIP. La tua voce continua; l'audio della clip è silenziato.</p>
+              </header>
+              <div class="visual-fx-controls">
+                <input id="video-broll-input" type="file" accept="video/mp4,video/quicktime,video/x-matroska,video/webm" hidden aria-label="Video locale B-roll">
+                <button type="button" class="button button-primary button-full" id="video-broll-import" disabled>+ Aggiungi clip video al cursore</button>
+                <p id="video-broll-status" class="visual-fx-status" role="status" aria-live="polite"></p>
+                <div id="video-broll-list" class="visual-fx-list" aria-label="Clip video B-roll del progetto"></div>
+              </div>
+            </section>
             <section class="visual-fx-panel" id="image-overlay-panel" aria-labelledby="image-overlay-heading">
               <header class="visual-fx-heading">
                 <h3 id="image-overlay-heading">Immagini sopra il video</h3>
-                <p>Aggiungi una schermata o una foto in un punto del video. La voce continua sotto. Per ora sono supportate immagini PNG, JPG e WebP, non clip video.</p>
+                <p>Aggiungi una schermata o una foto in un punto del video. La voce continua sotto. Puoi aggiungere immagini PNG, JPG e WebP come sovrapposizioni.</p>
               </header>
               <div class="visual-fx-controls">
                 <input id="pip-image-input" type="file" accept="image/png,image/jpeg,image/webp" hidden aria-label="Immagine locale B-roll">
@@ -699,7 +712,7 @@
           <div class="timeline-broll-track" id="timeline-broll-track" role="group"
                aria-label="B-roll proiettato sulla timeline originale" hidden>
             <div id="broll-lane" class="broll-lane"></div>
-            <span id="broll-lane-empty" class="broll-lane-empty">B-ROLL · Aggiungi un'immagine dal pannello B-roll</span>
+            <span id="broll-lane-empty" class="broll-lane-empty">B-ROLL · Importa una clip video o un'immagine</span>
           </div>
           <div class="playhead" id="playhead"><span></span></div>
         </div>
