@@ -296,3 +296,12 @@ inference API keys, invasive face tracking and a second rendering frontend.
 
 Use ideas as product design inputs; verify third-party licenses before copying
 code, effects, media or graphics.
+
+### Implemented later: Editorial Motion v10
+
+The creator-first composition uses four new bounded scene templates,
+`editorial_cards.py`, a catalog-driven single Studio inspector and read-only
+stage navigation. See [Editorial Motion](EDITORIAL_MOTION_SYSTEM_V1.md).
+The document above remains a **historical architecture proposal**: video
+B-roll, atomic edit transactions, timeline keyframes and preflight remain
+unimplemented unless separate PR/test evidence exists.

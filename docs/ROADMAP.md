@@ -115,3 +115,13 @@ See [detailed agentic editing execution plan](AGENTIC_EDITING_PLAN.md) for depen
 - [x] **AUD-OBS-01 (bounded):** short genuine source and FFmpeg-preview audio via MCP `pausio_get_audio_context`, separate volatile user opt-in, strict revision/timebase, <=6s WAV/4 calls per minute, RMS + peak in dBFS. Transport still requires real ChatGPT tunnel audio smoke test; LUFS/ducking remain open. [Audio observation](AUDIO_OBSERVATION_V1.md).
 
 - [x] **SPLIT-01:** `dashboard_split` output-timed scene (v9) with real FFmpeg presenter-bottom crop + libass animated upper dashboard/task/checks/progress/budget, Studio/MCP catalog, voice preserved and no runtime dependencies. [Guide](SPLIT_DASHBOARD_V1.md). General draggable compositor and cursors still future work.
+
+- [x] **ED-MOTION-01:** versioned short overlay/full-screen composition
+  (`floating_insight`, `permission_mock`, `code_inspector`,
+  `metric_spotlight`) with modern fixed design tokens, live face in overlay
+  modes, real libass timing and FFmpeg rendering, v10 import/replay, Studio
+  single-timeline stage map, MCP catalog and tests.
+  [Design and contracts](EDITORIAL_MOTION_SYSTEM_V1.md).
+- [ ] **ED-MOTION-02:** validated **atomic proposal batch** with one undo unit,
+  caption-safe area collision preflight, visual audit on real creator footage.
+  Scene preview quality remains subject to human judgment.

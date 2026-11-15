@@ -11,8 +11,9 @@ from typing import Any
 
 from pausio.captions import _ass_color, _ass_text, _ass_time
 from pausio.split_dashboard import compose_dashboard
+from pausio.editorial_cards import compose_editorial_card
 
-MAX_SCENES = 9
+MAX_SCENES = 16
 SCENE_FIELDS = frozenset({"id", "template", "start_ms", "duration_ms", "accent", "content"})
 _SCENE_ID = re.compile(r"^[0-9a-f]{32}$")
 _COLORS = {"mint": "#66D4C5", "orange": "#FFA875"}
@@ -23,6 +24,83 @@ _MUTED = "#A9BEC7"
 
 # Field descriptions and defaults are shared with MCP and the Studio editor.
 TEMPLATES = {
+    "floating_insight": {
+        "recommended_duration_ms": 1900,
+        "label": "Overlay · Insight flottante",
+        "layout": "overlay",
+        "min_duration_ms": 900, "max_duration_ms": 5000,
+        "fields": [
+            {"key": "title", "label": "Messaggio principale",
+             "type": "text", "max_length": 34,
+             "default": "IL RISCHIO È NEI PERMESSI"},
+            {"key": "detail", "label": "Spiegazione sintetica",
+             "type": "text", "max_length": 52,
+             "default": "Non solo cosa fa l'agente. Come lo autorizzi."},
+        ],
+    },
+    "permission_mock": {
+        "recommended_duration_ms": 3000,
+        "label": "Mockup · Dialogo autorizzazione",
+        "layout": "overlay",
+        "min_duration_ms": 1600, "max_duration_ms": 7000,
+        "fields": [
+            {"key": "title", "label": "Titolo popup",
+             "type": "text", "max_length": 36,
+             "default": "Allow this command?"},
+            {"key": "command", "label": "Comando illustrativo",
+             "type": "text", "max_length": 37,
+             "default": "Run a command requiring access"},
+            {"key": "once", "label": "Autorizzazione singola",
+             "type": "text", "max_length": 17,
+             "default": "Allow once"},
+            {"key": "persistent", "label": "Autorizzazione persistente",
+             "type": "text", "max_length": 21,
+             "default": "Don't ask again"},
+        ],
+    },
+    "code_inspector": {
+        "recommended_duration_ms": 3000,
+        "label": "Mockup · Configurazione locale",
+        "layout": "overlay",
+        "min_duration_ms": 1800, "max_duration_ms": 7000,
+        "fields": [
+            {"key": "filename", "label": "File illustrativo",
+             "type": "text", "max_length": 32,
+             "default": "settings.local.json"},
+            {"key": "line_one", "label": "Prima riga",
+             "type": "text", "max_length": 34,
+             "default": '"permissions": {'},
+            {"key": "line_two", "label": "Seconda riga",
+             "type": "text", "max_length": 34,
+             "default": '"allow": ['},
+            {"key": "highlight", "label": "Riga evidenziata",
+             "type": "text", "max_length": 34,
+             "default": '"example permission rule"'},
+        ],
+    },
+    "metric_spotlight": {
+        "recommended_duration_ms": 2800,
+        "label": "Inserto · Dato principale",
+        "layout": "fullscreen",
+        "min_duration_ms": 1800, "max_duration_ms": 7000,
+        "fields": [
+            {"key": "heading", "label": "Titolo piccolo",
+             "type": "text", "max_length": 35,
+             "default": "COSA HA TROVATO LA RICERCA"},
+            {"key": "number", "label": "Numero esatto",
+             "type": "text", "max_length": 13,
+             "default": "1.379"},
+            {"key": "unit", "label": "Unità",
+             "type": "text", "max_length": 22,
+             "default": "SEGRETI"},
+            {"key": "detail", "label": "Contesto",
+             "type": "text", "max_length": 46,
+             "default": "in file di configurazione pubblici"},
+            {"key": "source_note", "label": "Nota sulla fonte",
+             "type": "text", "max_length": 45,
+             "default": "Dati da verificare prima di pubblicare"},
+        ],
+    },
     "stat_reveal": {
         "label": "03 · Statistica animata",
         "fields": [
@@ -98,6 +176,9 @@ def catalog() -> list[dict]:
     """Return display metadata without exporting internal render expressions."""
     return [{"id": name, "label": spec["label"],
              "layout": spec.get("layout", "fullscreen"),
+             "min_duration_ms": spec.get("min_duration_ms", 2500),
+             "max_duration_ms": spec.get("max_duration_ms", 12000),
+             "recommended_duration_ms": spec.get("recommended_duration_ms", 3000),
              "fields": [dict(field) for field in spec["fields"]]}
             for name, spec in TEMPLATES.items()]
 
@@ -111,10 +192,13 @@ def validate_scene(raw: Any, total_ms: int) -> dict:
     if type(template) is not str or template not in TEMPLATES:
         raise ValueError("Scena: template sconosciuto.")
     start, duration = raw["start_ms"], raw["duration_ms"]
+    spec = TEMPLATES[template]
+    minimum = spec.get("min_duration_ms", 2500)
+    maximum = spec.get("max_duration_ms", 12000)
     if (type(start) is not int or type(duration) is not int or
-        start < 0 or not 2500 <= duration <= 12000 or
+        start < 0 or not minimum <= duration <= maximum or
         start + duration > total_ms):
-        raise ValueError("Scena: 2,5–12 s dentro la timeline montata.")
+        raise ValueError(f"Scena: {minimum}–{maximum} ms dentro la timeline montata.")
     if type(raw["accent"]) is not str or raw["accent"] not in _COLORS:
         raise ValueError("Scena: colore non supportato.")
     content = raw["content"]
@@ -143,14 +227,14 @@ def validate_scene(raw: Any, total_ms: int) -> dict:
 
 def validate_scenes(rows: Any, total_ms: int) -> None:
     if not isinstance(rows, (list, tuple)) or len(rows) > MAX_SCENES:
-        raise ValueError("Scena: massimo 9 scene per progetto.")
+        raise ValueError(f"Scena: massimo {MAX_SCENES} scene per progetto.")
     seen: set[str] = set()
     previous_end = 0
     for scene in sorted(rows, key=lambda x: x["start_ms"] if isinstance(x, dict)
                         and type(x.get("start_ms")) is int else -1):
         item = validate_scene(scene, total_ms)
         if item["id"] in seen or item["start_ms"] < previous_end:
-            raise ValueError("Scena: ID duplicato o intervalli a schermo intero sovrapposti.")
+            raise ValueError("Scena: ID duplicato o intervalli visivi sovrapposti.")
         seen.add(item["id"])
         previous_end = item["start_ms"] + item["duration_ms"]
 
@@ -202,6 +286,10 @@ def compose_scene_events(rows: list[dict], total_ms: int) -> str:
         accent = _COLORS[scene["accent"]]
         if scene["template"] == "dashboard_split":
             out.append(compose_dashboard(scene, _rect, _label))
+            continue
+        if scene["template"] in ("floating_insight", "permission_mock",
+                                 "code_inspector", "metric_spotlight"):
+            out.append(compose_editorial_card(scene, _event, _safe))
             continue
         out.append(_rect(a, end, 0, 0, 1080, 1920, _BACKGROUND))
         out.append(_rect(a + 150, end, 92, 135, 896, 7, accent))

@@ -224,3 +224,15 @@ In **Video FX → Scene grafiche a schermo intero** ora puoi aggiungere una stat
 **[Audio reale per ChatGPT](docs/AUDIO_OBSERVATION_V1.md)**: con il consenso esplicito separato in Video FX, Pausio può restituire via MCP brevi estratti WAV del video originale o montato, più picco e RMS in dBFS (non LUFS). Nessun trasferimento automatico della voce.
 
 **[Split-screen dashboard](docs/SPLIT_DASHBOARD_V1.md)** — quarto template in Video FX: volto del creator in basso, task progressivi, barra e budget sopra. FFmpeg + libass esistenti; modificabile da Studio e MCP, voce invariata.
+
+### Composizione editoriale modulare
+[Guida ai beat visuali](docs/EDITORIAL_MOTION_SYSTEM_V1.md) ·
+[Regia del video GitHub/password](docs/EDITORIAL_PASSWORD_VIDEO_PLAN.md)
+
+In **Video FX → Composizione editoriale modulare** alterna scene
+`floating_insight`, `permission_mock`, `code_inspector` e
+`metric_spotlight` (più i quattro template precedenti). I beat brevi
+conservano il volto, tranne il dato che prende deliberatamente lo schermo.
+La mappa «Volto/Overlay/Grafica/Split» serve a navigare l'unica timeline.
+L'agente usa i consueti comandi tipizzati `scene.template.add/update/remove`
+e il catalogo `pausio_get_scene_templates` (formato v10).

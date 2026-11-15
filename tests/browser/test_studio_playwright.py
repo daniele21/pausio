@@ -372,10 +372,45 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertFalse(self.page.locator("#visual-sharing-enabled").is_checked())
         self.assertFalse(self.errors,self.errors)
 
+    def test_editorial_short_overlay_face_map_and_real_preview(self):
+        original=self.upload_analyze()
+        self.page.locator('[data-workspace-nav="visual"]').click()
+        self.wait_condition(lambda:self.page.locator(
+            "#scene-template-kind option").count()==8)
+        selector=self.page.locator("#scene-template-kind")
+        selector.select_option("floating_insight")
+        self.assertEqual(self.page.locator(
+            "#scene-template-duration").input_value(),"1900")
+        self.page.locator("#scene-template-fields").locator(
+            '[data-scene-field="title"]').fill("RISCHIO NASCOSTO")
+        self.page.locator("#scene-template-add").click()
+        state=self.wait_state("revision",original["project_revision"]+1)
+        self.assertEqual(len(state["scene_templates"]),1)
+        self.assertEqual(state["scene_templates"][0]["template"],"floating_insight")
+        self.assertEqual(state["scene_templates"][0]["duration_ms"],1900)
+        sequence=self.page.locator("#scene-sequence-map")
+        self.assertTrue(sequence.is_visible())
+        self.assertTrue(sequence.get_by_role("button",name="Overlay").count()>=1)
+        self.assertTrue(sequence.get_by_role("button",name="Volto").count()>=1)
+        self.assertEqual(state["scene_templates"][0]["content"]["title"],
+                         "RISCHIO NASCOSTO")
+        self.page.locator(".scene-card").first.get_by_role(
+            "button",name="Guarda 5 s").click()
+        ready=self.wait_state("preview_range","completed",timeout=120000)
+        self.assertTrue(ready["preview_range_ready"],ready["job"])
+        self.wait_condition(lambda:self.page.locator(
+            "#quick-preview-dialog").is_visible())
+        self.shot("editorial-overlay-face-map")
+        self.page.locator("#quick-preview-close").click()
+        self.page.keyboard.press("Control+z")
+        reverted=self.wait_state("revision",state["project_revision"]+1)
+        self.assertFalse(reverted["scene_templates"])
+        self.assertFalse(self.errors,self.errors)
+
     def test_dashboard_split_reframes_creator_and_animates_in_render_preview(self):
         initial=self.upload_analyze()
         self.page.locator('[data-workspace-nav="visual"]').click()
-        self.wait_condition(lambda:self.page.locator("#scene-template-kind").locator("option").count()==4)
+        self.wait_condition(lambda:self.page.locator("#scene-template-kind").locator("option").count()==8)
         self.page.locator("#scene-template-kind").select_option("dashboard_split")
         self.page.locator("#scene-template-duration").fill("2800")
         self.page.locator("#scene-template-fields").locator(
@@ -406,7 +441,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
     def test_fullscreen_scene_template_is_editable_and_previewed_with_ffmpeg(self):
         initial=self.upload_analyze()
         self.page.locator('[data-workspace-nav="visual"]').click()
-        self.wait_condition(lambda:self.page.locator("#scene-template-kind").locator("option").count()==4)
+        self.wait_condition(lambda:self.page.locator("#scene-template-kind").locator("option").count()==8)
         self.page.locator("#scene-template-kind").select_option("stat_reveal")
         self.page.locator("#scene-template-duration").fill("2500")
         self.page.locator("#scene-template-fields").locator('[data-scene-field="number"]').fill("1.379")
@@ -508,7 +543,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
         exported=self.root/"visual-fx.pausio.json"
         download.value.save_as(exported)
         document=json.loads(exported.read_text())
-        self.assertEqual(document["schema_version"],9)
+        self.assertEqual(document["schema_version"],10)
         self.assertIn("video.transform.update",[row["type"] for row in document["commands"]])
         self.assertFalse(self.errors,self.errors)
 
@@ -989,7 +1024,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
             self.page.locator("#project-export").click()
         saved=self.root/"project.pausio.json";download.value.save_as(saved)
         data=json.loads(saved.read_text())
-        self.assertEqual(data["schema_version"],9)
+        self.assertEqual(data["schema_version"],10)
         self.assertIn("segment.update",[c["type"] for c in data["commands"]])
 
         self.page.locator("#preview-action").click()
