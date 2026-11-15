@@ -979,7 +979,7 @@ class StudioMediaWorkflowTests(StudioHttpTests):
 
         wrong = json.loads(json.dumps(document))
         wrong["media"]["sha256"] = "f" * 64
-        for bad in (wrong, {**document, "schema_version": 11},
+        for bad in (wrong, {**document, "schema_version": 12},
                     {**document, "commands": [{"id": "0" * 32,
                                               "type": "execute.code", "payload": {}}]}):
             status, _, _ = self.post("/api/project/import", bad)
