@@ -14,7 +14,7 @@ let captionPositionMode = false;
 let captionPointer = null;
 const captionNumberFields = ["x_pct","y_pct","font_size","outline_size"];
 const captionColorFields = ["text_color","outline_color","background_color","highlight_color"];
-const captionFontFields = ["font_family"];
+const captionFontFields = ["font_family","motion_mode"];
 const fontFallBack = new Set(["Georgia","Times New Roman","Courier New"]);
 function captionConfig(){ return captionDraft||project?.caption_config||project?.caption_presets?.social; }
 function renderCaptionSettings(){
