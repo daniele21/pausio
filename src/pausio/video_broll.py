@@ -47,7 +47,7 @@ def validate_video_broll(value: Any, output_ms: int) -> dict:
             and start + duration <= output_ms
             and 0 <= media_in <= 172_800_000 - duration):
         raise ValueError("Video B-roll: tempi fuori dai limiti.")
-    if value["mode"] not in {"fullscreen", "pip"} or type(value["mode"]) is not str:
+    if type(value["mode"]) is not str or value["mode"] not in {"fullscreen", "pip"}:
         raise ValueError("Video B-roll: modalità non supportata.")
     for field, minimum, maximum in (
         ("x_pct", 0, 100), ("y_pct", 0, 100), ("width_pct", 20, 80)
