@@ -1381,6 +1381,42 @@ class StudioHandler(BaseHTTPRequestHandler):
         except Exception:
             self._failed(500, "Errore interno. Controlla il terminale di Pausio.")
 
+    def _import_video_broll(self) -> None:
+        if self.headers.get("Content-Type") != "application/octet-stream":
+            raise StudioError("Caricamento B-roll video non valido.")
+        size = self._content_length(MAX_BROLL_BYTES)
+        filename = unquote(self.headers.get("X-Filename", ""))
+        try:
+            revision = int(self.headers.get("X-Pausio-Revision", ""))
+            anchor_ms = int(self.headers.get("X-Pausio-Start-Ms", ""))
+        except ValueError as exc:
+            raise StudioError("Cursore o revisione B-roll non validi.") from exc
+        destination, label = self.server.workspace.begin_video_broll_import(filename, revision)
+        completed = False
+        digest = hashlib.sha256()
+        try:
+            fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "wb") as target:
+                remaining = size
+                while remaining:
+                    chunk = self.rfile.read(min(1024 * 1024, remaining))
+                    if not chunk:
+                        raise StudioError("Caricamento B-roll video interrotto.")
+                    target.write(chunk)
+                    digest.update(chunk)
+                    remaining -= len(chunk)
+                target.flush()
+                os.fsync(target.fileno())
+            info = probe(destination)
+            self.server.workspace.finish_video_broll_import(
+                destination, label, digest.hexdigest(), revision, anchor_ms, info
+            )
+            completed = True
+            self._json(200, self.server.workspace.snapshot())
+        finally:
+            if not completed:
+                self.server.workspace.abort_import(destination)
+
     def _import_image(self) -> None:
         if self.headers.get("Content-Type") != "application/octet-stream":
             raise StudioError("Caricamento immagine non valido.")
