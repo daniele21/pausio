@@ -35,6 +35,7 @@ from pausio.audio_observation import audio_wav
 from pausio.graphic_overlays import remap_graphics
 from pausio.scene_templates import catalog as scene_template_catalog
 from pausio.image_overlays import MAX_IMAGE_BYTES, IMAGE_EXTENSIONS
+from pausio.video_broll import MAX_BROLL_BYTES, VIDEO_EXTENSIONS
 from pausio.planner import CUT_PRESETS, validate_cut_settings, policy_from_cut_settings, propose_segments
 from pausio.project_commands import ProjectTape, ProjectFormatError, UI_COMMANDS, default_audio_mix
 from pausio.visual_fx_auto import propose_visual_fx
@@ -67,6 +68,7 @@ ASSETS = {
     "/scene_template_ui.css": ("scene_template_ui.css", "text/css; charset=utf-8"),
     "/editorial_ui.js": ("editorial_ui.js", "text/javascript; charset=utf-8"),
     "/image_overlay_ui.js": ("image_overlay_ui.js", "text/javascript; charset=utf-8"),
+    "/video_broll_ui.js": ("video_broll_ui.js", "text/javascript; charset=utf-8"),
     "/capture": ("capture.html", "text/html; charset=utf-8"),
     "/capture.html": ("capture.html", "text/html; charset=utf-8"),
     "/capture.css": ("capture.css", "text/css; charset=utf-8"),
@@ -193,6 +195,12 @@ class StudioWorkspace:
                 "graphic_overlays": [dict(g) for g in self.tape.view.graphic_overlays] if self.tape else [],
                 "scene_templates": [dict(g) for g in self.tape.view.scene_templates] if self.tape else [],
                 "scene_template_catalog": scene_template_catalog(),
+                "video_broll": [
+                    {**dict(clip), "available": self._video_path(
+                        clip["asset_sha256"], clip["filename"]).is_file() and
+                        not self._video_path(clip["asset_sha256"], clip["filename"]).is_symlink()}
+                    for clip in self.tape.view.video_broll
+                ] if self.tape else [],
                 "image_overlays": [
                     {**dict(item), "available": self._image_path(
                         item["asset_sha256"], item["filename"]).is_file() and
@@ -230,6 +238,70 @@ class StudioWorkspace:
         if suffix not in IMAGE_EXTENSIONS:
             raise StudioError("Formato immagine non supportato.")
         return self.directory / ("pip-" + digest + suffix)
+
+    def _video_path(self, digest: str, filename: str) -> Path:
+        if not re.fullmatch(r"[0-9a-f]{64}", digest):
+            raise StudioError("Video B-roll: digest non valido.")
+        suffix = Path(filename).suffix.lower()
+        if suffix not in VIDEO_EXTENSIONS:
+            raise StudioError("Video B-roll: formato non supportato.")
+        return self.directory / ("roll-" + digest + suffix)
+
+    def begin_video_broll_import(self, name: str, revision: int) -> tuple[Path, str]:
+        label = name.strip()
+        if (not label or len(label) > 160 or "/" in label or "\\" in label
+            or any(ord(c) < 32 or ord(c) == 127 for c in label)
+            or Path(label).suffix.lower() not in VIDEO_EXTENSIONS):
+            raise StudioError("B-roll video: scegli MP4, MOV, MKV o WebM.")
+        with self.lock:
+            self._ensure_unlocked()
+            if (self.tape is None or self.plan is None
+                or type(revision) is not int or revision != self.tape.revision):
+                raise StudioError("Prepara un montaggio e aggiorna la versione del progetto.")
+            self.importing = True
+        return self.directory / f"incoming-roll-{uuid.uuid4().hex}{Path(label).suffix.lower()}", label
+
+    def finish_video_broll_import(
+        self, candidate: Path, label: str, digest: str, revision: int,
+        anchor_ms: int, info: MediaInfo
+    ) -> None:
+        with self.lock:
+            try:
+                if (self.tape is None or self.plan is None
+                    or revision != self.tape.revision):
+                    raise StudioError("Progetto cambiato durante l'import B-roll.")
+                total = sum(s.end_ms - s.start_ms for s in self.plan.segments)
+                if type(anchor_ms) is not int or not 0 <= anchor_ms < total:
+                    raise StudioError("Cursore fuori dal montaggio.")
+                if info.width > 3840 or info.height > 2160 or info.duration_ms < 400:
+                    raise StudioError("B-roll video: durata o risoluzione non supportata.")
+                previous = next(
+                    (clip for clip in self.tape.view.video_broll
+                     if clip["asset_sha256"] == digest), None
+                )
+                target = self._video_path(
+                    digest, previous["filename"] if previous else label
+                )
+                if target.is_symlink() or (target.exists() and not target.is_file()):
+                    raise StudioError("Asset B-roll non sicuro.")
+                os.replace(candidate, target)
+                if os.name == "posix":
+                    target.chmod(0o600)
+                if previous is None:
+                    duration = min(3200, info.duration_ms, total)
+                    if duration < 400:
+                        raise StudioError("Il montaggio deve durare almeno 400 ms.")
+                    start = max(0, min(anchor_ms, total - duration))
+                    clip = {
+                        "id": uuid.uuid4().hex, "asset_sha256": digest,
+                        "filename": label, "start_ms": start,
+                        "duration_ms": duration, "media_in_ms": 0,
+                        "mode": "fullscreen", "x_pct": 50,
+                        "y_pct": 20, "width_pct": 55,
+                    }
+                    self._install_tape(self.tape.append("video.broll.add", {"video": clip}))
+            finally:
+                self.importing = False
 
     def begin_image_import(self, name: str, revision: int) -> tuple[Path, str]:
         label = name.strip()
@@ -443,9 +515,10 @@ class StudioWorkspace:
             (self.directory / "export.mp4").unlink(missing_ok=True)
             (self.directory / "preview.mp4").unlink(missing_ok=True)
             (self.directory / "preview-range.mp4").unlink(missing_ok=True)
-            for image in self.directory.glob("pip-*"):
-                if image.is_file() or image.is_symlink():
-                    image.unlink(missing_ok=True)
+            for pattern in ("pip-*", "roll-*"):
+                for asset in self.directory.glob(pattern):
+                    if asset.is_file() or asset.is_symlink():
+                        asset.unlink(missing_ok=True)
             self.visual_sharing_enabled = False
             self.audio_sharing_enabled = False
             self._audio_observation_times.clear()
@@ -1028,6 +1101,12 @@ class StudioWorkspace:
                              "kind":t["kind"],"duration_ms":t["duration_ms"]}
                             for t in self.tape.view.video_transitions
                         ]
+                    active_videos = []
+                    for clip in self.tape.view.video_broll:
+                        path = self._video_path(clip["asset_sha256"], clip["filename"])
+                        if path.is_symlink() or not path.is_file():
+                            raise StudioError("B-roll video mancante: reimporta l'originale.")
+                        active_videos.append((path, dict(clip)))
                     active_images = []
                     for item in self.tape.view.image_overlays:
                         path = self._image_path(item["asset_sha256"], item["filename"])
@@ -1048,6 +1127,7 @@ class StudioWorkspace:
                         graphic_overlays=graphics,
                         scene_templates=[dict(x) for x in self.tape.view.scene_templates],
                         image_overlays=active_images,
+                        video_broll=active_videos,
                         audio_fx=active_fx, audio_mix=current_audio_mix,
                         video_fx=current_visual_fx,
                         video_transitions=current_transitions,
@@ -1224,6 +1304,9 @@ class StudioHandler(BaseHTTPRequestHandler):
             if path == "/api/image/import":
                 self._import_image()
                 return
+            if path == "/api/video-broll/import":
+                self._import_video_broll()
+                return
             if path == "/api/observation/consent":
                 # Consent is a human Studio action: unlike generic Studio
                 # writes, this endpoint requires a real same-origin request.
@@ -1297,6 +1380,42 @@ class StudioHandler(BaseHTTPRequestHandler):
             self._failed(409 if "in corso" in str(exc) or "Versione" in str(exc) else 400, str(exc))
         except Exception:
             self._failed(500, "Errore interno. Controlla il terminale di Pausio.")
+
+    def _import_video_broll(self) -> None:
+        if self.headers.get("Content-Type") != "application/octet-stream":
+            raise StudioError("Caricamento B-roll video non valido.")
+        size = self._content_length(MAX_BROLL_BYTES)
+        filename = unquote(self.headers.get("X-Filename", ""))
+        try:
+            revision = int(self.headers.get("X-Pausio-Revision", ""))
+            anchor_ms = int(self.headers.get("X-Pausio-Start-Ms", ""))
+        except ValueError as exc:
+            raise StudioError("Cursore o revisione B-roll non validi.") from exc
+        destination, label = self.server.workspace.begin_video_broll_import(filename, revision)
+        completed = False
+        digest = hashlib.sha256()
+        try:
+            fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "wb") as target:
+                remaining = size
+                while remaining:
+                    chunk = self.rfile.read(min(1024 * 1024, remaining))
+                    if not chunk:
+                        raise StudioError("Caricamento B-roll video interrotto.")
+                    target.write(chunk)
+                    digest.update(chunk)
+                    remaining -= len(chunk)
+                target.flush()
+                os.fsync(target.fileno())
+            info = probe(destination)
+            self.server.workspace.finish_video_broll_import(
+                destination, label, digest.hexdigest(), revision, anchor_ms, info
+            )
+            completed = True
+            self._json(200, self.server.workspace.snapshot())
+        finally:
+            if not completed:
+                self.server.workspace.abort_import(destination)
 
     def _import_image(self) -> None:
         if self.headers.get("Content-Type") != "application/octet-stream":
