@@ -69,6 +69,7 @@ ASSETS = {
     "/editorial_ui.js": ("editorial_ui.js", "text/javascript; charset=utf-8"),
     "/image_overlay_ui.js": ("image_overlay_ui.js", "text/javascript; charset=utf-8"),
     "/caption_emphasis_ui.js": ("caption_emphasis_ui.js", "text/javascript; charset=utf-8"),
+    "/caption_emphasis_ui.css": ("caption_emphasis_ui.css", "text/css; charset=utf-8"),
     "/video_broll_ui.js": ("video_broll_ui.js", "text/javascript; charset=utf-8"),
     "/capture": ("capture.html", "text/html; charset=utf-8"),
     "/capture.html": ("capture.html", "text/html; charset=utf-8"),
