@@ -18,6 +18,7 @@
   <script src="/graphic_overlay_ui.js" defer></script>
   <script src="/editorial_ui.js" defer></script>
   <script src="/image_overlay_ui.js" defer></script>
+  <script src="/caption_emphasis_ui.js" defer></script>
   <script src="/video_broll_ui.js" defer></script>
   <script src="/scene_template_ui.js" defer></script>
   <script src="/visual_observation_ui.js" defer></script>
@@ -579,6 +580,7 @@
                   <div class="caption-color-pair">
                     <label>Testo <input type="color" data-caption-setting="text_color" value="#FFFFFF"></label>
                     <label>Contorno <input type="color" data-caption-setting="outline_color" value="#000000"></label>
+                    <label>Parola evidenziata <input type="color" data-caption-setting="highlight_color" value="#FFCD65"></label>
                   </div>
                   <label class="caption-checkbox"><input type="checkbox" data-caption-setting="background"> Sfondo pieno</label>
                   <label>Colore sfondo <input type="color" data-caption-setting="background_color" value="#000000"></label>
@@ -592,6 +594,14 @@
               <div id="caption-active" hidden>
                 <div class="caption-summary"><span id="caption-count"></span><button type="button" class="text-button" id="caption-clear">Rimuovi</button></div>
                 <div id="caption-edit-list" class="caption-edit-list" aria-label="Correzione sottotitoli"></div>
+                <section class="caption-emphasis-panel" aria-labelledby="caption-emphasis-title">
+                  <h4 id="caption-emphasis-title">Evidenzia le parole importanti</h4>
+                  <p class="caption-hint">Scegli una frase e tocca le parole che vuoi colorare. La modalità Focus parola segue il parlato solo se esistono timestamp verificati.</p>
+                  <label for="caption-emphasis-cue">Frase del video</label>
+                  <select id="caption-emphasis-cue" aria-label="Frase per evidenziare le parole"></select>
+                  <div id="caption-emphasis-words" class="caption-emphasis-words" role="group" aria-label="Parole da evidenziare"></div>
+                  <p id="caption-emphasis-status" class="caption-hint" role="status"></p>
+                </section>
                 <p class="caption-hint">Correggi una frase e premi Salva. Ogni modifica viene salvata nel progetto e richiede nuova conferma del montaggio.</p>
               </div>
             </section>
