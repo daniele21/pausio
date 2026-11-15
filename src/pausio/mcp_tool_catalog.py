@@ -148,9 +148,9 @@ TOOLS: list[dict[str, Any]] = [
            "required":["revision","media_id","scope","start_ms","duration_ms"],
            "additionalProperties":False}),
     _tool("pausio_get_scene_templates",
-          "Discover bounded editable full-screen and split-screen scene templates "
-          "(statistics, simulated permission, highlighted code and a creator "
-          "plus animated dashboard with tasks, progress and budget). "
+          "Discover versioned editorial scene templates: short floating insights, "
+          "simulated permission UI, code inspector, metric takeover, classic "
+          "full-screen cards and optional dashboard split. "
           "Return exact fields and defaults. Apply with scene.template.* "
           "commands through pausio_apply_command."),
     _tool("pausio_get_project",
@@ -231,8 +231,10 @@ def capabilities_report() -> dict[str, Any]:
                        "Studio UI supports larger images (up to 12 MiB).",
         "graphic_cards": "Typed stat/title/code/tip cards and animations, using "
                          "graphic.overlay.add/update/remove",
-        "scene_templates": "Four output-timed scene templates (including creator "
-                           "plus animated dashboard split-screen) via "
+        "scene_templates": "Eight output-timed editorial scene templates: "
+                           "face-preserving UI overlays, an intentional short "
+                           "full-screen metric, classic cards and optional "
+                           "dashboard split via "
                            "scene.template.add/update/remove; consult "
                            "pausio_get_scene_templates for validated fields.",
         "audio": "Existing music/FX can be listed, duplicated at another output "

@@ -92,3 +92,13 @@ When changing any video zoom/crop/keyframe, jump-cut transition, automatic visua
 - **Audio MCP observation v1:** reuse `audio_observation.py` (real FFmpeg/stdlib 16kHz mono WAV <=6s), `mcp_audio_observation.py` (typed parameters, MCP audio content, RMS/peak dBFS), and Studio separate session-only consent. The user must click a distinct local audio checkbox; frame consent is not enough. Bind media/revision and fresh preview; rate limit 4 excerpts/min, no arbitrary file/URL or PII logging. See `docs/AUDIO_OBSERVATION_V1.md`.
 
 - **Split dashboard v9:** use `split_dashboard.py` for canonical speaker crop/overlay and ASS dashboard animations; no separate browser-only rendering or arbitrary filters. Validate scene content, source/output time, original audio, v8 migration, actual FFmpeg pixels (upper dark/lower speaker), range previews and Playwright UI. Read `docs/SPLIT_DASHBOARD_V1.md` and `schemas/pausio-project-v9.schema.json`.
+
+- **Editorial Motion v10:** No always-on split. Short upper-field product-like
+  `floating_insight`, simulated `permission_mock`, local `code_inspector`,
+  rare full-frame `metric_spotlight`; default is source face. Use
+  `editorial_cards.py` as pure renderer feeding the SAME ASS/FFmpeg graph.
+  Output-time scenes; typed `scene.template.*` in `ProjectTape` with strict v10
+  schema, catalog-driven Studio/MCP inspector, no HTML-as-renderer.
+  Never silently display unverified source data as fact or fabricated mock
+  as real screenshot. Follow `docs/EDITORIAL_MOTION_SYSTEM_V1.md` and
+  `docs/EDITORIAL_PASSWORD_VIDEO_PLAN.md` for this creator's test scenario.

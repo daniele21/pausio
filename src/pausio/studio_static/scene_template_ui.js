@@ -1,5 +1,5 @@
 "use strict";
-/* Full-screen social scene templates: one typed ProjectTape event per scene.
+/* Modular editorial scene templates: one typed ProjectTape event per beat.
    Schema/defaults come from Python Studio snapshot, never from a JS renderer. */
 (() => {
   const el=id=>document.getElementById(id);
@@ -106,7 +106,7 @@
     const durationLabel=document.createElement("label");
     durationLabel.textContent="Durata (ms)";
     const durationInput=document.createElement("input");
-    durationInput.type="number";durationInput.min="2500";durationInput.max="12000";
+    durationInput.type="number";durationInput.min=String(fmt.min_duration_ms);durationInput.max=String(fmt.max_duration_ms);
     durationInput.step="100";durationInput.value=String(scene.duration_ms);
     durationLabel.append(durationInput);
     const accentLabel=document.createElement("label");
@@ -122,7 +122,7 @@
       const changed={...scene,
         content:readFields(controlsBox,fmt),
         start_ms:validatedTime(startInput,0,output()-1,"l'inizio"),
-        duration_ms:validatedTime(durationInput,2500,12000,"la durata"),
+        duration_ms:validatedTime(durationInput,fmt.min_duration_ms,fmt.max_duration_ms,"la durata"),
         accent:accent.value
       };
       await edit("scene.template.update",{scene:changed});
@@ -131,13 +131,14 @@
     const remove=button("Rimuovi scena",()=>edit(
       "scene.template.remove",{scene_id:scene.id}));
     remove.classList.add("scene-remove");
-    if(fmt.layout==="split_vertical"){
-      const hint=document.createElement("p");
-      hint.className="visual-fx-status";
-      hint.textContent="Dashboard sopra e volto sotto: la voce rimane originale. "
-        +"La posizione del volto si regola in «Modifica testo e durata».";
-      card.append(hint);
-    }
+    const hint=document.createElement("p");
+    hint.className="visual-fx-status";
+    hint.textContent=fmt.layout==="split_vertical"
+      ? "Layout split, soltanto per questa scena; posizione del volto regolabile."
+      : fmt.layout==="overlay"
+      ? "Overlay temporaneo: il volto rimane a pieno schermo, sotto la grafica."
+      : "Inserto grafico: al termine ritorna la ripresa originale.";
+    card.append(hint);
     card.append(header,range,actions,details,remove);
     return card;
   }
@@ -155,14 +156,19 @@
   }
   function refreshFields(){
     const fmt=format(el("scene-template-kind").value);
-    if(fmt)controls(el("scene-template-fields"),fmt);
+    if(!fmt)return;
+    controls(el("scene-template-fields"),fmt);
+    const duration=el("scene-template-duration");
+    duration.min=String(fmt.min_duration_ms);
+    duration.max=String(fmt.max_duration_ms);
+    duration.value=String(fmt.recommended_duration_ms);
   }
   async function add(){
     if(!project?.plan)throw Error("Prepara prima un montaggio.");
     const fmt=format(el("scene-template-kind").value);
     if(!fmt)throw Error("Seleziona un template.");
     const duration=validatedTime(el("scene-template-duration"),
-                                 2500,12000,"la durata");
+                                 fmt.min_duration_ms,fmt.max_duration_ms,"la durata");
     const at=Math.max(0,Math.min(output()-duration,now()));
     const scene={
       id:slug(),template:fmt.id,start_ms:at,duration_ms:duration,
@@ -172,17 +178,55 @@
     if(output()<duration)throw Error("Il video è troppo corto per questa scena.");
     await edit("scene.template.add",{scene});
   }
+  function drawSequence(){
+    const map=el("scene-sequence-map");
+    if(!map)return;
+    map.replaceChildren();
+    if(!project?.plan || output()<=0)return;
+    const sorted=[...scenes()].sort((a,b)=>a.start_ms-b.start_ms);
+    let cursor=0;
+    function beat(start,end,layout,label){
+      if(end<=start)return;
+      const node=document.createElement("button");
+      node.type="button";
+      node.className="scene-sequence-beat scene-sequence-"+layout;
+      node.style.flexGrow=String(end-start);
+      node.title=label+" · "+msFormat(start,true)+"–"+msFormat(end,true);
+      node.setAttribute("aria-label",node.title);
+      node.textContent=label;
+      node.disabled=working();
+      node.addEventListener("click",()=>{
+        const source=sourceFromOutput(start);
+        v.pause();
+        v.currentTime=(mode==="rendered"?start:source)/1000;
+        timelineLocate(source);
+      });
+      map.append(node);
+    }
+    for(const scene of sorted){
+      beat(cursor,scene.start_ms,"face","Volto");
+      const fmt=format(scene.template);
+      beat(scene.start_ms,scene.start_ms+scene.duration_ms,
+           fmt?.layout==="overlay"?"overlay":
+           fmt?.layout==="split_vertical"?"split":"full",
+           fmt?.layout==="overlay"?"Overlay":
+           fmt?.layout==="split_vertical"?"Split":"Grafica");
+      cursor=scene.start_ms+scene.duration_ms;
+    }
+    beat(cursor,output(),"face","Volto");
+  }
   function draw(){
     ensureChoices();
     const ready=!!project?.plan&&!working();
-    el("scene-template-add").disabled=!ready||scenes().length>=9;
+    el("scene-template-add").disabled=!ready||scenes().length>=16;
     const status=el("scene-template-status");
     status.textContent=project?.plan
-      ? scenes().length+"/9 scene · layout intero o split-screen; la voce originale continua. "
-        +"Per vedere il risultato usa «Guarda 5 s»."
+      ? scenes().length+"/16 inserti · alterna volto, overlay e schermate intere. "
+        +"Le pause senza grafiche mantengono il volto normale. «Guarda 5 s» genera la preview FFmpeg."
       : "Importa un video e prepara un montaggio per aggiungere scene.";
     const list=el("scene-template-list");list.replaceChildren();
-    for(const item of scenes())list.append(makeCard(item));
+    for(const item of [...scenes()].sort((a,b)=>a.start_ms-b.start_ms))list.append(makeCard(item));
+    drawSequence();
     for(const node of list.querySelectorAll("input,textarea,select,button"))node.disabled=working();
   }
   el("scene-template-kind").addEventListener("change",refreshFields);

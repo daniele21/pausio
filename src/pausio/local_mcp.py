@@ -195,8 +195,8 @@ def call_tool(name: str, arguments: dict, studio: StudioClient) -> dict:
         return capabilities_report()
     if name == "pausio_get_scene_templates":
         return {"templates": scene_template_catalog(), "timebase": "output",
-                "min_duration_ms": 2500, "max_duration_ms": 12000,
-                "max_scenes": 9, "audio": "Original voice and existing mix remain."}
+                "min_duration_ms": 900, "max_duration_ms": 12000,
+                "max_scenes": 16, "audio": "Original voice and existing mix remain."}
     if name == "pausio_list_assets":
         return inventory(studio.request("GET", "/api/state"))
     if name == "pausio_get_visual_context":

@@ -110,3 +110,7 @@ the rendered A56/Mac video for typography and audio before approving.
 **Next capability implemented separately:** [Frame observation v1](VISUAL_OBSERVATION_V1.md) for creator-authorized source/preview snapshots. Still does not include audio observation or automatic scene quality scoring.
 
 **Formato v9:** `dashboard_split` integra una dashboard animata e il creator nella fascia inferiore. [Guida](SPLIT_DASHBOARD_V1.md).
+
+**Editorial Motion v10:** quattro nuovi modelli temporanei / layout overlay e fullscreen,
+durate <2,5s dove appropriato, mappa sequenza e nessuno split fisso.
+[Guida](EDITORIAL_MOTION_SYSTEM_V1.md).
