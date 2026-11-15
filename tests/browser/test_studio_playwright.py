@@ -1204,6 +1204,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertEqual(highlighted["captions"][0]["emphasis_indices"],[1])
         self.assertEqual(self.page.locator(".caption-emphasis-word[aria-pressed='true']").count(),1)
         # Customizing appearance must NOT disable the word-aligned highlight.
+        self.page.locator("#caption-appearance summary").click()
         picker=self.page.locator('[data-caption-setting="highlight_color"]')
         picker.fill("#00aaff")
         picker.dispatch_event("change")
