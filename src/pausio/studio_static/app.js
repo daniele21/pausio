@@ -796,7 +796,7 @@ function updateCaptionOverlay(){
   overlay.style.background=config.background?config.background_color+"CC":"transparent";
   const value=cue?.text||"";
   const selected=new Set(cue?.emphasis_indices||[]);
-  const wordArray=cue?.words?.length?cue.words.map(w=>w.text):value.match(/\\S+/g)||[];
+  const wordArray=cue?.words?.length?cue.words.map(w=>w.text):value.match(/\S+/g)||[];
   const active=cue?.words?.findIndex(w=>at>=w.start_ms&&at<w.end_ms)??-1;
   const focus=config.preset==="word_focus"&&active>=0?active:-1;
   const key=JSON.stringify([cue?.id,value,[...selected],focus,config.highlight_color]);
