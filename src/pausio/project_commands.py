@@ -26,8 +26,9 @@ from pausio.scene_templates import validate_scene, validate_scenes
 from pausio.planner import CUT_PRESETS, validate_cut_settings
 
 FORMAT = "pausio.project"
-VERSION = 11
-PREVIOUS_VERSION = 10
+VERSION = 12
+PREVIOUS_VERSION = 11
+V10_VERSION = 10
 V9_VERSION = 9
 V8_VERSION = 8
 V7_VERSION = 7
@@ -54,6 +55,7 @@ _TYPES = frozenset({
     "timeline.approve",
     "caption.set",
     "caption.correct",
+    "caption.emphasize",
     "caption.retime",
     "caption.style",
     "caption.configure",
@@ -176,10 +178,10 @@ def _captions(raw: Any, duration_ms: int) -> list[dict]:
     ids = set()
     result = []
     for row in raw:
-        if not isinstance(row, dict) or set(row) not in (
-            {"id", "start_ms", "end_ms", "text"},
-            {"id", "start_ms", "end_ms", "text", "words"}
-        ):
+        allowed = {"id", "start_ms", "end_ms", "text", "words", "emphasis_indices"}
+        if (not isinstance(row, dict) or
+                not {"id", "start_ms", "end_ms", "text"} <= set(row) or
+                set(row) - allowed):
             raise ProjectFormatError("caption: campi non validi.")
         cue = row
         ident = _id(cue["id"], "caption.id")
@@ -211,6 +213,16 @@ def _captions(raw: Any, duration_ms: int) -> list[dict]:
             if joined != caption["text"]:
                 raise ProjectFormatError("Parole allineate diverse dal sottotitolo.")
             caption["words"] = verified
+        if "emphasis_indices" in cue:
+            chosen = cue["emphasis_indices"]
+            tokens = len(caption.get("words", [])) or len(caption["text"].split())
+            if (not isinstance(chosen, list) or len(chosen) > 6 or
+                    any(type(i) is not int or not 0 <= i < tokens for i in chosen) or
+                    len(set(chosen)) != len(chosen) or
+                    chosen != sorted(chosen)):
+                raise ProjectFormatError("Enfasi: scegli fino a 6 parole valide, senza duplicati.")
+            if chosen:
+                caption["emphasis_indices"] = list(chosen)
         result.append(caption)
     return result
 
@@ -508,9 +520,21 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
             # Once edited, the ASR word text no longer proves individual
             # timestamps. Invalidate word alignment instead of guessing.
             captions = [
-                {**{k:v for k,v in c.items() if k != "words"}, "text": text}
+                {**{k:v for k,v in c.items() if k not in {"words", "emphasis_indices"}}, "text": text}
                 if c["id"] == ident else c for c in captions
             ]
+            approved = False
+        elif kind == "caption.emphasize":
+            _object(payload, {"caption_id", "indices"}, kind)
+            ident = _id(payload["caption_id"], "caption_id")
+            if not any(c["id"] == ident for c in captions):
+                raise ProjectFormatError("Sottotitolo da evidenziare inesistente.")
+            proposed = [
+                {**{k: v for k, v in cue.items() if k != "emphasis_indices"},
+                 "emphasis_indices": payload["indices"]}
+                if cue["id"] == ident else cue for cue in captions
+            ]
+            captions = _captions(proposed, duration)
             approved = False
         elif kind == "caption.retime":
             _object(payload, {"caption_id", "start_ms", "end_ms"}, kind)
@@ -928,7 +952,7 @@ class ProjectTape:
             # V1 files are intentionally read-only inputs; exporting always
             # upgrades to V2 with cursor at the end and preserved event IDs.
             return cls(obj["media"], obj["commands"])
-        if version in (MIGRATION_VERSION, V3_VERSION, V4_VERSION, V5_VERSION, V6_VERSION, V7_VERSION, V8_VERSION, V9_VERSION, PREVIOUS_VERSION, VERSION):
+        if version in (MIGRATION_VERSION, V3_VERSION, V4_VERSION, V5_VERSION, V6_VERSION, V7_VERSION, V8_VERSION, V9_VERSION, V10_VERSION, PREVIOUS_VERSION, VERSION):
             obj = _object(
                 document,
                 {"format", "schema_version", "media", "commands",
