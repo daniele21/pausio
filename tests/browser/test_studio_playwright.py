@@ -1168,6 +1168,52 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.shot("transcript-compact-1440")
         self.assertFalse(self.errors,self.errors)
 
+    def test_semantic_word_emphasis_color_and_word_focus_in_studio(self):
+        """Manual token click is an edit event; custom color retains word timing."""
+        from unittest.mock import patch
+        self.upload_analyze()
+        self.page.locator('[data-workspace-nav="transcript"]').click()
+        transcript={
+            "provider":"pausio-local", "backend":"mlx-whisper", "model":"test",
+            "language":"it", "text":"Tre parole importanti.",
+            "word_timestamps_available":True,
+            "segments":[{
+                "start_ms":100,"end_ms":1100,"text":"Tre parole importanti.",
+                "words":[
+                    {"start_ms":100,"end_ms":300,"text":"Tre"},
+                    {"start_ms":300,"end_ms":650,"text":"parole"},
+                    {"start_ms":650,"end_ms":1100,"text":"importanti."}
+                ]
+            }]
+        }
+        with patch("pausio.studio.transcribe_video_local",return_value=transcript):
+            self.page.locator("#transcribe-action").click()
+            self.wait_state("transcribe","completed")
+        self.page.locator("#caption-style").select_option("word_focus")
+        self.page.locator("#caption-generate").click()
+        self.wait_condition(lambda:len(self.state()["captions"])>0)
+        cue=self.state()["captions"][0]
+        self.assertEqual(len(cue["words"]),3)
+        self.page.locator("#caption-emphasis-cue").select_option(cue["id"])
+        words=self.page.locator(".caption-emphasis-word")
+        self.assertEqual(words.count(),3)
+        before=self.state()["project_revision"]
+        words.nth(1).click()
+        highlighted=self.wait_state("revision",before+1)
+        self.assertEqual(highlighted["last_command"],"caption.emphasize")
+        self.assertEqual(highlighted["captions"][0]["emphasis_indices"],[1])
+        self.assertEqual(self.page.locator(".caption-emphasis-word[aria-pressed='true']").count(),1)
+        # Customizing appearance must NOT disable the word-aligned highlight.
+        picker=self.page.locator('[data-caption-setting="highlight_color"]')
+        picker.fill("#00aaff")
+        picker.dispatch_event("change")
+        customized=self.wait_state("revision",highlighted["project_revision"]+1)
+        self.assertEqual(customized["caption_config"]["highlight_color"],"#00AAFF")
+        self.assertEqual(customized["caption_config"]["motion_mode"],"word_focus")
+        self.assertEqual(customized["caption_config"]["preset"],"custom")
+        self.assertFalse(customized["approved"])
+        self.assertFalse(self.errors,self.errors)
+
     def test_generate_edit_and_preview_social_captions_in_browser(self):
         from unittest.mock import patch
         initial=self.upload_analyze()
