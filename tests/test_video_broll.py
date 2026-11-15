@@ -46,7 +46,7 @@ class VideoBrollTests(unittest.TestCase):
         invalid = (
             {"asset_sha256": "wrong"}, {"id": "bad"}, {"filename": "../bad.mp4"},
             {"filename": "https://host/roll.mp4"}, {"filename": "bad.svg"},
-            {"mode": "shell"}, {"start_ms": True}, {"start_ms": 2900},
+            {"mode": "shell"}, {"mode": []}, {"start_ms": True}, {"start_ms": 2900},
             {"duration_ms": 20_001}, {"media_in_ms": -1},
             {"x_pct": -1}, {"width_pct": 100}, {"user_filter": "eval=abc"},
         )
