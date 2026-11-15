@@ -1,0 +1,21 @@
+/* Compact word selection within Studio's existing caption inspector. */
+.caption-emphasis-panel{
+  margin-top:14px;padding:14px;border:1px solid var(--line,rgba(255,255,255,.13));
+  border-radius:12px;background:rgba(128,128,128,.035);
+}
+.caption-emphasis-panel h4{font-size:14px;font-weight:650;margin:0 0 8px}
+.caption-emphasis-panel label{display:block;margin:12px 0 6px;font-size:12px}
+#caption-emphasis-cue{display:block;width:100%;max-width:100%;padding:9px;border-radius:9px}
+.caption-emphasis-words{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0;min-height:34px}
+.caption-emphasis-word{
+  border:1px solid rgba(125,125,125,.45);background:transparent;
+  color:inherit;border-radius:8px;padding:7px 11px;font:inherit;
+  font-size:13px;font-weight:650;cursor:pointer;
+  transition:background-color .15s,border-color .15s;
+}
+.caption-emphasis-word[aria-pressed="true"]{
+  color:var(--word-accent);border-color:var(--word-accent);
+  background:rgba(128,128,128,.12);
+}
+.caption-emphasis-word:focus-visible{outline:2px solid currentColor;outline-offset:2px}
+.caption-emphasis-word:disabled{opacity:.55;cursor:not-allowed}
