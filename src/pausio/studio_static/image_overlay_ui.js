@@ -127,9 +127,9 @@
     const surface=el("timeline-surface"),track=el("timeline-broll-track");
     const lane=el("broll-lane");lane.replaceChildren();
     const visible=!!project?.plan&&!!project?.media&&
-      (images().length>0||el("app").dataset.workspace==="broll");
+      (images().length>0||(project?.video_broll||[]).length>0||el("app").dataset.workspace==="broll");
     track.hidden=!visible;surface.classList.toggle("has-broll",visible);
-    el("broll-lane-empty").hidden=images().length>0;
+    el("broll-lane-empty").hidden=images().length>0||(project?.video_broll||[]).length>0;
     if(!visible)return;
     const duration=project.media.duration_ms;
     for(const image of images()) {
