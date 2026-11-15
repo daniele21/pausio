@@ -24,23 +24,23 @@ CAPTION_PRESETS = {
     "social": {"preset": "social", "x_pct": 50, "y_pct": 80, "font_size": 64,
                "font_family": DEFAULT_CAPTION_FONT,
                "text_color": "#FFFFFF", "outline_color": "#000000",
-               "outline_size": 4, "background": False, "background_color": "#000000"},
+               "outline_size": 4, "background": False, "background_color": "#000000", "highlight_color": "#FFCD65"},
     "minimal": {"preset": "minimal", "x_pct": 50, "y_pct": 82, "font_size": 48,
                 "font_family": DEFAULT_CAPTION_FONT,
                 "text_color": "#FFFFFF", "outline_color": "#000000",
-                "outline_size": 3, "background": False, "background_color": "#000000"},
+                "outline_size": 3, "background": False, "background_color": "#000000", "highlight_color": "#FFCD65"},
     "boxed": {"preset": "boxed", "x_pct": 50, "y_pct": 76, "font_size": 56,
               "font_family": DEFAULT_CAPTION_FONT,
               "text_color": "#FFFFFF", "outline_color": "#000000",
-              "outline_size": 3, "background": True, "background_color": "#161616"},
+              "outline_size": 3, "background": True, "background_color": "#161616", "highlight_color": "#FFCD65"},
     "kinetic": {"preset": "kinetic", "x_pct": 50, "y_pct": 78, "font_size": 72,
                 "font_family": DEFAULT_CAPTION_FONT,
                 "text_color": "#FFFFFF", "outline_color": "#000000",
-                "outline_size": 4, "background": False, "background_color": "#000000"},
+                "outline_size": 4, "background": False, "background_color": "#000000", "highlight_color": "#FFCD65"},
     "word_focus": {"preset": "word_focus", "x_pct": 50, "y_pct": 78, "font_size": 68,
                    "font_family": DEFAULT_CAPTION_FONT,
                    "text_color": "#FFFFFF", "outline_color": "#000000",
-                   "outline_size": 4, "background": False, "background_color": "#000000"},
+                   "outline_size": 4, "background": False, "background_color": "#000000", "highlight_color": "#FFCD65"},
 }
 CAPTION_CONFIG_FIELDS = frozenset(CAPTION_PRESETS["social"])
 CAPTION_CONFIG_RANGES = {
@@ -55,19 +55,23 @@ def validate_caption_config(raw: object) -> dict[str, Any]:
     # Projects created before font selection did not contain font_family.
     # Normalize only this known legacy omission. Other unknown/missing fields
     # remain rejected; replay of older .pausio.json stays deterministic.
-    old_fields = CAPTION_CONFIG_FIELDS - {"font_family"}
-    if not isinstance(raw, dict) or set(raw) not in (
-        CAPTION_CONFIG_FIELDS, old_fields
-    ):
+    legacy_keys = (
+        CAPTION_CONFIG_FIELDS,
+        CAPTION_CONFIG_FIELDS - {"font_family"},
+        CAPTION_CONFIG_FIELDS - {"highlight_color"},
+        CAPTION_CONFIG_FIELDS - {"font_family", "highlight_color"},
+    )
+    if not isinstance(raw, dict) or set(raw) not in legacy_keys:
         raise ValueError("Configurazione sottotitoli incompleta o non valida.")
-    config = {"font_family": DEFAULT_CAPTION_FONT, **raw}
+    config = {"font_family": DEFAULT_CAPTION_FONT,
+              "highlight_color": "#FFCD65", **raw}
     preset = config["preset"]
     if not isinstance(preset, str) or preset not in (*CAPTION_STYLES, "custom"):
         raise ValueError("Preset sottotitoli sconosciuto.")
     for key, (minimum, maximum) in CAPTION_CONFIG_RANGES.items():
         if type(config[key]) is not int or not minimum <= config[key] <= maximum:
             raise ValueError(f"{key}: inserisci un intero tra {minimum} e {maximum}.")
-    for key in ("text_color", "outline_color", "background_color"):
+    for key in ("text_color", "outline_color", "background_color", "highlight_color"):
         if not isinstance(config[key], str) or not _COLOR_RE.fullmatch(config[key]):
             raise ValueError(f"{key}: usa un colore esadecimale #RRGGBB.")
     if type(config["background"]) is not bool:
@@ -220,11 +224,14 @@ def remap_captions(
                 continue
             aligned = cue.get("words")
             clipped_words = []
+            clipped_indices = []
             if aligned:
-                for word in aligned:
+                for original_index, word in enumerate(aligned):
                     # A clipped partial word must not become a fabricated
                     # full-word highlight in the output timeline.
                     if start <= word["start_ms"] and word["end_ms"] <= end:
+                        if original_index in cue.get("emphasis_indices", []):
+                            clipped_indices.append(len(clipped_words))
                         clipped_words.append({
                             "start_ms": offset + word["start_ms"]-segment.start_ms,
                             "end_ms": offset + word["end_ms"]-segment.start_ms,
@@ -239,6 +246,12 @@ def remap_captions(
             }
             if clipped_words:
                 mapped["words"] = clipped_words
+                if clipped_indices:
+                    mapped["emphasis_indices"] = clipped_indices
+            elif "emphasis_indices" in cue:
+                # Without certified word timing the full caption text is
+                # retained; semantic highlights remain phrase-level only.
+                mapped["emphasis_indices"] = list(cue["emphasis_indices"])
             output.append(mapped)
         offset += segment.end_ms - segment.start_ms
     return output
@@ -266,6 +279,39 @@ def _ass_color(rgb: str, *, alpha: str = "00") -> str:
     return f"&H{alpha}{rgb[5:7]}{rgb[3:5]}{rgb[1:3]}".upper()
 
 
+def _colored_words(
+    text: str, indices: set[int], normal: str, accent: str,
+    words: list[dict] | None = None,
+) -> str:
+    """Color selected textual spans without ever evaluating ASS input tags."""
+    if not indices:
+        return text
+    spans = []
+    if words:
+        cursor = 0
+        for word in words:
+            token = _ass_text(word["text"])
+            at = text.find(token, cursor)
+            if at < 0:
+                return text
+            spans.append((at, at + len(token)))
+            cursor = at + len(token)
+    else:
+        spans = [(m.start(), m.end()) for m in re.finditer(r"\S+", text)]
+    out = []
+    cursor = 0
+    for index, (start, end) in enumerate(spans):
+        out.append(text[cursor:start])
+        part = text[start:end]
+        if index in indices:
+            out.append("{\\c" + accent + "}" + part + "{\\c" + normal + "}")
+        else:
+            out.append(part)
+        cursor = end
+    out.append(text[cursor:])
+    return "".join(out)
+
+
 def ass_document(
     cues: list[dict], *, style: str = "social",
     settings: dict[str, Any] | None = None
@@ -281,6 +327,7 @@ def ass_document(
     y = round(config["y_pct"] * 1920 / 100)
     border_style = 3 if config["background"] else 1
     foreground = _ass_color(config["text_color"])
+    accent = _ass_color(config["highlight_color"])
     stroke = _ass_color(config["outline_color"])
     background = _ass_color(config["background_color"], alpha="30")
     header = (
@@ -306,6 +353,9 @@ def ass_document(
             continue
         value = _ass_text(cue["text"])
         if value:
+            emphasis = set(cue.get("emphasis_indices", []))
+            colored = _colored_words(value, emphasis, foreground, accent,
+                                     cue.get("words"))
             # This is a phrase entrance, not synthesized per-word alignment.
             # Source times remain authoritative and ASS tags are allowlisted.
             if config["preset"] == "kinetic":
@@ -317,29 +367,23 @@ def ass_document(
                 motion = ""
             events.append(
                 f"Dialogue: 0,{_ass_time(start)},{_ass_time(end)},"
-                f"Caption,,0,0,0,,{{\\an5\\pos({x},{y}){motion}}}{value}\n"
+                f"Caption,,0,0,0,,{{\\an5\\pos({x},{y}){motion}}}{colored}\n"
             )
             if config["preset"] == "word_focus" and cue.get("words"):
                 # Highlight only timed, verified words. Full-phrase base text
                 # remains stable in gaps; overlays use a fixed local ASS
                 # template and exact word starts/ends, never estimated timing.
-                cursor = 0
-                for word in cue["words"]:
-                    token = _ass_text(word["text"])
-                    position = value.find(token, cursor)
-                    if not token or position < 0:
-                        continue
-                    cursor = position + len(token)
+                for index, word in enumerate(cue["words"]):
                     word_start = max(start, word["start_ms"])
                     word_end = min(end, word["end_ms"])
                     if word_end - word_start < 50:
                         continue
-                    normal = foreground
-                    emphasis = _ass_color("#FFCD65")
-                    prefix = value[:position]
-                    suffix = value[cursor:]
-                    highlighted = (prefix + "{\\c" + emphasis + "}" + token +
-                                   "{\\c" + normal + "}" + suffix)
+                    # The active spoken word always receives the accent;
+                    # manually selected words remain colored throughout.
+                    highlighted = _colored_words(
+                        value, emphasis | {index}, foreground, accent,
+                        cue["words"],
+                    )
                     events.append(
                         f"Dialogue: 1,{_ass_time(word_start)},{_ass_time(word_end)},"
                         f"Caption,,0,0,0,,{{\\an5\\pos({x},{y})}}{highlighted}\\n"
