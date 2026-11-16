@@ -317,6 +317,10 @@ class StudioPlaywrightAudit(unittest.TestCase):
             str(self.root/"audit-video.mp4"))
         imported=self.wait_state("revision",updated["project_revision"]+1)
         self.assertEqual(len(imported["video_broll"]),1)
+        self.assertGreater(self.page.locator(".broll-video-mark").count(),0)
+        self.page.locator('[data-workspace-nav="visual"]').click()
+        self.page.locator('[data-workspace-nav="broll"]').click()
+        self.assertGreater(self.page.locator(".broll-video-mark").count(),0)
         card=self.page.locator("#video-broll-list [data-roll-id]").first
         card.locator("details").first.evaluate("(node)=>node.open=true")
         video_motion=card.locator("details").nth(1)
