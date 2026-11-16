@@ -283,6 +283,38 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertEqual(gone["image_overlays"],[])
         self.assertFalse(self.errors,self.errors)
 
+    def test_graphic_custom_entrance_exit_reversible_browser_preview(self):
+        """Creator sets independent motion phases and sees the FFmpeg result."""
+        initial=self.upload_analyze()
+        self.page.locator('[data-workspace-nav="cuts"]').click()
+        first=initial["editor_segments"][0]
+        self.page.evaluate(
+            "(ms)=>{document.querySelector('#preview-video').currentTime=ms/1000}",
+            first["start_ms"]+180)
+        self.page.locator("#graphic-text").fill("Tre controlli")
+        self.page.locator("#graphic-duration").fill("800")
+        self.page.locator("#graphic-motion-advanced summary").click()
+        self.page.locator("#graphic-motion-enabled").check()
+        self.page.locator("#graphic-motion-enter").select_option("slide_left")
+        self.page.locator("#graphic-motion-exit").select_option("slide_right")
+        self.page.locator("#graphic-motion-enter-ms").fill("150")
+        self.page.locator("#graphic-motion-exit-ms").fill("150")
+        self.page.locator("#graphic-add").click()
+        result=self.wait_state("revision",initial["project_revision"]+1)
+        self.assertEqual(len(result["graphic_overlays"]),1)
+        motion=result["graphic_overlays"][0]["motion"]
+        self.assertEqual(motion,{"enter":"slide_left","exit":"slide_right",
+                                 "enter_ms":150,"exit_ms":150})
+        self.page.locator("#graphic-preview").click()
+        preview=self.wait_state("preview","completed",timeout=120000)
+        self.assertTrue(preview["preview_ready"])
+        self.assertFalse(preview["approved"])
+        self.shot("graphic-custom-motion-preview")
+        self.page.keyboard.press("Control+z")
+        undone=self.wait_state("revision",preview["project_revision"]+1)
+        self.assertFalse(undone["graphic_overlays"])
+        self.assertFalse(self.errors,self.errors)
+
     def test_graphic_overlay_typed_edit_and_real_ffmpeg_preview(self):
         """Add source-bound graphic card, render actual ASS and undo/import."""
         initial=self.upload_analyze()
@@ -543,7 +575,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
         exported=self.root/"visual-fx.pausio.json"
         download.value.save_as(exported)
         document=json.loads(exported.read_text())
-        self.assertEqual(document["schema_version"],12)
+        self.assertEqual(document["schema_version"],13)
         self.assertIn("video.transform.update",[row["type"] for row in document["commands"]])
         self.assertFalse(self.errors,self.errors)
 
@@ -1024,7 +1056,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
             self.page.locator("#project-export").click()
         saved=self.root/"project.pausio.json";download.value.save_as(saved)
         data=json.loads(saved.read_text())
-        self.assertEqual(data["schema_version"],12)
+        self.assertEqual(data["schema_version"],13)
         self.assertIn("segment.update",[c["type"] for c in data["commands"]])
 
         self.page.locator("#preview-action").click()

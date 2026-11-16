@@ -5,7 +5,9 @@
   const graphics=()=>project?.graphic_overlays||[];
   const value=id=>e(id).value;
   const fields=["graphic-text","graphic-kind","graphic-animation","graphic-duration",
-                "graphic-x","graphic-y","graphic-size","graphic-color"];
+                "graphic-x","graphic-y","graphic-size","graphic-color",
+                "graphic-motion-enabled","graphic-motion-enter","graphic-motion-enter-ms",
+                "graphic-motion-exit","graphic-motion-exit-ms"];
   const integer=(id,lo,hi)=>{
     const node=e(id);
     if(!node.checkValidity())throw Error("Parametro grafico fuori dai limiti: "+id);
@@ -14,6 +16,69 @@
     return number;
   };
   const makeId=()=>crypto.randomUUID().replaceAll("-","");
+
+  const enterOptions=[
+    ["pop","Pop"],["fade","Fade"],["slide_up","Slide dal basso"],
+    ["slide_left","Slide da sinistra"],["none","Nessuna"]
+  ];
+  const exitOptions=[
+    ["fade","Fade"],["shrink","Shrink"],["slide_down","Slide verso il basso"],
+    ["slide_right","Slide verso destra"],["none","Nessuna"]
+  ];
+  const setDurationByMode=(modeField,durationField)=>{
+    if(modeField.value==="none")durationField.value="0";
+    else if(Number(durationField.value)===0)durationField.value="180";
+  };
+  const readMotion=(enabled,enter,leave,inMs,outMs)=>{
+    if(!enabled.checked)return null;
+    for(const node of [inMs,outMs]){
+      if(!node.checkValidity()||!Number.isInteger(Number(node.value)))
+        throw Error("Inserisci durate motion valide, tra 0 e 800 ms.");
+    }
+    return {enter:enter.value,exit:leave.value,
+            enter_ms:Number(inMs.value),exit_ms:Number(outMs.value)};
+  };
+  const makeMotionInspector=(graphic)=>{
+    const panel=document.createElement("details");
+    panel.className="pip-advanced";
+    const summary=document.createElement("summary");
+    summary.textContent="Entrata e uscita";
+    panel.open=!!graphic.motion;panel.append(summary);
+    const activeLabel=document.createElement("label");
+    const active=document.createElement("input");
+    active.type="checkbox";active.checked=!!graphic.motion;
+    activeLabel.append(active,document.createTextNode(" Personalizza il movimento"));
+    panel.append(activeLabel);
+    const grid=document.createElement("div");grid.className="visual-fx-edit-grid";
+    const choice=(label,selected,options)=>{
+      const wrapper=document.createElement("label");
+      wrapper.textContent=label;
+      const element=document.createElement("select");
+      element.setAttribute("aria-label",label+" grafica");
+      for(const [value,title] of options){
+        const option=document.createElement("option");option.value=value;
+        option.textContent=title;element.append(option);
+      }
+      element.value=selected;wrapper.append(element);grid.append(wrapper);
+      return element;
+    };
+    const number=(label,initial)=>{
+      const wrapper=document.createElement("label");wrapper.textContent=label;
+      const element=document.createElement("input");
+      element.type="number";element.min="0";element.max="800";element.step="10";
+      element.value=String(initial);element.setAttribute("aria-label",label+" grafica");
+      wrapper.append(element);grid.append(wrapper);
+      return element;
+    };
+    const enter=choice("Entrata",graphic.motion?.enter||"pop",enterOptions);
+    const enterMs=number("Durata entrata (ms)",graphic.motion?.enter_ms??240);
+    const leave=choice("Uscita",graphic.motion?.exit||"fade",exitOptions);
+    const exitMs=number("Durata uscita (ms)",graphic.motion?.exit_ms??180);
+    enter.addEventListener("change",()=>setDurationByMode(enter,enterMs));
+    leave.addEventListener("change",()=>setDurationByMode(leave,exitMs));
+    panel.append(grid);
+    return {panel,read:()=>readMotion(active,enter,leave,enterMs,exitMs)};
+  };
   const rowFor=(graphic)=>{
     const node=document.createElement("div");
     node.className="visual-fx-entry";
@@ -70,6 +135,7 @@
     colorField.type="color";colorField.value=graphic.color.toLowerCase();
     colorField.setAttribute("aria-label","Colore grafica");
     colorLabel.append(colorField);controls.append(colorLabel);
+    const motionInspector=makeMotionInspector(graphic);
     const actions=document.createElement("div");
     actions.className="visual-fx-entry-actions";
     const button=(title,callback)=>{
@@ -93,11 +159,14 @@
             throw Error("Valore non valido: "+title);
           updated[key]=Number(field.value);
         }
+        const motion=motionInspector.read();
+        if(motion)updated.motion=motion;
+        else delete updated.motion;
         await edit("graphic.overlay.update",{graphic:updated});
       }),
       button("Rimuovi",()=>edit("graphic.overlay.remove",{graphic_id:graphic.id})),
     );
-    node.append(summary,input,controls,actions);
+    node.append(summary,input,controls,motionInspector.panel,actions);
     return node;
   };
   function draw(){
@@ -105,6 +174,10 @@
     e("graphic-add").disabled=!available||working();
     e("graphic-preview").disabled=!available||working();
     for(const id of fields)e(id).disabled=working();
+    e("graphic-motion-enter").disabled=working()||!e("graphic-motion-enabled").checked;
+    e("graphic-motion-exit").disabled=working()||!e("graphic-motion-enabled").checked;
+    e("graphic-motion-enter-ms").disabled=working()||!e("graphic-motion-enabled").checked;
+    e("graphic-motion-exit-ms").disabled=working()||!e("graphic-motion-enabled").checked;
     const list=e("graphic-list");
     list.replaceChildren();
     for(const graphic of graphics())list.append(rowFor(graphic));
@@ -133,8 +206,20 @@
       text,kind:value("graphic-kind"),animation:value("graphic-animation"),
       x_pct:x,y_pct:y,font_size:fontSize,color:value("graphic-color").toUpperCase(),
     };
+    const motion=readMotion(
+      e("graphic-motion-enabled"),e("graphic-motion-enter"),
+      e("graphic-motion-exit"),e("graphic-motion-enter-ms"),
+      e("graphic-motion-exit-ms"));
+    if(motion)graphic.motion=motion;
     await edit("graphic.overlay.add",{graphic});
   }
+  e("graphic-motion-enabled").addEventListener("change",draw);
+  e("graphic-motion-enter").addEventListener("change",()=>{
+    setDurationByMode(e("graphic-motion-enter"),e("graphic-motion-enter-ms"));
+  });
+  e("graphic-motion-exit").addEventListener("change",()=>{
+    setDurationByMode(e("graphic-motion-exit"),e("graphic-motion-exit-ms"));
+  });
   e("graphic-add").addEventListener("click",()=>run(add));
   e("graphic-preview").addEventListener("click",()=>run(()=>startJob("preview")));
   window.pausioGraphics={update:draw};

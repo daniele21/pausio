@@ -38,7 +38,7 @@ class SceneTemplateContractTests(unittest.TestCase):
         start = ProjectTape(media()).append("timeline.keep_all", {})
         a = scene("stat_reveal", 0)
         edited = start.append("scene.template.add", {"scene": a})
-        self.assertEqual(edited.as_dict()["schema_version"], 12)
+        self.assertEqual(edited.as_dict()["schema_version"], 13)
         self.assertEqual(edited.view.scene_templates, (a,))
         self.assertFalse(edited.view.approved)
         edited = edited.append("timeline.approve", {})
@@ -54,7 +54,7 @@ class SceneTemplateContractTests(unittest.TestCase):
         self.assertFalse(changed.append("scene.template.remove",
                                        {"scene_id": a["id"]}).view.scene_templates)
         legacy = {**edited.as_dict(), "schema_version": 7}
-        self.assertEqual(ProjectTape.from_dict(legacy).as_dict()["schema_version"],12)
+        self.assertEqual(ProjectTape.from_dict(legacy).as_dict()["schema_version"],13)
 
     def test_safe_failures_dont_mutate_tape(self):
         base = ProjectTape(media()).append("timeline.keep_all", {})

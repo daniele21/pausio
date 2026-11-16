@@ -474,6 +474,40 @@
                   <label>Dimensione <input type="number" id="graphic-size" min="36" max="104" step="2" value="64"></label>
                   <label>Colore <input type="color" id="graphic-color" value="#ffc69f"></label>
                 </div>
+                <details class="caption-appearance" id="graphic-motion-advanced">
+                  <summary>Motion avanzato · entrata e uscita configurabili</summary>
+                  <label class="caption-checkbox">
+                    <input type="checkbox" id="graphic-motion-enabled">
+                    Personalizza entrata e uscita
+                  </label>
+                  <div class="visual-fx-edit-grid">
+                    <label>Entrata
+                      <select id="graphic-motion-enter">
+                        <option value="pop">Pop</option>
+                        <option value="fade">Fade</option>
+                        <option value="slide_up">Slide dal basso</option>
+                        <option value="slide_left">Slide da sinistra</option>
+                        <option value="none">Nessuna</option>
+                      </select>
+                    </label>
+                    <label>Durata entrata (ms)
+                      <input type="number" id="graphic-motion-enter-ms" min="0" max="800" step="10" value="240">
+                    </label>
+                    <label>Uscita
+                      <select id="graphic-motion-exit">
+                        <option value="fade">Fade</option>
+                        <option value="shrink">Shrink</option>
+                        <option value="slide_down">Slide verso il basso</option>
+                        <option value="slide_right">Slide verso destra</option>
+                        <option value="none">Nessuna</option>
+                      </select>
+                    </label>
+                    <label>Durata uscita (ms)
+                      <input type="number" id="graphic-motion-exit-ms" min="0" max="800" step="10" value="180">
+                    </label>
+                  </div>
+                  <p class="caption-hint">Le durate di entrata e uscita devono lasciare almeno 100 ms di permanenza. Per il risultato effettivo usa la preview FFmpeg.</p>
+                </details>
                 <button type="button" class="button button-outline button-full" id="graphic-add" disabled>+ Aggiungi scheda al cursore</button>
                 <p id="graphic-status" class="visual-fx-status" role="status" aria-live="polite"></p>
                 <div id="graphic-list" class="visual-fx-list" aria-label="Schede grafiche applicate"></div>
