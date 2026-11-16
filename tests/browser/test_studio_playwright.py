@@ -283,6 +283,65 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertEqual(gone["image_overlays"],[])
         self.assertFalse(self.errors,self.errors)
 
+    def test_media_image_and_video_motion_inspectors_and_ffmpeg_preview(self):
+        """Both media editors emit typed motion commands; one actual render."""
+        initial=self.upload_analyze()
+        self.page.locator('[data-workspace-nav="broll"]').click()
+        image=self.root/"motion-image.png"
+        subprocess.run([
+            "ffmpeg","-hide_banner","-nostdin","-v","error","-y",
+            "-f","lavfi","-i","color=c=green:s=140x80:r=1:d=1",
+            "-frames:v","1","-threads:v","1",str(image)
+        ],check=True,timeout=35)
+        self.page.locator("#pip-image-input").set_input_files(str(image))
+        added=self.wait_state("revision",initial["project_revision"]+1)
+        self.assertEqual(len(added["image_overlays"]),1)
+        picture=self.page.locator("#pip-image-list [data-pip-id]").first
+        picture.locator("details").first.evaluate("(node)=>node.open=true")
+        image_motion=picture.locator("details").nth(1)
+        image_motion.locator("summary").click()
+        image_motion.locator('input[type="checkbox"]').check()
+        image_motion.locator("select").first.select_option("slide_up")
+        image_motion.locator("select").nth(1).select_option("slide_down")
+        image_motion.locator('input[type="number"]').first.fill("150")
+        image_motion.locator('input[type="number"]').nth(1).fill("120")
+        picture.get_by_role("button",name="Salva modifiche").click()
+        updated=self.wait_state("revision",added["project_revision"]+1)
+        self.assertEqual(updated["last_command"],"image.overlay.update")
+        self.assertEqual(updated["image_overlays"][0]["motion"],{
+            "enter":"slide_up","exit":"slide_down","enter_ms":150,"exit_ms":120
+        })
+        # Reimport the already local recorded clip as a visual insert only.
+        self.page.locator("#video-broll-input").set_input_files(
+            str(self.root/"audit-video.mp4"))
+        imported=self.wait_state("revision",updated["project_revision"]+1)
+        self.assertEqual(len(imported["video_broll"]),1)
+        card=self.page.locator("#video-broll-list [data-roll-id]").first
+        card.locator("details").first.evaluate("(node)=>node.open=true")
+        video_motion=card.locator("details").nth(1)
+        video_motion.locator("summary").click()
+        video_motion.locator('input[type="checkbox"]').check()
+        video_motion.locator("select").first.select_option("fade")
+        video_motion.locator("select").nth(1).select_option("slide_right")
+        video_motion.locator('input[type="number"]').first.fill("160")
+        video_motion.locator('input[type="number"]').nth(1).fill("170")
+        card.get_by_role("button",name="Salva modifiche").click()
+        revised=self.wait_state("revision",imported["project_revision"]+1)
+        self.assertEqual(revised["last_command"],"video.broll.update")
+        self.assertEqual(revised["video_broll"][0]["motion"],{
+            "enter":"fade","exit":"slide_right","enter_ms":160,"exit_ms":170
+        })
+        self.page.locator("#preview-action").click()
+        preview=self.wait_state("preview","completed",timeout=120000)
+        self.assertTrue(preview["preview_ready"])
+        self.assertFalse(preview["approved"])
+        self.shot("media-motion-image-video-preview")
+        self.page.keyboard.press("Control+z")
+        undone=self.wait_state("revision",revised["project_revision"]+1)
+        self.assertNotIn("motion",undone["video_broll"][0])
+        self.assertEqual(undone["image_overlays"][0]["motion"]["enter"],"slide_up")
+        self.assertFalse(self.errors,self.errors)
+
     def test_graphic_custom_entrance_exit_reversible_browser_preview(self):
         """Creator sets independent motion phases and sees the FFmpeg result."""
         initial=self.upload_analyze()
