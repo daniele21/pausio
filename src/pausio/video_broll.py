@@ -100,10 +100,20 @@ def compose_video_broll(
                    "force_original_aspect_ratio=decrease,setsar=1")
             x = f"(main_w-overlay_w)*{clip['x_pct'] / 100:.3f}"
             y = f"(main_h-overlay_h)*{clip['y_pct'] / 100:.3f}"
-        filters.append(
-            f"[{first_input + i}:v:0]trim=start={clip_in:.3f}:end={clip_out:.3f},"
-            f"setpts=PTS-STARTPTS+{start:.3f}/TB,fps=30,{fit},format=rgba[rollsrc{i}]"
-        )
+        fade, x, y = compile_media_motion(clip, size=size, x=x, y=y)
+        if fade:
+            # Fade on local clip time, then position on edited-output time.
+            prefilter = (
+                f"[{first_input + i}:v:0]trim=start={clip_in:.3f}:end={clip_out:.3f},"
+                f"setpts=PTS-STARTPTS,fps=30,{fit},format=rgba,{fade},"
+                f"setpts=PTS+{start:.3f}/TB[rollsrc{i}]"
+            )
+        else:
+            prefilter = (
+                f"[{first_input + i}:v:0]trim=start={clip_in:.3f}:end={clip_out:.3f},"
+                f"setpts=PTS-STARTPTS+{start:.3f}/TB,fps=30,{fit},format=rgba[rollsrc{i}]"
+            )
+        filters.append(prefilter)
         target = final_label if i == len(videos) - 1 else f"[rollstage{i}]"
         filters.append(
             f"{previous}[rollsrc{i}]overlay=x='{x}':y='{y}':"
