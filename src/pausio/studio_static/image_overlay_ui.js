@@ -72,6 +72,7 @@
       wrapper.append(input);grid.append(wrapper);
       fields[key]={input,unit};
     }
+    const motionEditor=window.pausioMediaMotion.make(image);
     const save=document.createElement("button");
     save.type="button";save.className="button button-primary button-full";
     save.textContent="Salva modifiche";
@@ -83,10 +84,12 @@
           throw Error("Valore non valido: "+key);
         updated[key]=Math.round(Number(input.value)*unit);
       }
+      const motion=motionEditor.read();
+      if(motion)updated.motion=motion;else delete updated.motion;
       selectedId=image.id;
       await edit("image.overlay.update",{image:updated});
     }));
-    box.append(grid,save);
+    box.append(grid,motionEditor.node,save);
     box.addEventListener("toggle",()=>{if(box.open)selectedId=image.id;});
     return box;
   }
