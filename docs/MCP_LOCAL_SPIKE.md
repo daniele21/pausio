@@ -1,5 +1,7 @@
 # Local MCP spike — Pausio Studio tools (experimental)
 
+> **Historical spike documentation.** For the up-to-date 20-tool server catalog, usage decisions, asset import and bounded visual/audio observation, use [TOOL_CATALOG.md](TOOL_CATALOG.md). Some inventory/limitation lines below describe the original MVP, not the current code.
+
 This is the **first proof of tool control**, not a shipped autonomous editor. It does not use or require an OpenAI/Anthropic inference API key. ChatGPT/Claude Chat perform any semantic/editorial analysis **outside** Pausio. The tool server only forwards a small allowlist of commands to your already-running Pausio Studio, which owns validation, revisions and rendering.
 
 ## Run with Claude Desktop (local stdio connector)
