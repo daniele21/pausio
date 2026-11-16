@@ -83,13 +83,16 @@
       input.value=String(item[key]/unit);input.setAttribute("aria-label",label);
       wrapper.append(input);grid.append(wrapper);nums[key]={input,unit};
     }
-    details.append(grid,action("Salva modifiche",async()=>{
+    const motionEditor=window.pausioMediaMotion.make(item);
+    details.append(grid,motionEditor.node,action("Salva modifiche",async()=>{
       const {available,...record}=item;record.mode=selector.value;
       for(const [key,{input,unit}] of Object.entries(nums)){
         if(!input.checkValidity()||!Number.isFinite(Number(input.value)))
           throw Error("Valore non valido: "+key);
         record[key]=Math.round(Number(input.value)*unit);
       }
+      const motion=motionEditor.read();
+      if(motion)record.motion=motion;else delete record.motion;
       selected=item.id;
       await edit("video.broll.update",{video:record});
     },"button button-primary button-full"));
