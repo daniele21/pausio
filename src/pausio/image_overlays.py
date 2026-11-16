@@ -8,6 +8,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from pausio.media_motion import validate_media_motion
+
 MAX_IMAGE_OVERLAYS = 4
 MAX_IMAGE_BYTES = 12 * 1024 * 1024
 IMAGE_EXTENSIONS = frozenset({".png", ".jpg", ".jpeg", ".webp"})
@@ -22,7 +24,7 @@ _HEX64 = re.compile(r"^[0-9a-f]{64}$")
 def validate_image_overlay(raw: Any, output_ms: int) -> dict:
     if type(output_ms) is not int or not 0 < output_ms <= 172_800_000:
         raise ValueError("Durata montata non valida per le immagini.")
-    if not isinstance(raw, dict) or set(raw) != IMAGE_FIELDS:
+    if not isinstance(raw, dict) or set(raw) not in (IMAGE_FIELDS, IMAGE_FIELDS | {"motion"}):
         raise ValueError("Immagine PIP: campi sconosciuti o mancanti.")
     if (not isinstance(raw["id"], str) or not _HEX32.fullmatch(raw["id"]) or
         not isinstance(raw["asset_sha256"], str) or
@@ -44,6 +46,8 @@ def validate_image_overlay(raw: Any, output_ms: int) -> dict:
         val=raw[key]
         if type(val) is not int or not lo <= val <= hi:
             raise ValueError(f"Immagine PIP: {key} deve essere {lo}..{hi}.")
+    if "motion" in raw:
+        validate_media_motion(raw["motion"], duration)
     return dict(raw)
 
 
