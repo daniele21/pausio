@@ -252,7 +252,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertTrue(self.page.locator("#timeline-broll-track").is_visible())
         self.assertTrue(self.page.locator("#pip-image-playhead-note").is_visible())
         self.page.locator(".broll-mark").first.click()
-        self.assertTrue(self.page.locator(".pip-card details").evaluate("(node)=>node.open"))
+        self.assertTrue(self.page.locator(".pip-card details").first.evaluate("(node)=>node.open"))
         self.assertEqual(self.page.locator("#app").get_attribute("data-workspace"),"broll")
         self.assertEqual(len(self.state()["image_overlays"]),1)
         item=self.page.locator(".pip-card[data-pip-id]").first
@@ -287,6 +287,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
         """Both media editors emit typed motion commands; one actual render."""
         initial=self.upload_analyze()
         self.page.locator('[data-workspace-nav="broll"]').click()
+        self.assertTrue(self.page.locator("#video-broll-panel").is_visible())
         image=self.root/"motion-image.png"
         subprocess.run([
             "ffmpeg","-hide_banner","-nostdin","-v","error","-y",
@@ -369,7 +370,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertTrue(preview["preview_ready"])
         self.assertFalse(preview["approved"])
         self.shot("graphic-custom-motion-preview")
-        self.page.keyboard.press("Control+z")
+        self.page.locator("#desktop-undo-action").click()
         undone=self.wait_state("revision",preview["project_revision"]+1)
         self.assertFalse(undone["graphic_overlays"])
         self.assertFalse(self.errors,self.errors)
