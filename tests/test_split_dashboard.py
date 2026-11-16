@@ -40,7 +40,7 @@ class SplitDashboardTests(unittest.TestCase):
         original=ProjectTape(media()).append("timeline.keep_all",{})
         scene=dashboard()
         edited=original.append("scene.template.add",{"scene":scene})
-        self.assertEqual(edited.as_dict()["schema_version"],11)
+        self.assertEqual(edited.as_dict()["schema_version"],12)
         self.assertEqual(edited.view.scene_templates,(scene,))
         self.assertEqual(edited.undo().view.scene_templates,())
         self.assertEqual(edited.undo().redo().view.scene_templates,(scene,))
@@ -48,7 +48,7 @@ class SplitDashboardTests(unittest.TestCase):
         # v8 projects containing older scene types still import into v10.
         old=ProjectTape(media()).append("timeline.keep_all",{}).as_dict()
         old["schema_version"]=8
-        self.assertEqual(ProjectTape.from_dict(old).as_dict()["schema_version"],11)
+        self.assertEqual(ProjectTape.from_dict(old).as_dict()["schema_version"],12)
 
     def test_no_arbitrary_expressions_and_bounded_controls(self):
         original=ProjectTape(media()).append("timeline.keep_all",{})

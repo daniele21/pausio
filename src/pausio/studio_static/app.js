@@ -13,8 +13,8 @@ let captionDraft = null, captionSource = null, captionMediaKey = null;
 let captionPositionMode = false;
 let captionPointer = null;
 const captionNumberFields = ["x_pct","y_pct","font_size","outline_size"];
-const captionColorFields = ["text_color","outline_color","background_color"];
-const captionFontFields = ["font_family"];
+const captionColorFields = ["text_color","outline_color","background_color","highlight_color"];
+const captionFontFields = ["font_family","motion_mode"];
 const fontFallBack = new Set(["Georgia","Times New Roman","Courier New"]);
 function captionConfig(){ return captionDraft||project?.caption_config||project?.caption_presets?.social; }
 function renderCaptionSettings(){
@@ -299,6 +299,7 @@ function update(next){
   window.pausioSceneTemplates?.update(next);
   window.pausioVisualObservation?.update(next);
   window.pausioImages?.update(next);
+  window.pausioCaptionEmphasis?.update(next);
   window.pausioVideos?.update(next);
   window.pausioEditorial?.update(next);
   updateFxMonitorUI();drawAudioMixer();syncVoicePlayback();syncLiveFx();transport();
@@ -794,7 +795,31 @@ function updateCaptionOverlay(){
   overlay.style.textShadow="0 1px 2px "+config.outline_color;
   overlay.style.background=config.background?config.background_color+"CC":"transparent";
   const value=cue?.text||"";
-  if(overlay.textContent!==value)overlay.textContent=value;
+  const selected=new Set(cue?.emphasis_indices||[]);
+  const wordArray=cue?.words?.length?cue.words.map(w=>w.text):value.match(/\S+/g)||[];
+  const active=cue?.words?.findIndex(w=>at>=w.start_ms&&at<w.end_ms)??-1;
+  const focus=config.motion_mode==="word_focus"&&active>=0?active:-1;
+  const key=JSON.stringify([cue?.id,value,[...selected],focus,config.highlight_color]);
+  if(overlay.dataset.renderKey!==key){
+    overlay.dataset.renderKey=key;
+    const content=document.createDocumentFragment();
+    let cursor=0,failed=false;
+    for(let i=0;i<wordArray.length;i++){
+      const token=wordArray[i],pos=value.indexOf(token,cursor);
+      if(pos<0){failed=true;break;}
+      content.append(document.createTextNode(value.slice(cursor,pos)));
+      const word=document.createElement("span");
+      word.textContent=token;
+      if(selected.has(i)||i===focus)word.style.color=config.highlight_color||"#FFCD65";
+      content.append(word);
+      cursor=pos+token.length;
+    }
+    if(failed){overlay.textContent=value;}
+    else{
+      content.append(document.createTextNode(value.slice(cursor)));
+      overlay.replaceChildren(content);
+    }
+  }
 }
 
 /* FX are stored in EDITED time, but the displayed source waveform uses SOURCE time.

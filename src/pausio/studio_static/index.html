@@ -9,6 +9,7 @@
   <title>Studio · Pausio</title>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/image_overlay_ui.css">
+  <link rel="stylesheet" href="/caption_emphasis_ui.css">
   <link rel="stylesheet" href="/scene_template_ui.css">
   <script src="/audio_monitor_ui.js" defer></script>
   <script src="/app.js" defer></script>
@@ -18,6 +19,7 @@
   <script src="/graphic_overlay_ui.js" defer></script>
   <script src="/editorial_ui.js" defer></script>
   <script src="/image_overlay_ui.js" defer></script>
+  <script src="/caption_emphasis_ui.js" defer></script>
   <script src="/video_broll_ui.js" defer></script>
   <script src="/scene_template_ui.js" defer></script>
   <script src="/visual_observation_ui.js" defer></script>
@@ -564,6 +566,13 @@
                     </select>
                   </label>
                   <p class="caption-font-hint">Font del sistema: per verificare la resa esatta nell'MP4 usa «Genera preview». Se il font non è installato, FFmpeg può sostituirlo.</p>
+                   <label>Animazione del sottotitolo
+                     <select data-caption-setting="motion_mode" aria-label="Animazione dei sottotitoli">
+                       <option value="none">Fermo · senza animazioni</option>
+                       <option value="kinetic">Kinetic · pop morbido della frase</option>
+                       <option value="word_focus">Focus parola · segue il parlato se allineato</option>
+                     </select>
+                   </label>
                   <label>Orizzontale <output id="caption-x-output">50%</output>
                     <input type="range" data-caption-setting="x_pct" min="15" max="85" step="1" value="50">
                   </label>
@@ -579,6 +588,7 @@
                   <div class="caption-color-pair">
                     <label>Testo <input type="color" data-caption-setting="text_color" value="#FFFFFF"></label>
                     <label>Contorno <input type="color" data-caption-setting="outline_color" value="#000000"></label>
+                    <label>Parola evidenziata <input type="color" data-caption-setting="highlight_color" value="#FFCD65"></label>
                   </div>
                   <label class="caption-checkbox"><input type="checkbox" data-caption-setting="background"> Sfondo pieno</label>
                   <label>Colore sfondo <input type="color" data-caption-setting="background_color" value="#000000"></label>
@@ -592,6 +602,14 @@
               <div id="caption-active" hidden>
                 <div class="caption-summary"><span id="caption-count"></span><button type="button" class="text-button" id="caption-clear">Rimuovi</button></div>
                 <div id="caption-edit-list" class="caption-edit-list" aria-label="Correzione sottotitoli"></div>
+                <section class="caption-emphasis-panel" aria-labelledby="caption-emphasis-title">
+                  <h4 id="caption-emphasis-title">Evidenzia le parole importanti</h4>
+                  <p class="caption-hint">Scegli una frase e tocca le parole che vuoi colorare. La modalità Focus parola segue il parlato solo se esistono timestamp verificati.</p>
+                  <label for="caption-emphasis-cue">Frase del video</label>
+                  <select id="caption-emphasis-cue" aria-label="Frase per evidenziare le parole"></select>
+                  <div id="caption-emphasis-words" class="caption-emphasis-words" role="group" aria-label="Parole da evidenziare"></div>
+                  <p id="caption-emphasis-status" class="caption-hint" role="status"></p>
+                </section>
                 <p class="caption-hint">Correggi una frase e premi Salva. Ogni modifica viene salvata nel progetto e richiede nuova conferma del montaggio.</p>
               </div>
             </section>
