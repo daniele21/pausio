@@ -1207,7 +1207,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.page.locator("#caption-appearance summary").click()
         picker=self.page.locator('[data-caption-setting="highlight_color"]')
         picker.fill("#00aaff")
-        picker.dispatch_event("change")
+        picker.press("Tab")  # commit exactly one native change event
         customized=self.wait_state("revision",highlighted["project_revision"]+1)
         self.assertEqual(customized["caption_config"]["highlight_color"],"#00AAFF")
         self.assertEqual(customized["caption_config"]["motion_mode"],"word_focus")
