@@ -27,7 +27,7 @@ class VideoBrollTests(unittest.TestCase):
 
     def test_reversible_portable_clip_and_legacy_v10(self):
         tape = self.base.append("video.broll.add", {"video": self.clip})
-        self.assertEqual(tape.as_dict()["schema_version"], 12)
+        self.assertEqual(tape.as_dict()["schema_version"], 13)
         self.assertEqual(tape.view.video_broll, (self.clip,))
         self.assertEqual(ProjectTape.from_dict(tape.as_dict()).view.video_broll,
                          tape.view.video_broll)
