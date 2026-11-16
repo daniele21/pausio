@@ -10,6 +10,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from pausio.media_motion import validate_media_motion, compile_media_motion
+
 MAX_VIDEO_BROLL = 6
 MAX_BROLL_BYTES = 256 * 1024 * 1024
 VIDEO_EXTENSIONS = frozenset({".mp4", ".mov", ".mkv", ".webm"})
@@ -25,7 +27,7 @@ def validate_video_broll(value: Any, output_ms: int) -> dict:
     """Reject arbitrary paths, expressions, unknown fields and invalid times."""
     if type(output_ms) is not int or not 0 < output_ms <= 172_800_000:
         raise ValueError("Video B-roll: durata del montaggio non valida.")
-    if not isinstance(value, dict) or set(value) != VIDEO_BROLL_FIELDS:
+    if not isinstance(value, dict) or set(value) not in (VIDEO_BROLL_FIELDS, VIDEO_BROLL_FIELDS | {"motion"}):
         raise ValueError("Video B-roll: campi non validi.")
     if (not isinstance(value["id"], str) or not _ID.fullmatch(value["id"])
             or not isinstance(value["asset_sha256"], str)
@@ -54,6 +56,8 @@ def validate_video_broll(value: Any, output_ms: int) -> dict:
     ):
         if not minimum <= value[field] <= maximum:
             raise ValueError(f"Video B-roll: {field} fuori limite.")
+    if "motion" in value:
+        validate_media_motion(value["motion"], duration)
     return dict(value)
 
 
@@ -96,10 +100,20 @@ def compose_video_broll(
                    "force_original_aspect_ratio=decrease,setsar=1")
             x = f"(main_w-overlay_w)*{clip['x_pct'] / 100:.3f}"
             y = f"(main_h-overlay_h)*{clip['y_pct'] / 100:.3f}"
-        filters.append(
-            f"[{first_input + i}:v:0]trim=start={clip_in:.3f}:end={clip_out:.3f},"
-            f"setpts=PTS-STARTPTS+{start:.3f}/TB,fps=30,{fit},format=rgba[rollsrc{i}]"
-        )
+        fade, x, y = compile_media_motion(clip, size=size, x=x, y=y)
+        if fade:
+            # Fade on local clip time, then position on edited-output time.
+            prefilter = (
+                f"[{first_input + i}:v:0]trim=start={clip_in:.3f}:end={clip_out:.3f},"
+                f"setpts=PTS-STARTPTS,fps=30,{fit},format=rgba,{fade},"
+                f"setpts=PTS+{start:.3f}/TB[rollsrc{i}]"
+            )
+        else:
+            prefilter = (
+                f"[{first_input + i}:v:0]trim=start={clip_in:.3f}:end={clip_out:.3f},"
+                f"setpts=PTS-STARTPTS+{start:.3f}/TB,fps=30,{fit},format=rgba[rollsrc{i}]"
+            )
+        filters.append(prefilter)
         target = final_label if i == len(videos) - 1 else f"[rollstage{i}]"
         filters.append(
             f"{previous}[rollsrc{i}]overlay=x='{x}':y='{y}':"

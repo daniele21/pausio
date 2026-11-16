@@ -19,6 +19,7 @@ from pausio.captions import ass_document
 from pausio.graphic_overlays import compose_graphics_ass
 from pausio.split_dashboard import compile_speaker_splits
 from pausio.image_overlays import validate_image_overlays
+from pausio.media_motion import compile_media_motion
 from pausio.video_broll import MAX_BROLL_BYTES, validate_video_brolls, compose_video_broll
 from pausio.domain import Interval
 from pausio.visual_fx import motion_filter, prepare_motion_fx
@@ -416,19 +417,37 @@ def render(
             end = (clip["start_ms"]+clip["duration_ms"])/1000
             x = clip["x_pct"]/100
             y = clip["y_pct"]/100
-            components.append(
-                f"[{input_index}:v:0]scale={width}:{height}:"
-                "force_original_aspect_ratio=decrease,format=rgba"
-                f"[pipimage{i}]"
+            base_x = f"(main_w-overlay_w)*{x:.3f}"
+            base_y = f"(main_h-overlay_h)*{y:.3f}"
+            fading, position_x, position_y = compile_media_motion(
+                clip, size=size, x=base_x, y=base_y
             )
+            if fading:
+                # Local image clock for fade alpha, shifted to the edited
+                # timeline only AFTER duration clipping. This keeps source
+                # audio and subsequent layers entirely independent.
+                components.append(
+                    f"[{input_index}:v:0]fps=30,trim=duration={clip['duration_ms']/1000:.3f},"
+                    "setpts=PTS-STARTPTS,"
+                    f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
+                    f"format=rgba,{fading},setpts=PTS+{start:.3f}/TB[pipimage{i}]"
+                )
+            else:
+                components.append(
+                    f"[{input_index}:v:0]scale={width}:{height}:"
+                    "force_original_aspect_ratio=decrease,format=rgba"
+                    f"[pipimage{i}]"
+                )
             target = "[basev]" if has_text and i==len(images)-1 else (
                 "[outv]" if i==len(images)-1 else f"[pipstage{i}]"
             )
             components.append(
                 f"{last}[pipimage{i}]overlay="
-                f"x='(main_w-overlay_w)*{x:.3f}':"
-                f"y='(main_h-overlay_h)*{y:.3f}':"
-                f"enable='between(t\\,{start:.3f}\\,{end:.3f})':shortest=1:format=auto"
+                f"x='{position_x}':"
+                f"y='{position_y}':"
+                f"enable='between(t\\,{start:.3f}\\,{end:.3f})':"
+                + ("eof_action=pass:repeatlast=0:shortest=0" if fading else "shortest=1")
+                + ":format=auto"
                 + (",format=yuv420p" if i==len(images)-1 else "")
                 + target
             )

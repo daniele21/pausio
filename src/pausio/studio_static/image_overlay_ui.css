@@ -4,7 +4,7 @@
   .app-shell[data-workspace="broll"] .inspector-tabs,
   .app-shell[data-workspace="broll"] .inspector-counter,
   .app-shell[data-workspace="broll"] .selection-inspector,
-  .app-shell[data-workspace="broll"] #cuts-content > :not(#image-overlay-panel) {
+  .app-shell[data-workspace="broll"] #cuts-content > :not(#image-overlay-panel):not(#video-broll-panel) {
     display: none !important;
   }
   .app-shell[data-workspace="broll"] .editor-dock {
@@ -14,8 +14,8 @@
     display: none !important;
   }
 }
-.app-shell[data-workspace="visual"] #image-overlay-panel { display:none !important; }
-.app-shell[data-workspace="broll"] #image-overlay-panel {
+.app-shell[data-workspace="visual"] :is(#image-overlay-panel,#video-broll-panel) { display:none !important; }
+.app-shell[data-workspace="broll"] :is(#image-overlay-panel,#video-broll-panel) {
   margin-top:0; padding-top:5px; border-top:0;
 }
 #image-overlay-panel .pip-playhead-note {
@@ -23,26 +23,26 @@
   border-radius:6px; background:var(--surface-raised);
   font-variant-numeric:tabular-nums; line-height:1.5;
 }
-#image-overlay-panel .pip-card .pip-interval {
+:is(#image-overlay-panel,#video-broll-panel) .pip-card .pip-interval {
   color:var(--accent-bright); font-variant-numeric:tabular-nums;
 }
-#image-overlay-panel .pip-card .pip-name {
+:is(#image-overlay-panel,#video-broll-panel) .pip-card .pip-name {
   overflow-wrap:anywhere; font-size:12px;
 }
-#image-overlay-panel .pip-advanced {
+:is(#image-overlay-panel,#video-broll-panel) .pip-advanced {
   border:1px solid var(--border); border-radius:6px;
   padding:8px; min-width:0;
 }
-#image-overlay-panel .pip-advanced summary {
+:is(#image-overlay-panel,#video-broll-panel) .pip-advanced summary {
   cursor:pointer; padding:5px; color:var(--ink);
   font-size:11px;
 }
-#image-overlay-panel .pip-advanced summary:focus-visible {
+:is(#image-overlay-panel,#video-broll-panel) .pip-advanced summary:focus-visible {
   outline:2px solid var(--focus);outline-offset:2px;
 }
-#image-overlay-panel .pip-advanced .visual-fx-edit-grid { margin:10px 0; }
-#image-overlay-panel .pip-advanced .button { width:100%; }
-#image-overlay-panel .pip-card > .button { width:100%; }
+:is(#image-overlay-panel,#video-broll-panel) .pip-advanced .visual-fx-edit-grid { margin:10px 0; }
+:is(#image-overlay-panel,#video-broll-panel) .pip-advanced .button { width:100%; }
+:is(#image-overlay-panel,#video-broll-panel) .pip-card > .button { width:100%; }
 #image-overlay-panel .pip-empty {
   margin:0; padding:12px; border:1px dashed var(--border);
   border-radius:8px; line-height:1.5; font-size:11px;
