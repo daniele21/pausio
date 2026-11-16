@@ -1,5 +1,7 @@
 # Pilotare Pausio con ChatGPT: primo test reale (MCP locale)
 
+> **Guida storica del primo pilota.** Il catalogo aggiornato e normativo dei tool, con i casi d'uso e le limitazioni, è [TOOL_CATALOG.md](TOOL_CATALOG.md). Verificare sempre le capability del server e i tool esposti dal client connesso.
+
 ## Stato, senza promesse automatiche
 
 Pausio ha un MCP **stdio locale** che può controllare il progetto aperto in
@@ -41,10 +43,7 @@ validazione/importazione media esistente in Studio. Non recuperano
 automaticamente il contenuto di un file creato nella chat, né verificano
 indipendentemente la licenza: per file grandi, import da UI.
 
-**Non ancora esposti:** caricamento video dal client di chat, preview di frame
-o audio verso il modello, download dell'MP4 in chat, libreria locale globale,
-ricerca/generazione automatica di B-roll, video B-roll MP4/MOV, approvazione
-senza utente, server MCP remoto pubblico. Il bridge non crea immagini o musica.
+**Limitazioni attuali:** non sono esposti caricamento del video sorgente dal client di chat, download dell'MP4 in chat, libreria locale globale, scouting/generazione automatica di B-roll, video B-roll MP4/MOV, approvazione senza utente e un server MCP remoto pubblico. Il bridge non crea immagini o musica. **Sono ora dichiarati dal server** i tool di osservazione limitata **pausio_get_visual_context** e **pausio_get_audio_context**, utilizzabili soltanto con consenso distinto in Studio e se il client MCP li espone. Vedi [catalogo](TOOL_CATALOG.md), [frame](VISUAL_OBSERVATION_V1.md) e [audio](AUDIO_OBSERVATION_V1.md).
 
 ## Test rapido, senza cloud e senza chiave LLM
 
@@ -111,8 +110,7 @@ senza utente, server MCP remoto pubblico. Il bridge non crea immagini o musica.
   esecuzione di shell. Audio/video grezzi non passano dal MCP.
 - Tool di lettura esplicita della trascrizione: prima di invocarlo, considera
   che le parole possono raggiungere il provider della chat.
-- Un tool MCP non equivale ad aver visto fotogrammi: per una regia affidabile
-  bisognerà aggiungere osservazioni visuali bounded (storyboard e frame).
+- Un tool MCP non equivale ad aver visto fotogrammi: la regia visuale richiede una chiamata esplicita a **pausio_get_visual_context**, con consenso in Studio, preview aggiornata dove necessario e supporto del client ai blocchi immagine. L'osservazione bounded è implementata nel server, ma va testata sulla connessione effettiva.
 - Qualsiasi modifica toglie l'approvazione, invalidando il precedente render;
   l'utente mantiene Undo/Redo e il download dalla UI.
 - Non affermare che un test ChatGPT+Mac è passato senza una vera sessione
