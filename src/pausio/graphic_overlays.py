@@ -11,6 +11,7 @@ from typing import Any
 from pausio.domain import Interval
 from pausio.captions import ass_document, _ass_time, _ass_text, _ass_color
 from pausio.scene_templates import compose_scene_events
+from pausio.graphic_motion import validate_motion, compose_motion_events
 
 MAX_GRAPHICS = 12
 KINDS = frozenset({"headline", "stat", "code", "tip"})
@@ -23,7 +24,7 @@ COLOR = re.compile(r"^#[0-9A-F]{6}$")
 
 
 def validate_graphic(raw: Any, segments: list[dict], source_duration_ms: int) -> dict:
-    if not isinstance(raw, dict) or set(raw) != FIELDS:
+    if not isinstance(raw, dict) or set(raw) not in (FIELDS, FIELDS | {"motion"}):
         raise ValueError("Grafica: campi obbligatori o sconosciuti.")
     if not all(isinstance(raw[k], str) and IDENTITY.fullmatch(raw[k])
                for k in ("id", "segment_id")):
@@ -53,6 +54,8 @@ def validate_graphic(raw: Any, segments: list[dict], source_duration_ms: int) ->
             raise ValueError(f"Grafica: {key} fuori dai limiti {low}–{high}.")
     if not isinstance(raw["color"], str) or not COLOR.fullmatch(raw["color"]):
         raise ValueError("Grafica: colore in formato #RRGGBB maiuscolo.")
+    if "motion" in raw:
+        validate_motion(raw["motion"], b - a)
     return dict(raw)
 
 
@@ -120,7 +123,7 @@ def compose_graphics_ass(cues: list[dict], graphics: list[dict], *,
     events = []
     for g in graphics:
         # Render-side hard check (all values are already source-validated).
-        if (not isinstance(g, dict) or set(g) != FIELDS or
+        if (not isinstance(g, dict) or set(g) not in (FIELDS, FIELDS | {"motion"}) or
             type(g["start_ms"]) is not int or type(g["end_ms"]) is not int or
             g["end_ms"]-g["start_ms"] < 400 or
             type(g["kind"]) is not str or g["kind"] not in KINDS or
@@ -144,6 +147,12 @@ def compose_graphics_ass(cues: list[dict], graphics: list[dict], *,
         fade = r"\fad(180,160)" if g["animation"] != "pop" else r"\fad(100,130)"
         line = _ass_text(g["text"])
         if not line:
+            continue
+        if "motion" in g:
+            events.append(compose_motion_events(
+                g, style=style_name, font=font, padding=padding,
+                color=color, text=line, x=x, y=y, size=size,
+            ))
             continue
         overrides = (fr"\an5{pos}\fn{font}\fs{size}\c{color}"
                      fr"\bord{padding}\shad0{fade}{effect}")
