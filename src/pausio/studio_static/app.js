@@ -1426,6 +1426,7 @@ function setWorkspace(name, persist=true){
   else tab("cuts");
   renderWorkspaceLibraries();
   window.pausioImages?.update();
+  window.pausioVideos?.update();
   if(persist){try{localStorage.setItem("pausio-studio-workspace",name);}catch(_error){}}
 }
 function syncDesktopCommands(){
