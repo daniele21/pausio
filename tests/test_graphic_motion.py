@@ -34,7 +34,7 @@ class GraphicMotionTests(unittest.TestCase):
 
     def test_v13_replay_undo_and_legacy_motion_untouched(self):
         base = self.tape.append("graphic.overlay.add", {"graphic": self.graphic})
-        self.assertEqual(base.as_dict()["schema_version"], 13)
+        self.assertEqual(base.as_dict()["schema_version"], 14)
         self.assertNotIn("motion", base.view.graphic_overlays[0])
         enhanced = {**self.graphic, "motion": self.motion}
         tape = base.append("graphic.overlay.update", {"graphic": enhanced})
