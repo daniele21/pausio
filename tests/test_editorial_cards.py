@@ -28,7 +28,7 @@ def card(kind, at=0, duration=2500, *, identity=None, accent="orange"):
 class EditorialCompositionContractTests(unittest.TestCase):
     def test_discoverable_modular_catalog_and_replay_v10(self):
         formats={f["id"]:f for f in catalog()}
-        self.assertEqual(len(formats),8)
+        self.assertEqual(len(formats),9)
         self.assertEqual(formats["floating_insight"]["layout"],"overlay")
         self.assertEqual(formats["metric_spotlight"]["layout"],"fullscreen")
         self.assertEqual(formats["permission_mock"]["min_duration_ms"],1600)
@@ -37,13 +37,13 @@ class EditorialCompositionContractTests(unittest.TestCase):
         base=ProjectTape(media()).append("timeline.keep_all",{})
         first=card("floating_insight",1000,1200)
         edited=base.append("scene.template.add",{"scene":first})
-        self.assertEqual(edited.as_dict()["schema_version"],14)
+        self.assertEqual(edited.as_dict()["schema_version"],15)
         self.assertEqual(edited.view.scene_templates,(first,))
         self.assertEqual(edited.undo().view.scene_templates,())
         self.assertEqual(edited.undo().redo().view.scene_templates,(first,))
         self.assertEqual(ProjectTape.from_dict(edited.as_dict()).view,edited.view)
         old={**base.as_dict(),"schema_version":9}
-        self.assertEqual(ProjectTape.from_dict(old).as_dict()["schema_version"],14)
+        self.assertEqual(ProjectTape.from_dict(old).as_dict()["schema_version"],15)
 
     def test_timed_beats_include_real_face_only_gaps(self):
         base=ProjectTape(media(15000)).append("timeline.keep_all",{})
