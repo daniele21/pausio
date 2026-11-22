@@ -83,6 +83,8 @@
     if(!create||!list)return;
     create.hidden=rows.length>0;
     create.disabled=!ready()||rows.length>0;
+    el("style-variants-import").disabled=!ready()||rows.length>0;
+    el("style-variants-export").hidden=rows.length===0;
     list.replaceChildren();
     for(const item of rows){
       const node=document.createElement("button");
@@ -116,6 +118,22 @@
     update(state);
     proposal=null;skipped.clear();selection="authority";
     message="Tre timeline indipendenti create. Seleziona una versione per personalizzarla.";
+    draw();
+  }
+  async function importVariants(file){
+    if(!file)throw Error("Seleziona il file JSON con le tre versioni.");
+    if(file.size>4*1024*1024)throw Error("Il bundle supera il limite locale di 4 MB.");
+    let bundle;
+    try{bundle=JSON.parse(await file.text());}
+    catch(_error){throw Error("Il file delle tre versioni non contiene JSON valido.");}
+    if(!ready())throw Error("Importa prima il video originale.");
+    const state=await post("/api/variants/import",{
+      revision:current().project_revision,bundle
+    });
+    proposal=null;forMedia=null;skipped.clear();
+    selection=state.active_variant||"authority";
+    update(state);
+    message="Tre versioni importate e collegate al video verificato.";
     draw();
   }
   async function switchVariant(styleId){
@@ -215,6 +233,15 @@
     draw();
   }
   el("style-variants-create").addEventListener("click",()=>run(createVariants));
+  el("style-variants-import").addEventListener("click",()=>{
+    el("style-variants-input").click();
+  });
+  el("style-variants-input").addEventListener("change",event=>{
+    const input=event.currentTarget;
+    const file=input.files?.[0];
+    input.value="";
+    if(file)run(()=>importVariants(file));
+  });
   el("style-pack-generate").addEventListener("click",()=>run(generate));
   el("style-pack-caption").addEventListener("click",()=>run(applyCaption));
   window.pausioStylePacks={update:draw};
