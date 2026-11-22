@@ -33,6 +33,40 @@ It does not render three concurrent previews/MP4s or automatically choose
 semantic scenes from video footage. Subtitle preset differences do not
 alone constitute complete editorial post-production.
 
+## One-click export of all three approved MP4s
+
+With three saved versions, **individually approve each edit first**.
+The **Esporta tutte e 3 · MP4** control is disabled if even one
+version is unapproved. A confirmation dialog starts a local asynchronous
+`POST /api/variants/render-all` job guarded by both the active project
+revision and the opaque media session ID.
+
+The worker renders each approved `ProjectTape` sequentially at
+**1080 × 1920**, reusing the same FFmpeg video/audio processing pipeline,
+captions, scene templates, camera moves and local B-roll as the single
+render. A status shows 0–3 completed variants. The ZIP
+`pausio-three-variants.zip` contains exactly these three files:
+
+- `pausio-authority.mp4`
+- `pausio-visual-explainer.mp4`
+- `pausio-social-impact.mp4`
+
+The ZIP is built in a private staging directory **only after all three
+MP4s are validated** and is atomically published at a fixed local path.
+Failure of any video produces no downloadable partial ZIP.
+`GET /api/variants/download-all` streams the result only after the
+whole batch succeeds. Mutating the current timeline, switching to
+another variant, importing new media or clearing the session immediately
+revokes the old ZIP and marks the batch stale. The full ZIP is deliberately
+not part of the durable source checkpoint: if Studio is restarted,
+regenerate it from saved variant projects.
+
+The user must approve the content, including statistics and citations;
+this feature automates only the export operation, **not editing or
+approval**. Rendered MP4s include speech and may contain private
+information; the archive stays local until the user explicitly shares it.
+The project JSON bundle and rendered MP4 ZIP are distinct downloads.
+
 ## Storage design
 
 `src/pausio/variant_projects.py` owns a strict, pure
