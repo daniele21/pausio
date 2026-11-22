@@ -39,3 +39,36 @@
 @media(prefers-reduced-motion:reduce) {
   .style-pack-choice {transition:none;}
 }
+
+/* Persisted variant selector is visually distinct from *proposal* style tabs. */
+.style-variant-manager {
+  margin-bottom: 14px;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-raised);
+}
+.style-variant-manager h4 { margin:0 0 7px; font-size:13px; }
+.style-variant-manager .visual-fx-status { font-size:11px; line-height:1.5; }
+.style-variant-workspaces {
+  display: grid; grid-template-columns: repeat(3,minmax(0,1fr));
+  gap: 7px; margin: 10px 0;
+}
+.style-variant-choice {
+  display: flex; flex-direction: column; text-align: left; gap: 5px;
+  min-width: 0; padding: 10px;
+  background: var(--surface-raised); color: var(--ink);
+  border: 1px solid var(--border); border-radius: 9px;
+  cursor: pointer;
+}
+.style-variant-choice strong { font-size: 12px; overflow-wrap:anywhere; }
+.style-variant-choice small { font-size: 10px; color:var(--ink-secondary); line-height:1.4; }
+.style-variant-choice[aria-pressed="true"] {
+  border-color: var(--style-accent);
+  box-shadow: inset 0 0 0 1px var(--style-accent);
+}
+.style-variant-choice:disabled { cursor:default; }
+.style-variant-choice:focus-visible { outline:2px solid var(--style-accent);outline-offset:2px; }
+@media(max-width:520px) {
+  .style-variant-workspaces { grid-template-columns:1fr; }
+}
