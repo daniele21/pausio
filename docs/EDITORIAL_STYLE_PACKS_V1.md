@@ -60,6 +60,20 @@ rejects out-of-bounds/overlapping beats, excess beats, invalid scene types
 and uncertain numeric evidence. If a requested visual does not fit in the
 beat, the output records a skip rather than silently extending the scene.
 
+## Studio API (read-only, not yet an editor panel)
+
+The existing local Studio snapshot now includes `style_pack_catalog`. A
+revision-guarded `POST /api/editorial/variants` endpoint accepts a JSON
+object containing exactly `revision` and `beats` and returns three
+independent storyboard proposals plus `base_revision` and
+`media_sha256`. It requires the same local-host, content-type, client
+header and origin checks as existing Studio editing requests.
+
+The endpoint does **not** call any generative service, inspect private audio,
+change `ProjectTape`, add scene templates, start a preview or approve edits.
+The caller must supply all reviewed beats and complete scene copy. It is
+intentionally a foundation for a future Studio compare/editor panel.
+
 ## Motion Graphics primitive: count-up (technical spike)
 
 \`pausio.motion_metric.countup_frames\` converts an **already-approved**
@@ -103,6 +117,7 @@ it as an integrated, selectable Studio feature.
 \`\`\`bash
 python -m unittest discover -s tests -p 'test_style_packs.py'
 python -m unittest discover -s tests -p 'test_motion_metric.py'
+python -m unittest discover -s tests -p 'test_style_packs_studio.py'
 \`\`\`
 
 Verify deterministic candidate IDs, distinct policies, nonmutation,
