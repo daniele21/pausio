@@ -74,6 +74,42 @@ change `ProjectTape`, add scene templates, start a preview or approve edits.
 The caller must supply all reviewed beats and complete scene copy. It is
 intentionally a foundation for a future Studio compare/editor panel.
 
+## Studio three-style comparison (development branch)
+
+An additional **review-only** endpoint
+`POST /api/editorial/variants/auto` accepts exactly:
+
+```json
+{"revision": 7}
+```
+
+This uses existing `propose_editorial_plan` three times, with each Style Pack's
+respective `clean_tech`, `educational`, or `dynamic_social` policy.
+It returns candidate `graphic.overlay.add` and `video.transform.add`
+commands, timestamps, caption suggestions and provenance. It can use
+already-present caption text for literal numbers, filenames and practical
+advice, plus conservative timing signals for camera moves. **This is not AI
+video comprehension**. If the real speech is not transcribed into captions,
+no informational card can be inferred. Existing creator effects are protected.
+
+A new **Tre regie** panel in Video FX shows all three proposals, allows
+switching between their candidate lists and explicitly accepting one
+`ProjectTape` edit at a time. The chosen Style Pack's caption preset
+(`minimal`, `word_focus`, `kinetic`) may be applied through the existing
+`caption.style` command. Every change invalidates the proposals and requires
+regeneration against the latest revision. The current source and shared
+timeline stay unchanged until a creator selects an edit.
+
+**Important limitation:** these are three candidate storyboards, **not
+three independently saved timeline variants or three pre-rendered videos**.
+The UI deliberately describes them as technical storyboard suggestions,
+not finished videos. Actual per-variant save/preview/export needs a dedicated
+versioned project model and careful integration with the stacked B-roll
+and caption-motion work (#84–#87). The standalone counter prototype has not
+yet become an editable template; it must be implemented with a dedicated
+versioned schema rather than silently changing historic `metric_spotlight`
+rendering.
+
 ## Motion Graphics primitive: count-up (technical spike)
 
 \`pausio.motion_metric.countup_frames\` converts an **already-approved**
