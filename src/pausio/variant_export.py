@@ -1,8 +1,8 @@
 """All-or-nothing, offline ZIP export of three *approved* Pausio projects.
 
 Reuses the same native FFmpeg compositor, caption remapping, FX, and local
-media verification as Studio's single-video export. The ZIP is created only
-after all three real MP4s are verified, in a private staging directory.
+media verification as Studio's single-video export. The ZIP is built in a private staging directory, validated and published
+atomically only after all three MP4s are verified.
 """
 from __future__ import annotations
 
@@ -52,73 +52,73 @@ def render_three_approved(
 
     with tempfile.TemporaryDirectory(prefix=".pausio-three-export-", dir=target.parent) as staged:
         stage = Path(staged)
-        outputs = []
-        for index, style_id in enumerate(STYLE_IDS):
-            tape: ProjectTape = variants.tapes[style_id]
-            plan = tape.edit_plan(str(source))
-            segment_index = {segment["id"]: i for i, segment in enumerate(tape.view.segments)}
-            active_fx = [
-                {
-                    "segment_index": segment_index[fx["segment_id"]],
-                    **{k: v for k, v in fx.items() if k not in {"id", "segment_id"}},
-                }
-                for fx in tape.view.video_fx
-            ]
-            transitions = [
-                {
-                    "boundary_index": segment_index[item["left_segment_id"]],
-                    "kind": item["kind"],
-                    "duration_ms": item["duration_ms"],
-                }
-                for item in tape.view.video_transitions
-            ]
-            audio = []
-            for clip in tape.view.audio_clips:
-                path = audio_asset(clip["asset_sha256"])
-                if path.is_symlink() or not path.is_file():
-                    raise ValueError("Effetto audio locale mancante o non sicuro.")
-                with path.open("rb") as handle:
-                    digest = hashlib.file_digest(handle, "sha256").hexdigest()
-                if digest != clip["asset_sha256"]:
-                    raise ValueError("Effetto audio modificato: reimporta l'originale.")
-                audio.append((path, dict(clip)))
-            images = [
-                (image_asset(item["asset_sha256"], item["filename"]), dict(item))
-                for item in tape.view.image_overlays
-            ]
-            videos = [
-                (video_asset(clip["asset_sha256"], clip["filename"]), dict(clip))
-                for clip in tape.view.video_broll
-            ]
-            output = stage / f"pausio-{style_id.replace('_', '-')}.mp4"
-            render(
-                source, output, plan.segments, has_audio=plan.has_audio,
-                size=(1080, 1920),
-                captions=remap_captions(tape.view.captions, plan.segments),
-                caption_style=tape.view.caption_style,
-                caption_config=tape.view.caption_config,
-                audio_fx=audio, audio_mix=dict(tape.view.audio_mix),
-                video_fx=active_fx, video_transitions=transitions,
-                graphic_overlays=remap_graphics(tape.view.graphic_overlays, plan.segments),
-                scene_templates=[dict(x) for x in tape.view.scene_templates],
-                image_overlays=images, video_broll=videos,
-            )
-            result = probe(output)
-            if (not output.is_file() or output.stat().st_size == 0
-                or result.width != 1080 or result.height != 1920
-                or result.has_audio != plan.has_audio):
-                raise ValueError("Verifica MP4 non superata: " + style_id)
-            outputs.append(output)
-            if progress:
-                progress(style_id, index + 1)
-
         archive = stage / BATCH_FILENAME
+        names = set()
         with ZipFile(archive, "w", compression=ZIP_STORED, allowZip64=True) as dest:
-            for output in outputs:
+            for index, style_id in enumerate(STYLE_IDS):
+                tape: ProjectTape = variants.tapes[style_id]
+                plan = tape.edit_plan(str(source))
+                segment_index = {segment["id"]: i for i, segment in enumerate(tape.view.segments)}
+                active_fx = [
+                    {
+                        "segment_index": segment_index[fx["segment_id"]],
+                        **{k: v for k, v in fx.items() if k not in {"id", "segment_id"}},
+                    }
+                    for fx in tape.view.video_fx
+                ]
+                transitions = [
+                    {
+                        "boundary_index": segment_index[item["left_segment_id"]],
+                        "kind": item["kind"],
+                        "duration_ms": item["duration_ms"],
+                    }
+                    for item in tape.view.video_transitions
+                ]
+                audio = []
+                for clip in tape.view.audio_clips:
+                    path = audio_asset(clip["asset_sha256"])
+                    if path.is_symlink() or not path.is_file():
+                        raise ValueError("Effetto audio locale mancante o non sicuro.")
+                    with path.open("rb") as handle:
+                        digest = hashlib.file_digest(handle, "sha256").hexdigest()
+                    if digest != clip["asset_sha256"]:
+                        raise ValueError("Effetto audio modificato: reimporta l'originale.")
+                    audio.append((path, dict(clip)))
+                images = [
+                    (image_asset(item["asset_sha256"], item["filename"]), dict(item))
+                    for item in tape.view.image_overlays
+                ]
+                videos = [
+                    (video_asset(clip["asset_sha256"], clip["filename"]), dict(clip))
+                    for clip in tape.view.video_broll
+                ]
+                output = stage / f"pausio-{style_id.replace('_', '-')}.mp4"
+                render(
+                    source, output, plan.segments, has_audio=plan.has_audio,
+                    size=(1080, 1920),
+                    captions=remap_captions(tape.view.captions, plan.segments),
+                    caption_style=tape.view.caption_style,
+                    caption_config=tape.view.caption_config,
+                    audio_fx=audio, audio_mix=dict(tape.view.audio_mix),
+                    video_fx=active_fx, video_transitions=transitions,
+                    graphic_overlays=remap_graphics(tape.view.graphic_overlays, plan.segments),
+                    scene_templates=[dict(x) for x in tape.view.scene_templates],
+                    image_overlays=images, video_broll=videos,
+                )
+                result = probe(output)
+                if (not output.is_file() or output.stat().st_size == 0
+                    or result.width != 1080 or result.height != 1920
+                    or result.has_audio != plan.has_audio):
+                    raise ValueError("Verifica MP4 non superata: " + style_id)
                 dest.write(output, output.name)
+                names.add(output.name)
+                # MP4s are already compressed. Reclaim each large staging
+                # file immediately instead of keeping 3 copies plus the ZIP.
+                output.unlink()
+                if progress:
+                    progress(style_id, index + 1)
         with ZipFile(archive, "r") as check:
-            if (set(check.namelist()) != {p.name for p in outputs}
-                or check.testzip() is not None):
+            if set(check.namelist()) != names or check.testzip() is not None:
                 raise ValueError("Archivio ZIP incompleto o corrotto.")
         if archive.stat().st_size <= 0:
             raise ValueError("Esportazione multipla vuota.")
