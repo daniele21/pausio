@@ -35,6 +35,7 @@ from pausio.audio_observation import audio_wav
 from pausio.graphic_overlays import remap_graphics
 from pausio.scene_templates import catalog as scene_template_catalog
 from pausio.style_packs import PACKS, catalog as style_pack_catalog, propose_three_variants
+from pausio.variant_projects import STYLE_IDS, VariantWorkspace
 from pausio.image_overlays import MAX_IMAGE_BYTES, IMAGE_EXTENSIONS
 from pausio.planner import CUT_PRESETS, validate_cut_settings, policy_from_cut_settings, propose_segments
 from pausio.project_commands import ProjectTape, ProjectFormatError, UI_COMMANDS, default_audio_mix
@@ -97,6 +98,7 @@ class StudioWorkspace:
         self.importing = False
         self.approved = False
         self.tape: ProjectTape | None = None
+        self.variants: VariantWorkspace | None = None
         self.media_sha256: str | None = None
         self.media_id: str | None = None
         self.source: Path | None = None
@@ -140,6 +142,7 @@ class StudioWorkspace:
                     self.media_id = uuid.uuid4().hex
                     self.info = info
                     self._install_tape(tape, persist=False)
+                    self.variants = self.store.recovered_variants
                     self.transcript = transcript
                     self.recovered = True
                     if from_backup:
@@ -196,6 +199,8 @@ class StudioWorkspace:
                 "graphic_overlays": [dict(g) for g in self.tape.view.graphic_overlays] if self.tape else [],
                 "scene_templates": [dict(g) for g in self.tape.view.scene_templates] if self.tape else [],
                 "scene_template_catalog": scene_template_catalog(),
+                "active_variant": self.variants.active if self.variants else None,
+                "variant_workspaces": self.variants.summary() if self.variants else [],
                 "style_pack_catalog": style_pack_catalog(),
                 "image_overlays": [
                     {**dict(item), "available": self._image_path(
@@ -384,6 +389,7 @@ class StudioWorkspace:
                 self.media_sha256 = sha256
                 self.info = info
                 self.tape = tape
+                self.variants = None
                 self.plan = None
                 self.suggested_plan = None
                 self.approved = False
@@ -409,9 +415,20 @@ class StudioWorkspace:
             finally:
                 self.importing = False
 
-    def _install_tape(self, tape: ProjectTape, *, persist: bool = True) -> None:
-        """Only expose the new derived state after successful autosave."""
+    def _install_tape(
+        self, tape: ProjectTape, *, persist: bool = True,
+        variant_bundle: VariantWorkspace | None = None,
+    ) -> None:
+        """Only expose tape and sibling variants after one successful autosave."""
         assert self.source is not None
+        new_variants = (
+            variant_bundle if variant_bundle is not None
+            else self.variants.with_active_tape(tape) if self.variants else None
+        )
+        if new_variants is not None and (
+            new_variants.tapes[new_variants.active].as_dict() != tape.as_dict()
+        ):
+            raise StudioError("La variante attiva non corrisponde al montaggio.")
         new_plan = tape.edit_plan(str(self.source))
         proposal = tape.view.suggested
         suggested_plan = (
@@ -423,8 +440,12 @@ class StudioWorkspace:
             if proposal is not None else None
         )
         if persist and self.store:
-            self.store.save(tape, self.source, transcript=self.transcript)
+            self.store.save(
+                tape, self.source, transcript=self.transcript,
+                variant_bundle=new_variants,
+            )
         self.tape = tape
+        self.variants = new_variants
         self.plan = new_plan
         self.suggested_plan = suggested_plan
         self.approved = tape.view.approved
@@ -460,6 +481,7 @@ class StudioWorkspace:
             self.media_sha256 = None
             self.media_id = None
             self.tape = None
+            self.variants = None
             self.plan = None
             self.suggested_plan = None
             self.approved = False
@@ -784,6 +806,60 @@ class StudioWorkspace:
                 "variants": variants,
                 "review_required": True,
             }
+
+    def fork_style_variants(self, raw: dict) -> None:
+        """Create three separately undoable copies and save them atomically."""
+        with self.lock:
+            self._ensure_unlocked()
+            if self.variants is not None:
+                raise StudioError("Le tre versioni esistono già. Selezionane una.")
+            if self.tape is None or self.plan is None or self.source is None:
+                raise StudioError("Prepara prima la timeline e importa un video.")
+            if (not isinstance(raw, dict) or set(raw) != {"revision"} or
+                    type(raw["revision"]) is not int or
+                    raw["revision"] != self.tape.revision):
+                raise StudioError("Revisione non valida per creare le tre versioni.")
+            try:
+                bundle = VariantWorkspace.fork(self.tape)
+                # Explicit "create three variants" action applies caption style
+                # independently to each copy; existing caption content/timing
+                # and every other track are preserved.
+                if self.tape.view.captions:
+                    new_tapes = {}
+                    for key in STYLE_IDS:
+                        tape = bundle.tapes[key]
+                        wanted = PACKS[key].caption_preset
+                        if tape.view.caption_style != wanted:
+                            tape = tape.append("caption.style", {"style": wanted})
+                        new_tapes[key] = tape
+                    bundle = VariantWorkspace(bundle.active, new_tapes)
+                self._install_tape(
+                    bundle.tapes[bundle.active], variant_bundle=bundle
+                )
+            except (ValueError, ProjectFormatError) as exc:
+                raise StudioError(str(exc)) from exc
+
+    def switch_style_variant(self, raw: dict) -> None:
+        """Switch local editor's single active preview/export to another tape."""
+        with self.lock:
+            self._ensure_unlocked()
+            if self.variants is None or self.tape is None:
+                raise StudioError("Crea prima le tre versioni.")
+            if (not isinstance(raw, dict) or set(raw) != {"revision", "style_id"} or
+                    type(raw["revision"]) is not int or
+                    raw["revision"] != self.tape.revision or
+                    type(raw["style_id"]) is not str or
+                    raw["style_id"] not in STYLE_IDS):
+                raise StudioError("Variante o revisione non valida.")
+            if self.variants.active == raw["style_id"]:
+                return
+            try:
+                bundle = self.variants.switch(raw["style_id"])
+                self._install_tape(
+                    bundle.tapes[bundle.active], variant_bundle=bundle
+                )
+            except ValueError as exc:
+                raise StudioError(str(exc)) from exc
 
     def suggest_style_variants_auto(self, raw: dict) -> dict:
         """Three reviewable technical edit plans from actual caption/cut evidence.
@@ -1349,6 +1425,14 @@ class StudioHandler(BaseHTTPRequestHandler):
             if path == "/api/editorial/variants/auto":
                 proposal = self.server.workspace.suggest_style_variants_auto(self._read_json())
                 self._json(200, proposal)
+                return
+            if path == "/api/variants/create":
+                self.server.workspace.fork_style_variants(self._read_json())
+                self._json(200, self.server.workspace.snapshot())
+                return
+            if path == "/api/variants/switch":
+                self.server.workspace.switch_style_variant(self._read_json())
+                self._json(200, self.server.workspace.snapshot())
                 return
             if path == "/api/captions/generate":
                 self.server.workspace.generate_captions(self._read_json())
