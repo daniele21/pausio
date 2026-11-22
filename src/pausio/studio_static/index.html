@@ -364,6 +364,10 @@
                   <h4 id="style-variant-manager-title">Versioni del montaggio</h4>
                   <p class="visual-fx-status">Le versioni condividono il video originale, ma mantengono modifiche, conferma ed esportazione separate. La preview è sempre relativa alla versione attiva.</p>
                   <button type="button" class="button button-outline button-full" id="style-variants-create" disabled>+ Crea 3 versioni indipendenti</button>
+                  <div class="style-pack-actions">
+                    <button type="button" class="button button-outline" id="style-variants-import" disabled>Importa 3 versioni</button>
+                    <a class="button button-outline" id="style-variants-export" href="/api/variants/export" download="pausio-three-variants.json" hidden>Esporta 3 versioni</a>
+                  </div>
                   <div id="style-variant-workspaces" class="style-variant-workspaces" role="group" aria-label="Versioni indipendenti del montaggio"></div>
                   <p class="visual-fx-status" id="style-variant-status" role="status" aria-live="polite">Un solo montaggio attivo. Crea le versioni dopo aver preparato la timeline.</p>
                 </div>
@@ -776,6 +780,7 @@
     <input type="file" id="file-input" accept="video/mp4,video/quicktime,video/webm,video/x-matroska,.m4v,.mov,.mkv" hidden>
     <input type="file" id="fx-input" accept=".mp3,.wav,.m4a,.aac,.flac,.ogg,audio/*" hidden>
     <input type="file" id="project-input" accept=".json,.pausio.json,application/json" hidden>
+    <input type="file" id="style-variants-input" accept=".json,application/json" hidden>
     <div class="job-banner" id="job-banner" role="status" aria-live="polite" hidden>
       <span class="spinner" aria-hidden="true"></span>
       <span id="job-message">Analisi in corso…</span>
