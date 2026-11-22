@@ -34,6 +34,7 @@ from pausio.media_observation import ObservationError, frame_jpeg
 from pausio.audio_observation import audio_wav
 from pausio.graphic_overlays import remap_graphics
 from pausio.scene_templates import catalog as scene_template_catalog
+from pausio.style_packs import catalog as style_pack_catalog, propose_three_variants
 from pausio.image_overlays import MAX_IMAGE_BYTES, IMAGE_EXTENSIONS
 from pausio.planner import CUT_PRESETS, validate_cut_settings, policy_from_cut_settings, propose_segments
 from pausio.project_commands import ProjectTape, ProjectFormatError, UI_COMMANDS, default_audio_mix
@@ -193,6 +194,7 @@ class StudioWorkspace:
                 "graphic_overlays": [dict(g) for g in self.tape.view.graphic_overlays] if self.tape else [],
                 "scene_templates": [dict(g) for g in self.tape.view.scene_templates] if self.tape else [],
                 "scene_template_catalog": scene_template_catalog(),
+                "style_pack_catalog": style_pack_catalog(),
                 "image_overlays": [
                     {**dict(item), "available": self._image_path(
                         item["asset_sha256"], item["filename"]).is_file() and
@@ -757,6 +759,30 @@ class StudioWorkspace:
             except ValueError as exc:
                 raise StudioError(str(exc)) from exc
 
+    def suggest_style_variants(self, raw: dict) -> dict:
+        """Propose three review-only storyboards on the current edited timeline."""
+        with self.lock:
+            self._ensure_unlocked()
+            if (self.tape is None or self.plan is None or
+                    self.info is None or self.media_sha256 is None):
+                raise StudioError("Importa e prepara un montaggio prima di creare le varianti.")
+            if not isinstance(raw, dict) or set(raw) != {"revision", "beats"}:
+                raise StudioError("Le varianti richiedono revision e beats.")
+            revision = raw["revision"]
+            if type(revision) is not int or revision != self.tape.revision:
+                raise StudioError("La revisione del progetto è cambiata.")
+            output_ms = sum(s.end_ms - s.start_ms for s in self.plan.segments)
+            try:
+                variants = propose_three_variants(raw["beats"], output_ms)
+            except ValueError as exc:
+                raise StudioError(str(exc)) from exc
+            return {
+                "base_revision": revision,
+                "media_sha256": self.media_sha256,
+                "variants": variants,
+                "review_required": True,
+            }
+
     def suggest_face_anchor(self, raw: dict) -> dict:
         """Opt-in read-only local sample; only a human/agent edit changes framing."""
         with self.lock:
@@ -1262,6 +1288,10 @@ class StudioHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/editorial/suggest":
                 proposal = self.server.workspace.suggest_editorial_plan(self._read_json())
+                self._json(200, proposal)
+                return
+            if path == "/api/editorial/variants":
+                proposal = self.server.workspace.suggest_style_variants(self._read_json())
                 self._json(200, proposal)
                 return
             if path == "/api/captions/generate":
