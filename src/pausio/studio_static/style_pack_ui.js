@@ -85,6 +85,31 @@
     create.disabled=!ready()||rows.length>0;
     el("style-variants-import").disabled=!ready()||rows.length>0;
     el("style-variants-export").hidden=rows.length===0;
+    const allReviewed=rows.length===3&&rows.every(item=>item.approved);
+    const run=el("style-variants-render-all");
+    run.disabled=!ready()||!allReviewed;
+    run.textContent=allReviewed?"Esporta tutte e 3 · MP4":
+      "Conferma tutti e 3 i montaggi per esportare";
+    const download=el("style-variants-download-all");
+    download.hidden=!current().batch_export_ready;
+    const status=el("style-variants-render-status");
+    const job=current().job||{};
+    if(job.kind==="render_variants"&&job.status==="running"){
+      status.textContent="Generazione MP4 "+(job.completed||0)+"/3 completata. "+
+        "Video in lavorazione: "+(labels[job.variant]||"preparazione")+
+        ". Lo ZIP sarà disponibile solo a render concluso.";
+    }else if(job.kind==="render_variants"&&job.status==="failed"){
+      status.textContent="Esportazione non riuscita: "+(job.error||"controlla gli asset locali")+
+        ". Nessun ZIP parziale è disponibile.";
+    }else if(current().batch_export_ready){
+      status.textContent="Tre MP4 verificati e pronti nel pacchetto ZIP. "+
+        "Le versioni e le approvazioni restano inalterate.";
+    }else{
+      status.textContent=allReviewed
+        ?"Tutte e tre le versioni approvate: esportazione locale 1080 × 1920."
+        :"Conferma ciascuna versione prima dell'export multiplo ("+
+          rows.filter(x=>x.approved).length+"/3).";
+    }
     list.replaceChildren();
     for(const item of rows){
       const node=document.createElement("button");
@@ -110,6 +135,24 @@
           ?"Salvataggio locale recuperabile dopo il riavvio."
           :"Sessione temporanea: esporta la singola versione per conservarla.")
       : "Nessuna variante creata. Il montaggio attuale sarà copiato tre volte.";
+  }
+  async function exportAll(){
+    const rows=current().variant_workspaces||[];
+    if(rows.length!==3||rows.some(x=>!x.approved))
+      throw Error("Devi confermare tutti e tre i montaggi prima di esportarli.");
+    if(!ready())throw Error("Un'altra elaborazione è in corso.");
+    const confirmed=window.confirm(
+      "Esportare tre video verticali 1080 × 1920 in uno ZIP locale? "+
+      "Ogni versione mantiene le proprie modifiche, senza caricare file online."
+    );
+    if(!confirmed)return;
+    const state=await post("/api/variants/render-all",{
+      revision:current().project_revision,media_id:current().media_id
+    });
+    update(state);
+    message="Rendering locale di tre versioni avviato. "+
+      "Lo ZIP apparirà solo dopo la verifica di tutti i file.";
+    draw();
   }
   async function createVariants(){
     if(!ready())throw Error("Prepara il montaggio prima di creare le versioni.");
@@ -233,6 +276,7 @@
     draw();
   }
   el("style-variants-create").addEventListener("click",()=>run(createVariants));
+  el("style-variants-render-all").addEventListener("click",()=>run(exportAll));
   el("style-variants-import").addEventListener("click",()=>{
     el("style-variants-input").click();
   });
