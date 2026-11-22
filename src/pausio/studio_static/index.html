@@ -357,9 +357,16 @@
             <section class="visual-fx-panel" id="style-pack-panel" aria-labelledby="style-pack-heading">
               <header class="visual-fx-heading">
                 <h3 id="style-pack-heading">Tre regie · scegli il trattamento</h3>
-                <p>Confronta tre proposte basate sui tagli e sui sottotitoli esistenti. Non sono ancora tre MP4: ogni intervento si può applicare singolarmente e verificare nella preview FFmpeg.</p>
+                <p>Crea tre versioni indipendenti dello stesso video, ciascuna con il proprio montaggio e Undo/Redo. Confronta le proposte, applica gli interventi e genera preview ed MP4 per la versione attiva.</p>
               </header>
               <div class="visual-fx-controls">
+                <div class="style-variant-manager" aria-labelledby="style-variant-manager-title">
+                  <h4 id="style-variant-manager-title">Versioni del montaggio</h4>
+                  <p class="visual-fx-status">Le versioni condividono il video originale, ma mantengono modifiche, conferma ed esportazione separate. La preview è sempre relativa alla versione attiva.</p>
+                  <button type="button" class="button button-outline button-full" id="style-variants-create" disabled>+ Crea 3 versioni indipendenti</button>
+                  <div id="style-variant-workspaces" class="style-variant-workspaces" role="group" aria-label="Versioni indipendenti del montaggio"></div>
+                  <p class="visual-fx-status" id="style-variant-status" role="status" aria-live="polite">Un solo montaggio attivo. Crea le versioni dopo aver preparato la timeline.</p>
+                </div>
                 <button type="button" class="button button-primary button-full" id="style-pack-generate" disabled>✦ Confronta 3 storyboard</button>
                 <div id="style-pack-choices" class="style-pack-choices" role="group" aria-label="Selezione regia"></div>
                 <p id="style-pack-selected" class="style-pack-selected">Seleziona uno stile e genera le tre proposte</p>
