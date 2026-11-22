@@ -8,10 +8,13 @@ A local-first toolkit for natural-sounding, talking-head social videos. Pausio i
 
 ## In sviluppo — tre Style Pack editoriali e Motion Graphics spike
 
-Sul branch `feat/editorial-style-packs` sono disponibili i **preset di regia read-only**
-Authority, Visual Explainer e Social Impact e un prototipo locale di metrica
-con animazione count-up. I preset producono proposte di scene revisionabili, non
-eseguono montaggi automatici e non sono ancora selezionabili in Studio.
+Sul branch `feat/editorial-style-packs` sono disponibili **tre modalità di
+regia** (Authority, Visual Explainer e Social Impact) nel pannello **Video FX →
+Tre regie**. Da sottotitoli e segnali tecnici esistenti puoi confrontare tre
+storyboard, selezionare uno stile e applicare interventi individuali con Undo/Redo.
+Sono ancora **proposte**, non tre timeline persistenti o tre MP4 finali. È presente
+anche un prototipo locale di metrica con animazione count-up (demo sintetica
+separata, non ancora un template di Studio).
 Per architettura, limiti e demo sintetica FFmpeg:
 [Style Packs e Motion Graphics v1](docs/EDITORIAL_STYLE_PACKS_V1.md).
 
