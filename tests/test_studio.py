@@ -134,6 +134,28 @@ class StudioHttpTests(unittest.TestCase):
         })
         self.assertEqual(before, self.workspace.tape.as_dict())
 
+        status, _, _ = self.request("GET", "/api/variants/export")
+        self.assertEqual(status, 400)
+        status, _, payload = self.post(
+            "/api/variants/create", {"revision": revision}
+        )
+        self.assertEqual(status, 200, payload[:150])
+        current=json.loads(payload)
+        self.assertEqual(len(current["variant_workspaces"]), 3)
+        self.assertEqual(current["active_variant"], "authority")
+        status, _, exported = self.request("GET", "/api/variants/export")
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(exported)["format"], "pausio.local-variants")
+        status, _, payload = self.post("/api/variants/switch", {
+            "revision": current["project_revision"], "style_id": "social_impact"
+        })
+        self.assertEqual(status, 200, payload[:150])
+        self.assertEqual(json.loads(payload)["active_variant"], "social_impact")
+        status, _, _ = self.post("/api/variants/import", {
+            "revision": self.workspace.tape.revision, "bundle": json.loads(exported)
+        })
+        self.assertEqual(status, 400, "Cannot overwrite existing variants")
+
         for raw in ({"revision": revision + 1}, {"revision": True},
                     {"revision": revision, "unknown": 1}):
             status, _, _ = self.post("/api/editorial/variants/auto", raw)
