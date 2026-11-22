@@ -159,6 +159,25 @@ class ThreeVariantBatchExportTests(unittest.TestCase):
             finally:
                 restored.close()
 
+    def test_swapped_original_media_fails_before_any_render(self):
+        with tempfile.TemporaryDirectory() as td:
+            ws=imported_workspace(Path(td)/"workspace")
+            try:
+                prepare(ws)
+                ws.source.write_bytes(b"tampered different video bytes")
+                with patch("pausio.variant_export.render") as renderer:
+                    ws.render_all_style_variants({
+                        "revision":ws.tape.revision,"media_id":ws.media_id
+                    })
+                    job=await_export(ws)
+                    renderer.assert_not_called()
+                self.assertEqual(job["status"],"failed")
+                self.assertIn("sorgente",job["error"])
+                self.assertFalse((ws.directory/BATCH_FILENAME).exists())
+                self.assertFalse(ws.snapshot()["batch_export_ready"])
+            finally:
+                ws.close()
+
     def test_mid_job_failure_never_creates_downloadable_partial_zip(self):
         with tempfile.TemporaryDirectory() as td:
             ws=imported_workspace(Path(td)/"workspace")
