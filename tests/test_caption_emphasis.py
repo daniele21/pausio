@@ -38,7 +38,7 @@ class CaptionEmphasisTests(unittest.TestCase):
         edited = with_cue.append("caption.emphasize", {
             "caption_id": "b" * 32, "indices": [0, 2]
         })
-        self.assertEqual(edited.as_dict()["schema_version"], 14)
+        self.assertEqual(edited.as_dict()["schema_version"], 15)
         self.assertEqual(edited.view.captions[0]["emphasis_indices"], [0, 2])
         self.assertEqual(edited.undo().view.captions, with_cue.view.captions)
         self.assertEqual(edited.undo().redo().view.captions, edited.view.captions)
