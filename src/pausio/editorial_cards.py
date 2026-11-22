@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Callable
 
 from pausio.captions import _ass_color, _ass_time
+from pausio.motion_metric import compose_counter_events
 
 W, H = 1080, 1920
 # Neutral, brand-agnostic design, not a screenshot of a named product.
@@ -161,6 +162,27 @@ def _metric_spotlight(c: _Canvas, d: dict) -> None:
            delay=1100, weight=False)
 
 
+def _metric_countup(c: _Canvas, d: dict) -> None:
+    """New v15 scene: independent renderer; old metric spotlight untouched."""
+    c.panel(0, 0, W, H, radius=2, color="#F4F2ED", shadow=False)
+    c.panel(76, 118, 928, 8, radius=4, color=c.accent, shadow=False)
+    c.badge("EVIDENZA", 102, 234, 228, color="#E9E7E1")
+    c.type(d["heading"], 540, 420, 51, INK, delay=180)
+    # Start in the same position as the original metric label, but animate
+    # only in this explicitly requested v15 template.
+    c.parts.append(compose_counter_events(
+        d["number"], c.start + 380, c.end, c.event, c.safe,
+        x=540, y=810, size=183, color="#A84D2F",
+    ))
+    c.type(d["unit"], 540, 1004, 78, INK, delay=640)
+    c.panel(115, 1164, 850, 2, radius=1,
+            color="#CBD0D5", shadow=False, delay=800)
+    c.type(d["detail"], 540, 1320, 39, MUTED,
+           delay=910, weight=False)
+    c.type(d["source_note"], 540, 1638, 27, MUTED,
+           delay=1100, weight=False)
+
+
 def compose_editorial_card(scene: dict, event: Callable, safe: Callable) -> str:
     """Compile one validated event into deterministic libass dialogue rows."""
     templates = {
@@ -168,6 +190,7 @@ def compose_editorial_card(scene: dict, event: Callable, safe: Callable) -> str:
         "permission_mock": _permission_mock,
         "code_inspector": _code_inspector,
         "metric_spotlight": _metric_spotlight,
+        "metric_countup": _metric_countup,
     }
     render = templates[scene["template"]]
     canvas = _Canvas(scene, event, safe)
