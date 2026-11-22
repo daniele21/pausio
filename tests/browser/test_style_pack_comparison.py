@@ -89,6 +89,29 @@ class StylePackBrowserTests(unittest.TestCase):
                     self.assertEqual(ws.tape.view.caption_style, "minimal")
                     self.assertEqual(ws.tape.revision, tape.revision + 1)
                     self.assertFalse(ws.tape.view.approved)
+                    # Explicitly fork the current edit into three independently
+                    # recoverable versions. Their caption styles then diverge.
+                    page.locator("#style-variants-create").click()
+                    page.wait_for_function(
+                        "() => document.querySelectorAll("
+                        "'#style-variant-workspaces button').length === 3"
+                    )
+                    self.assertEqual(ws.variants.active, "authority")
+                    self.assertEqual(ws.tape.view.caption_style, "minimal")
+                    page.locator("#style-variant-workspaces button").nth(2).click()
+                    page.wait_for_function(
+                        "() => document.getElementById('style-variant-status')"
+                        ".textContent.includes('Social Impact')"
+                    )
+                    self.assertEqual(ws.variants.active, "social_impact")
+                    self.assertEqual(ws.tape.view.caption_style, "kinetic")
+                    page.locator("#style-variant-workspaces button").nth(0).click()
+                    page.wait_for_function(
+                        "() => document.getElementById('style-variant-status')"
+                        ".textContent.includes('Authority')"
+                    )
+                    self.assertEqual(ws.variants.active, "authority")
+                    self.assertEqual(ws.tape.view.caption_style, "minimal")
                     self.assertFalse(errors, errors)
                 finally:
                     browser.close()
