@@ -14,7 +14,7 @@ class StudioStylePackTests(unittest.TestCase):
         self.workspace = StudioWorkspace()
         self.workspace.source = self.workspace.directory / "synthetic.mp4"
         self.workspace.media_sha256 = "a" * 64
-        self.workspace.info = SimpleNamespace(as_dict=lambda: {"duration_ms": 12000})
+        self.workspace.info = SimpleNamespace(duration_ms=12000, as_dict=lambda: {"duration_ms": 12000})
         tape = ProjectTape({
             "filename": "synthetic.mp4", "sha256": "a" * 64,
             "duration_ms": 12000, "has_audio": True,
@@ -51,6 +51,41 @@ class StudioStylePackTests(unittest.TestCase):
             "authority", "visual_explainer", "social_impact",
         })
         self.assertEqual(before, self.workspace.tape.as_dict())
+
+    def test_automatic_three_style_technical_proposals_are_read_only(self):
+        before = self.workspace.tape.as_dict()
+        response = self.workspace.suggest_style_variants_auto({
+            "revision": self.workspace.tape.revision,
+        })
+        self.assertEqual(response["base_revision"], self.workspace.tape.revision)
+        self.assertTrue(response["review_required"])
+        self.assertEqual(set(response["variants"]), {
+            "authority", "visual_explainer", "social_impact",
+        })
+        self.assertEqual([
+            x["caption_preset_suggestion"] for x in response["variants"].values()
+        ], ["minimal", "word_focus", "kinetic"])
+        for variant in response["variants"].values():
+            self.assertIn("semantic_director", variant["missing_signals"])
+            for candidate in variant["candidates"]:
+                self.assertIn(candidate["command_type"], {
+                    "graphic.overlay.add", "video.transform.add",
+                })
+        self.assertEqual(self.workspace.tape.as_dict(), before)
+
+    def test_automatic_style_rejects_bad_payload_and_stale_revision(self):
+        revision = self.workspace.tape.revision
+        for request in (
+            {"revision": revision + 1},
+            {"revision": True},
+            {"revision": revision, "beats": []},
+            {},
+        ):
+            with self.subTest(request=request), self.assertRaises(StudioError):
+                self.workspace.suggest_style_variants_auto(request)
+        self.workspace.tape = None
+        with self.assertRaises(StudioError):
+            self.workspace.suggest_style_variants_auto({"revision": revision})
 
     def test_fails_closed_on_stale_revision_invalid_beats_or_missing_media(self):
         for request in (
