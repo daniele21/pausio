@@ -12,6 +12,9 @@ Il branch `feat/editorial-integration-v15` combina la gestione di
 **Authority, Visual Explainer e Social Impact** come tre timeline
 indipendenti, la UI di confronto delle proposte, gli effetti B-roll e
 i componenti motion v14, e il template `metric_countup` dello schema v15.
+È incluso anche **Esporta tutte e 3 · MP4**: dopo tre approvazioni
+indipendenti Pausio genera localmente un unico ZIP con i tre video
+verticali 1080 × 1920; nessun contenuto viene pubblicato online.
 Non è ancora distribuito: richiede test di integrazione ed esame visivo
 di preview ed export, prima del merge in `main`.
 Dettagli: [Tre varianti](docs/EDITORIAL_VARIANTS_V1.md),
