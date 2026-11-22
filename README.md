@@ -12,11 +12,15 @@ Sul branch `feat/editorial-style-packs` sono disponibili **tre modalità di
 regia** (Authority, Visual Explainer e Social Impact) nel pannello **Video FX →
 Tre regie**. Da sottotitoli e segnali tecnici esistenti puoi confrontare tre
 storyboard, selezionare uno stile e applicare interventi individuali con Undo/Redo.
-Sono ancora **proposte**, non tre timeline persistenti o tre MP4 finali. È presente
+Le tre versioni ora possono essere salvate come timeline indipendenti
+con approvazioni, anteprime ed esportazioni **una alla volta**. Lo storyboard
+assistito rimane una proposta da approvare; non crea automaticamente tre
+MP4 già montati. È presente
 anche un prototipo locale di metrica con animazione count-up (demo sintetica
 separata, non ancora un template di Studio).
 Per architettura, limiti e demo sintetica FFmpeg:
-[Style Packs e Motion Graphics v1](docs/EDITORIAL_STYLE_PACKS_V1.md).
+[Style Packs e Motion Graphics v1](docs/EDITORIAL_STYLE_PACKS_V1.md) e
+[Gestione di tre varianti indipendenti](docs/EDITORIAL_VARIANTS_V1.md).
 
 ## Download — GitHub Early Access v0.1.0
 
