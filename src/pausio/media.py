@@ -19,6 +19,7 @@ from pausio.captions import ass_document
 from pausio.graphic_overlays import compose_graphics_ass
 from pausio.split_dashboard import compile_speaker_splits
 from pausio.image_overlays import validate_image_overlays
+from pausio.video_broll import MAX_BROLL_BYTES, validate_video_brolls, compose_video_broll
 from pausio.domain import Interval
 from pausio.visual_fx import motion_filter, prepare_motion_fx
 from pausio.visual_transitions import compile_dips
@@ -260,6 +261,7 @@ def render(
     graphic_overlays: list[dict] | None = None,
     scene_templates: list[dict] | None = None,
     image_overlays: list[tuple[Path, dict]] | None = None,
+    video_broll: list[tuple[Path, dict]] | None = None,
     output_window: tuple[int, int] | None = None,
 ) -> list[str]:
     """Render ordered intervals in one re-encode; preserve aspect ratio with padding.
@@ -286,6 +288,7 @@ def render(
     if graphic_overlays is not None and not isinstance(graphic_overlays, list):
         raise MediaError("graphic_overlays must be a list or None")
     images = image_overlays or []
+    videos = video_broll or []
     output_ms = sum(s.end_ms - s.start_ms for s in segments)
     try:
         validate_window(output_window, output_ms)
@@ -293,6 +296,7 @@ def render(
         raise MediaError(str(exc)) from exc
     try:
         validate_image_overlays([clip for _, clip in images], output_ms)
+        validate_video_brolls([clip for _, clip in videos], output_ms)
     except ValueError as exc:
         raise MediaError(str(exc)) from exc
     for asset, clip in images:
@@ -303,6 +307,19 @@ def render(
             digest = hashlib.file_digest(data, "sha256").hexdigest()
         if digest != clip["asset_sha256"]:
             raise MediaError("Hash dell'immagine B-roll differente; reimporta l'asset.")
+    # Validate local video assets before invoking FFmpeg. Never resolve URL or
+    # user-supplied filtergraph from the portable JSON.
+    for asset, clip in videos:
+        if asset.is_symlink() or not asset.is_file() or asset.stat().st_size > MAX_BROLL_BYTES:
+            raise MediaError("Video B-roll mancante, non sicuro o troppo grande.")
+        info = probe(asset)
+        if (info.width > 3840 or info.height > 2160
+                or clip["media_in_ms"] + clip["duration_ms"] > info.duration_ms + 80):
+            raise MediaError("Video B-roll: durata o risoluzione sorgente non supportata.")
+        with asset.open("rb") as data:
+            digest = hashlib.file_digest(data, "sha256").hexdigest()
+        if digest != clip["asset_sha256"]:
+            raise MediaError("Hash video B-roll differente; reimporta l'asset.")
     has_text = bool(captions) or bool(graphic_overlays) or bool(scene_templates)
     # Validate subtitle text/style for both preview and final output.
     render_ffmpeg = require_binary("ffmpeg")
@@ -372,7 +389,7 @@ def render(
     split_scenes = [s for s in scene_templates or []
                     if s["template"] == "dashboard_split"]
     normalized = "[normalv]" if split_scenes else (
-        "[pipbase]" if images else "[basev]" if has_text else "[outv]")
+        "[rollbase]" if videos else "[pipbase]" if images else "[basev]" if has_text else "[outv]")
     components.append(
         f"[joinedv]fps=30,scale={size[0]}:{size[1]}:force_original_aspect_ratio=decrease,"
         f"pad={size[0]}:{size[1]}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p"
@@ -380,13 +397,19 @@ def render(
     )
     if split_scenes:
         speaker = compile_speaker_splits(components, normalized, split_scenes, size)
-        last_label = "[pipbase]" if images else "[basev]" if has_text else "[outv]"
+        last_label = "[rollbase]" if videos else "[pipbase]" if images else "[basev]" if has_text else "[outv]"
         components.append(f"{speaker}null{last_label}")
+    if videos:
+        compose_video_broll(
+            components, base_label="[rollbase]", videos=videos,
+            first_input=1 + len(audio_fx or []), size=size,
+            final_label="[pipbase]" if images else "[basev]" if has_text else "[outv]",
+        )
     if images:
         last = "[pipbase]"
         for i, (_, clip) in enumerate(images):
-            # Input order: original video, sound FX, then image assets.
-            input_index = 1 + len(audio_fx or []) + i
+            # Input order: source, audio FX, video B-roll, image assets.
+            input_index = 1 + len(audio_fx or []) + len(videos) + i
             width = max(2, round(size[0]*clip["width_pct"]/100)//2*2)
             height = max(2, round(size[1]*0.58)//2*2)
             start = clip["start_ms"]/1000
@@ -459,6 +482,8 @@ def render(
         args = [render_ffmpeg, "-hide_banner", "-nostdin", "-y",
                 "-i", str(source)]
         for path, _ in effects:
+            args.extend(["-i", str(path)])
+        for path, _ in videos:
             args.extend(["-i", str(path)])
         for path, _ in images:
             args.extend(["-loop", "1", "-framerate", "30", "-i", str(path)])

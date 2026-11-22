@@ -21,12 +21,14 @@ from pausio.domain import EditPlan, Interval
 from pausio.visual_transitions import compile_dips, MAX_TRANSITIONS
 from pausio.graphic_overlays import validate_graphic, validate_graphics
 from pausio.image_overlays import validate_image_overlay, validate_image_overlays
+from pausio.video_broll import validate_video_broll, validate_video_brolls
 from pausio.scene_templates import validate_scene, validate_scenes
 from pausio.planner import CUT_PRESETS, validate_cut_settings
 
 FORMAT = "pausio.project"
-VERSION = 10
-PREVIOUS_VERSION = 9
+VERSION = 11
+PREVIOUS_VERSION = 10
+V9_VERSION = 9
 V8_VERSION = 8
 V7_VERSION = 7
 V6_VERSION = 6
@@ -64,6 +66,9 @@ _TYPES = frozenset({
     "image.overlay.add",
     "image.overlay.update",
     "image.overlay.remove",
+    "video.broll.add",
+    "video.broll.update",
+    "video.broll.remove",
     "graphic.overlay.add",
     "graphic.overlay.update",
     "graphic.overlay.remove",
@@ -376,6 +381,7 @@ class ProjectView:
     video_transitions: tuple[dict, ...] = ()
     graphic_overlays: tuple[dict, ...] = ()
     image_overlays: tuple[dict, ...] = ()
+    video_broll: tuple[dict, ...] = ()
     scene_templates: tuple[dict, ...] = ()
 
 
@@ -395,6 +401,7 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
     video_transitions: list[dict] = []
     graphic_overlays: list[dict] = []
     image_overlays: list[dict] = []
+    video_broll: list[dict] = []
     scene_templates: list[dict] = []
     used_events: set[str] = set()
 
@@ -634,6 +641,40 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
                 raise ProjectFormatError("Immagine PIP da rimuovere inesistente.")
             image_overlays = [image for image in image_overlays if image["id"] != ident]
             approved = False
+        elif kind == "video.broll.add":
+            _object(payload, {"video"}, kind)
+            total = sum(item["end_ms"] - item["start_ms"] for item in current)
+            try:
+                clip = validate_video_broll(payload["video"], total)
+                validate_video_brolls([*video_broll, clip], total)
+            except ValueError as exc:
+                raise ProjectFormatError(str(exc)) from exc
+            video_broll = [*video_broll, clip]
+            approved = False
+        elif kind == "video.broll.update":
+            _object(payload, {"video"}, kind)
+            total = sum(item["end_ms"] - item["start_ms"] for item in current)
+            try:
+                clip = validate_video_broll(payload["video"], total)
+            except ValueError as exc:
+                raise ProjectFormatError(str(exc)) from exc
+            if not any(row["id"] == clip["id"] for row in video_broll):
+                raise ProjectFormatError("Video B-roll da modificare inesistente.")
+            updated = [clip if row["id"] == clip["id"] else row
+                       for row in video_broll]
+            try:
+                validate_video_brolls(updated, total)
+            except ValueError as exc:
+                raise ProjectFormatError(str(exc)) from exc
+            video_broll = updated
+            approved = False
+        elif kind == "video.broll.remove":
+            _object(payload, {"video_id"}, kind)
+            ident = _id(payload["video_id"], "video_id")
+            if not any(row["id"] == ident for row in video_broll):
+                raise ProjectFormatError("Video B-roll da rimuovere inesistente.")
+            video_broll = [row for row in video_broll if row["id"] != ident]
+            approved = False
         elif kind == "graphic.overlay.add":
             _object(payload, {"graphic"}, kind)
             try:
@@ -740,6 +781,12 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
                 image_overlays,
                 sum(row["end_ms"]-row["start_ms"] for row in current)
             )
+            validate_video_brolls(
+                video_broll,
+                sum(row["end_ms"]-row["start_ms"] for row in current)
+            )
+        elif video_broll:
+            raise ValueError("Video B-roll senza segmenti mantenuti.")
         elif image_overlays:
             raise ValueError("Immagine PIP senza segmenti mantenuti.")
     except ValueError as exc:
@@ -759,6 +806,7 @@ def _replay(media: dict, commands: tuple[dict, ...]) -> ProjectView:
         video_transitions=tuple(copy.deepcopy(video_transitions)),
         graphic_overlays=tuple(copy.deepcopy(graphic_overlays)),
         image_overlays=tuple(copy.deepcopy(image_overlays)),
+        video_broll=tuple(copy.deepcopy(video_broll)),
         scene_templates=tuple(copy.deepcopy(scene_templates)),
     )
 
@@ -880,7 +928,7 @@ class ProjectTape:
             # V1 files are intentionally read-only inputs; exporting always
             # upgrades to V2 with cursor at the end and preserved event IDs.
             return cls(obj["media"], obj["commands"])
-        if version in (MIGRATION_VERSION, V3_VERSION, V4_VERSION, V5_VERSION, V6_VERSION, V7_VERSION, V8_VERSION, PREVIOUS_VERSION, VERSION):
+        if version in (MIGRATION_VERSION, V3_VERSION, V4_VERSION, V5_VERSION, V6_VERSION, V7_VERSION, V8_VERSION, V9_VERSION, PREVIOUS_VERSION, VERSION):
             obj = _object(
                 document,
                 {"format", "schema_version", "media", "commands",

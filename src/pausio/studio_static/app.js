@@ -299,6 +299,7 @@ function update(next){
   window.pausioSceneTemplates?.update(next);
   window.pausioVisualObservation?.update(next);
   window.pausioImages?.update(next);
+  window.pausioVideos?.update(next);
   window.pausioEditorial?.update(next);
   updateFxMonitorUI();drawAudioMixer();syncVoicePlayback();syncLiveFx();transport();
   syncDesktopCommands();
