@@ -341,6 +341,12 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertTrue(preview["preview_ready"])
         self.assertFalse(preview["approved"])
         self.shot("media-motion-image-video-preview")
+        # Global undo shortcut only applies outside editable form controls.
+        # Focus a non-editable toolbar button to avoid native input undo.
+        # Wait for the frontend to observe job completion before exercising
+        # the global shortcut; backend completion can precede UI polling.
+        self.wait_condition(lambda:self.page.locator("#undo-action").is_enabled())
+        self.page.locator("#undo-action").focus()
         self.page.keyboard.press("Control+z")
         undone=self.wait_state("revision",revised["project_revision"]+1)
         self.assertNotIn("motion",undone["video_broll"][0])
@@ -472,7 +478,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
         original=self.upload_analyze()
         self.page.locator('[data-workspace-nav="visual"]').click()
         self.wait_condition(lambda:self.page.locator(
-            "#scene-template-kind option").count()==8)
+            "#scene-template-kind option").count()==9)
         selector=self.page.locator("#scene-template-kind")
         selector.select_option("floating_insight")
         self.assertEqual(self.page.locator(
@@ -506,7 +512,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
     def test_dashboard_split_reframes_creator_and_animates_in_render_preview(self):
         initial=self.upload_analyze()
         self.page.locator('[data-workspace-nav="visual"]').click()
-        self.wait_condition(lambda:self.page.locator("#scene-template-kind").locator("option").count()==8)
+        self.wait_condition(lambda:self.page.locator("#scene-template-kind").locator("option").count()==9)
         self.page.locator("#scene-template-kind").select_option("dashboard_split")
         self.page.locator("#scene-template-duration").fill("2800")
         self.page.locator("#scene-template-fields").locator(
@@ -537,7 +543,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
     def test_fullscreen_scene_template_is_editable_and_previewed_with_ffmpeg(self):
         initial=self.upload_analyze()
         self.page.locator('[data-workspace-nav="visual"]').click()
-        self.wait_condition(lambda:self.page.locator("#scene-template-kind").locator("option").count()==8)
+        self.wait_condition(lambda:self.page.locator("#scene-template-kind").locator("option").count()==9)
         self.page.locator("#scene-template-kind").select_option("stat_reveal")
         self.page.locator("#scene-template-duration").fill("2500")
         self.page.locator("#scene-template-fields").locator('[data-scene-field="number"]').fill("1.379")
@@ -639,7 +645,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
         exported=self.root/"visual-fx.pausio.json"
         download.value.save_as(exported)
         document=json.loads(exported.read_text())
-        self.assertEqual(document["schema_version"],14)
+        self.assertEqual(document["schema_version"],15)
         self.assertIn("video.transform.update",[row["type"] for row in document["commands"]])
         self.assertFalse(self.errors,self.errors)
 
@@ -1120,7 +1126,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
             self.page.locator("#project-export").click()
         saved=self.root/"project.pausio.json";download.value.save_as(saved)
         data=json.loads(saved.read_text())
-        self.assertEqual(data["schema_version"],14)
+        self.assertEqual(data["schema_version"],15)
         self.assertIn("segment.update",[c["type"] for c in data["commands"]])
 
         self.page.locator("#preview-action").click()

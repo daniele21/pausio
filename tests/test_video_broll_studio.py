@@ -122,7 +122,7 @@ class VideoBrollStudioTests(unittest.TestCase):
         self.assertEqual(status, 200, data[:200])
         self.assertFalse(json.loads(data)["preview_ready"])
         portable = json.loads(self.request("/api/project/export")[1])
-        self.assertEqual(portable["schema_version"], 14)
+        self.assertEqual(portable["schema_version"], 15)
         self.assertNotIn(str(roll), json.dumps(portable))
 
         digest = row["asset_sha256"]
