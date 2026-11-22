@@ -473,6 +473,8 @@ class StudioWorkspace:
                 self.approved = False
                 self.transcript = None
                 self.export_ready = False
+                self.batch_ready = False
+                (self.directory / BATCH_FILENAME).unlink(missing_ok=True)
                 self.preview_ready = False
                 self.preview_range_ready = False
                 self.preview_range_window = None
@@ -528,6 +530,8 @@ class StudioWorkspace:
         self.suggested_plan = suggested_plan
         self.approved = tape.view.approved
         self.export_ready = False
+        self.batch_ready = False
+        (self.directory / BATCH_FILENAME).unlink(missing_ok=True)
         self.preview_ready = False
         self.preview_range_ready = False
         self.preview_range_window = None
@@ -566,6 +570,8 @@ class StudioWorkspace:
             self.approved = False
             self.transcript = None
             self.export_ready = False
+            self.batch_ready = False
+            (self.directory / BATCH_FILENAME).unlink(missing_ok=True)
             self.preview_ready = False
             self.preview_range_ready = False
             self.preview_range_window = None
