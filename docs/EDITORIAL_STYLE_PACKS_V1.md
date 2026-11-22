@@ -100,8 +100,11 @@ switching between their candidate lists and explicitly accepting one
 regeneration against the latest revision. The current source and shared
 timeline stay unchanged until a creator selects an edit.
 
-**Important limitation:** these are three candidate storyboards, **not
-three independently saved timeline variants or three pre-rendered videos**.
+**Important:** this paragraph describes **storyboard suggestions**, not
+the actual variant storage. Separate, independently saved ProjectTape timelines
+are now supported by the [three-variant Studio workflow](EDITORIAL_VARIANTS_V1.md).
+However, three previews/MP4s are still rendered **one active version at a time**,
+not simultaneously.
 The UI deliberately describes them as technical storyboard suggestions,
 not finished videos. Actual per-variant save/preview/export needs a dedicated
 versioned project model and careful integration with the stacked B-roll
