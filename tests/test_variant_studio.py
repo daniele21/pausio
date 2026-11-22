@@ -88,6 +88,72 @@ class VariantStudioTests(unittest.TestCase):
             finally:
                 ws.close()
 
+    def test_export_import_preserves_all_variants_and_rejects_wrong_media(self):
+        with tempfile.TemporaryDirectory() as td:
+            first = imported_workspace(Path(td) / "source")
+            second = imported_workspace(Path(td) / "restored")
+            try:
+                applied_plan(first)
+                first.fork_style_variants({"revision": first.tape.revision})
+                first.switch_style_variant({
+                    "revision": first.tape.revision, "style_id": "social_impact"
+                })
+                first.approve_plan()
+                exported = first.export_style_variants()
+                self.assertEqual(exported["active"], "social_impact")
+                self.assertNotIn("transcript", str(exported))
+                second.import_style_variants({
+                    "revision": second.tape.revision, "bundle": exported
+                })
+                self.assertEqual(second.snapshot()["active_variant"], "social_impact")
+                self.assertTrue(second.tape.view.approved)
+                second.switch_style_variant({
+                    "revision": second.tape.revision, "style_id": "authority"
+                })
+                self.assertFalse(second.tape.view.approved)
+                with self.assertRaises(StudioError):
+                    second.import_style_variants({
+                        "revision": second.tape.revision, "bundle": exported
+                    })
+                # Import against another media digest cannot alter the project.
+                other = imported_workspace(Path(td) / "other")
+                try:
+                    before = other.tape.as_dict()
+                    bad = json.loads(json.dumps(exported))
+                    bad["projects"]["social_impact"]["media"]["sha256"] = "b"*64
+                    with self.assertRaises(StudioError):
+                        other.import_style_variants({
+                            "revision": other.tape.revision, "bundle": bad
+                        })
+                    self.assertEqual(other.tape.as_dict(), before)
+                finally:
+                    other.close()
+            finally:
+                first.close()
+                second.close()
+
+    def test_corrupt_variant_checkpoint_falls_back_to_previous_valid_session(self):
+        with tempfile.TemporaryDirectory() as td:
+            directory = Path(td) / "private"
+            ws = imported_workspace(directory)
+            try:
+                applied_plan(ws)
+                ws.fork_style_variants({"revision": ws.tape.revision})
+                checkpoint = directory / STATE_FILE
+                bad = json.loads(checkpoint.read_text())
+                bad["variants"]["projects"]["authority"]["revision"] += 1
+                checkpoint.write_text(json.dumps(bad), encoding="utf-8")
+            finally:
+                ws.close()
+            recovered = new_workspace(directory)
+            try:
+                self.assertTrue(recovered.snapshot()["recovered"])
+                self.assertIsNotNone(recovered.snapshot()["recovery_warning"])
+                self.assertIsNone(recovered.snapshot()["active_variant"])
+                self.assertIsNotNone(recovered.tape)
+            finally:
+                recovered.close()
+
     def test_legacy_v2_session_is_left_unchanged_without_variants(self):
         with tempfile.TemporaryDirectory() as td:
             ws=imported_workspace(Path(td)/"private")
