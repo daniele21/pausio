@@ -343,6 +343,9 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.shot("media-motion-image-video-preview")
         # Global undo shortcut only applies outside editable form controls.
         # Focus a non-editable toolbar button to avoid native input undo.
+        # Wait for the frontend to observe job completion before exercising
+        # the global shortcut; backend completion can precede UI polling.
+        self.wait_condition(lambda:self.page.locator("#undo-action").is_enabled())
         self.page.locator("#undo-action").focus()
         self.page.keyboard.press("Control+z")
         undone=self.wait_state("revision",revised["project_revision"]+1)
