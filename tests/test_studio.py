@@ -92,6 +92,26 @@ class StudioHttpTests(unittest.TestCase):
         self.assertIn(b'id="scene-template-panel"', self.request("GET", "/")[2])
         self.assertIn(b'id="approve-action"', self.request("GET", "/")[2])
 
+    def test_batch_zip_endpoint_is_hidden_until_ready_and_local_only(self):
+        from zipfile import ZipFile
+        path = self.workspace.directory / "pausio-three-variants.zip"
+        self.assertEqual(self.request("GET", "/api/variants/download-all")[0], 404)
+        status, _, _ = self.post("/api/variants/render-all", {
+            "revision": 0, "media_id": "unknown"
+        })
+        self.assertEqual(status, 400)
+        with ZipFile(path, "w") as target:
+            target.writestr("pausio-authority.mp4", b"test")
+        self.workspace.batch_ready = True
+        status, headers, payload = self.request("GET", "/api/variants/download-all")
+        self.assertEqual(status, 200)
+        self.assertEqual(headers["Content-Type"], "application/zip")
+        self.assertIn("attachment", headers["Content-Disposition"])
+        self.assertTrue(payload.startswith(b"PK"))
+        self.assertEqual(headers["Cache-Control"], "no-store")
+        self.workspace.batch_ready = False
+        self.assertEqual(self.request("GET", "/api/variants/download-all")[0], 404)
+
     def test_style_pack_assets_and_revision_guarded_auto_storyboards(self):
         """The Studio endpoint returns three proposals without mutating ProjectTape."""
         from pausio.project_commands import ProjectTape
