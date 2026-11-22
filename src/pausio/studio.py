@@ -36,6 +36,7 @@ from pausio.graphic_overlays import remap_graphics
 from pausio.scene_templates import catalog as scene_template_catalog
 from pausio.style_packs import PACKS, catalog as style_pack_catalog, propose_three_variants
 from pausio.variant_projects import STYLE_IDS, VariantWorkspace
+from pausio.variant_export import BATCH_FILENAME, render_three_approved
 from pausio.image_overlays import MAX_IMAGE_BYTES, IMAGE_EXTENSIONS
 from pausio.video_broll import MAX_BROLL_BYTES, VIDEO_EXTENSIONS
 from pausio.planner import CUT_PRESETS, validate_cut_settings, policy_from_cut_settings, propose_segments
@@ -112,6 +113,7 @@ class StudioWorkspace:
         self.plan: EditPlan | None = None
         self.suggested_plan: EditPlan | None = None
         self.transcript: dict | None = None
+        self.batch_ready = False
         self.export_ready = False
         self.preview_ready = False
         self.preview_range_ready = False
@@ -227,6 +229,7 @@ class StudioWorkspace:
                     self.tape.view.captions, self.plan.segments
                 ) if self.tape and self.plan and self.tape.view.captions else [],
                 "export_ready": self.export_ready,
+                "batch_export_ready": self.batch_ready and (self.directory / BATCH_FILENAME).is_file(),
                 "preview_ready": self.preview_ready,
                 "visual_sharing_enabled": self.visual_sharing_enabled,
                 "audio_sharing_enabled": self.audio_sharing_enabled,
@@ -1163,6 +1166,73 @@ class StudioWorkspace:
                 raise StudioError(str(exc)) from exc
             self._install_tape(incoming)
 
+    def render_all_style_variants(self, raw: dict) -> None:
+        """Explicitly render the three approved variants; never auto-approve."""
+        with self.lock:
+            self._ensure_unlocked()
+            if (self.variants is None or self.tape is None or self.info is None
+                    or self.media_sha256 is None or self.source is None):
+                raise StudioError("Crea e rivedi prima le tre versioni.")
+            if (not isinstance(raw, dict) or set(raw) != {"revision", "media_id"}
+                    or type(raw["revision"]) is not int
+                    or raw["revision"] != self.tape.revision
+                    or type(raw["media_id"]) is not str
+                    or raw["media_id"] != self.media_id):
+                raise StudioError("Timeline cambiata: aggiorna Studio prima di esportare.")
+            bundle = self.variants
+            missing = [key for key in STYLE_IDS if not bundle.tapes[key].view.approved]
+            if missing:
+                raise StudioError("Conferma prima queste versioni: " + ", ".join(missing))
+            try:
+                for key in STYLE_IDS:
+                    bundle.tapes[key].require_media(
+                        sha256=self.media_sha256,
+                        duration_ms=self.info.duration_ms,
+                        has_audio=self.info.has_audio,
+                    )
+            except ProjectFormatError as exc:
+                raise StudioError(str(exc)) from exc
+            source, info = self.source, self.info
+            destination = self.directory / BATCH_FILENAME
+            destination.unlink(missing_ok=True)
+            self.batch_ready = False
+            self.job = {
+                "status": "running", "kind": "render_variants", "error": None,
+                "completed": 0, "total": 3, "variant": None,
+            }
+
+        def report(style_id: str, completed: int) -> None:
+            with self.lock:
+                self.job.update(completed=completed, variant=style_id)
+
+        def worker() -> None:
+            try:
+                render_three_approved(
+                    bundle, source, info, destination,
+                    audio_asset=self._audio_path,
+                    image_asset=self._image_path,
+                    video_asset=self._video_path,
+                    progress=report,
+                )
+                with self.lock:
+                    self.batch_ready = True
+                    self.job = {
+                        "status": "completed", "kind": "render_variants",
+                        "error": None, "completed": 3, "total": 3,
+                        "variant": STYLE_IDS[-1],
+                    }
+            except Exception as exc:
+                destination.unlink(missing_ok=True)
+                with self.lock:
+                    self.batch_ready = False
+                    self.job = {
+                        "status": "failed", "kind": "render_variants",
+                        "error": str(exc)[:350],
+                        "completed": self.job.get("completed", 0),
+                        "total": 3, "variant": self.job.get("variant"),
+                    }
+        threading.Thread(target=worker, name="pausio-render-three", daemon=True).start()
+
     def start_job(
         self, kind: str, *, settings: object | None = None, asr: object | None = None,
         range_start_ms: object | None = None, range_duration_ms: object | None = None
@@ -1568,6 +1638,10 @@ class StudioHandler(BaseHTTPRequestHandler):
                 self.server.workspace.switch_style_variant(self._read_json())
                 self._json(200, self.server.workspace.snapshot())
                 return
+            if path == "/api/variants/render-all":
+                self.server.workspace.render_all_style_variants(self._read_json())
+                self._json(202, self.server.workspace.snapshot())
+                return
             if path == "/api/variants/import":
                 self.server.workspace.import_style_variants(self._read_json())
                 self._json(200, self.server.workspace.snapshot())
@@ -1814,6 +1888,9 @@ class StudioHandler(BaseHTTPRequestHandler):
             except StudioError as exc:
                 self._failed(409, str(exc))
             return
+        if path == "/api/variants/download-all":
+            self._download_style_archive()
+            return
         if path == "/api/variants/export":
             try:
                 content = json.dumps(
@@ -1885,6 +1962,33 @@ class StudioHandler(BaseHTTPRequestHandler):
                         preview_range=path == "/api/preview/range")
         else:
             self._failed(404, "Risorsa non trovata.")
+
+    def _download_style_archive(self) -> None:
+        """Serve a completed ZIP in chunks; file paths never enter the URL."""
+        with self.server.workspace.lock:
+            path = self.server.workspace.directory / BATCH_FILENAME
+            if (not self.server.workspace.batch_ready or path.is_symlink()
+                    or not path.is_file() or path.stat().st_size <= 0):
+                self._failed(404, "Il pacchetto delle tre versioni non è disponibile.")
+                return
+            try:
+                stream = path.open("rb")
+                total = path.stat().st_size
+            except OSError:
+                self._failed(404, "Pacchetto non disponibile.")
+                return
+        try:
+            self._headers(200, total, "application/zip")
+            self.send_header("Content-Disposition",
+                             'attachment; filename="pausio-three-variants.zip"')
+            self.end_headers()
+            while True:
+                chunk = stream.read(1024 * 1024)
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+        finally:
+            stream.close()
 
     def _media(
         self, exported: bool, headers_only: bool, *,
