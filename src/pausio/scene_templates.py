@@ -12,6 +12,7 @@ from typing import Any
 from pausio.captions import _ass_color, _ass_text, _ass_time
 from pausio.split_dashboard import compose_dashboard
 from pausio.editorial_cards import compose_editorial_card
+from pausio.motion_metric import is_valid_counter_value
 
 MAX_SCENES = 16
 SCENE_FIELDS = frozenset({"id", "template", "start_ms", "duration_ms", "accent", "content"})
@@ -171,6 +172,14 @@ TEMPLATES = {
     },
 }
 
+# Additive scene type: legacy metric_spotlight remains byte-for-byte unchanged.
+# The dedicated v15 schema gives this template a distinct, validated identity.
+TEMPLATES["metric_countup"] = {
+    **TEMPLATES["metric_spotlight"],
+    "label": "Inserto · Metrica animata (count-up)",
+    "fields": [dict(field) for field in TEMPLATES["metric_spotlight"]["fields"]],
+}
+
 
 def catalog() -> list[dict]:
     """Return display metadata without exporting internal render expressions."""
@@ -215,6 +224,8 @@ def validate_scene(raw: Any, total_ms: int) -> dict:
               or any(ord(ch) == 127 or (ord(ch) < 32 and
                        not (field["type"] == "textarea" and ch == "\n")) for ch in value)):
             raise ValueError(f"Scena: testo {key} non valido.")
+    if template == "metric_countup" and not is_valid_counter_value(content["number"]):
+        raise ValueError("Count-up: usa un numero intero non negativo, massimo 9.999.999.")
     if template == "code_highlight":
         lines = content["code"].split("\n")
         if (not 1 <= len(lines) <= 5 or
@@ -288,7 +299,8 @@ def compose_scene_events(rows: list[dict], total_ms: int) -> str:
             out.append(compose_dashboard(scene, _rect, _label))
             continue
         if scene["template"] in ("floating_insight", "permission_mock",
-                                 "code_inspector", "metric_spotlight"):
+                                 "code_inspector", "metric_spotlight",
+                                 "metric_countup"):
             out.append(compose_editorial_card(scene, _event, _safe))
             continue
         out.append(_rect(a, end, 0, 0, 1080, 1920, _BACKGROUND))
