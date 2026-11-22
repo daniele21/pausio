@@ -49,7 +49,7 @@ _PACKS: tuple[StylePack, ...] = (
     ),
     StylePack(
         id="visual_explainer", label="Visual Explainer",
-        caption_preset="boxed", camera_preset="educativo",
+        caption_preset="word_focus", camera_preset="educativo",
         editorial_preset="educational", accent="mint",
         max_scenes_per_minute=6, min_gap_ms=900, max_scene_ms=4700,
         template_priority={
@@ -62,7 +62,7 @@ _PACKS: tuple[StylePack, ...] = (
     ),
     StylePack(
         id="social_impact", label="Social Impact",
-        caption_preset="social", camera_preset="dinamico",
+        caption_preset="kinetic", camera_preset="dinamico",
         editorial_preset="dynamic_social", accent="orange",
         max_scenes_per_minute=8, min_gap_ms=450, max_scene_ms=2600,
         template_priority={
