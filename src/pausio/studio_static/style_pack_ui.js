@@ -36,7 +36,7 @@
       " · "+time(candidate.output_time_ms);
     const evidence=document.createElement("p");
     evidence.textContent=candidate.evidence?.quoted_text
-      ? "Dal video: «"+candidate.evidence.quoted_text+"»"
+      ? "Dai sottotitoli: «"+candidate.evidence.quoted_text+"»"
       : "Segnale tecnico · "+(candidate.evidence?.kind||"timestamp");
     const payload=candidate.command_type==="graphic.overlay.add"
       ? candidate.payload.graphic : candidate.payload.effect;
