@@ -373,6 +373,12 @@
                     <a class="button button-outline" id="style-variants-export" href="/api/variants/export" download="pausio-three-variants.json" hidden>Esporta 3 versioni</a>
                   </div>
                   <div id="style-variant-workspaces" class="style-variant-workspaces" role="group" aria-label="Versioni indipendenti del montaggio"></div>
+                  <div class="style-variant-export">
+                    <button type="button" class="button button-primary button-full" id="style-variants-render-all" disabled>Esporta tutte e 3 · MP4</button>
+                    <a class="button button-outline button-full" id="style-variants-download-all" href="/api/variants/download-all" download="pausio-three-variants.zip" hidden>Scarica i tre MP4 · ZIP</a>
+                    <p class="visual-fx-status" id="style-variants-render-status" role="status" aria-live="polite">Per esportare insieme le versioni, conferma il montaggio di ciascuna.</p>
+                  </div>
+
                   <p class="visual-fx-status" id="style-variant-status" role="status" aria-live="polite">Un solo montaggio attivo. Crea le versioni dopo aver preparato la timeline.</p>
                 </div>
                 <button type="button" class="button button-primary button-full" id="style-pack-generate" disabled>✦ Confronta 3 storyboard</button>
