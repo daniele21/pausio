@@ -1021,6 +1021,51 @@ class StudioWorkspace:
             except ProjectFormatError as exc:
                 raise StudioError(str(exc)) from exc
 
+    def export_style_variants(self) -> dict:
+        """Export all three command tapes, never source media or ASR text."""
+        with self.lock:
+            if self.variants is None or self.tape is None:
+                raise StudioError("Crea prima le tre versioni.")
+            return self.variants.as_dict()
+
+    def import_style_variants(self, raw: dict) -> None:
+        """Explicitly restore a verified three-version bundle on the imported video."""
+        with self.lock:
+            self._ensure_unlocked()
+            if (self.tape is None or self.info is None or self.source is None or
+                    self.media_sha256 is None or self.filename is None):
+                raise StudioError("Importa prima il video originale.")
+            if self.variants is not None:
+                raise StudioError("Le tre versioni esistono già: non sovrascriverle.")
+            if (not isinstance(raw, dict) or set(raw) != {"revision", "bundle"} or
+                    type(raw["revision"]) is not int or
+                    raw["revision"] != self.tape.revision):
+                raise StudioError("Revisione del progetto non aggiornata.")
+            try:
+                imported = VariantWorkspace.from_dict(raw["bundle"])
+                restored = {}
+                for key in STYLE_IDS:
+                    tape = imported.tapes[key]
+                    tape.require_media(
+                        sha256=self.media_sha256,
+                        duration_ms=self.info.duration_ms,
+                        has_audio=self.info.has_audio,
+                    )
+                    # A renamed local copy of the SAME video is legitimate.
+                    # Normalize only its display filename, not hash or commands.
+                    if tape.media["filename"] != self.filename:
+                        document = tape.as_dict()
+                        document["media"]["filename"] = self.filename
+                        tape = ProjectTape.from_dict(document)
+                    restored[key] = tape
+                bundle = VariantWorkspace(imported.active, restored)
+                self._install_tape(
+                    bundle.tapes[bundle.active], variant_bundle=bundle
+                )
+                self.media_id = uuid.uuid4().hex
+            except (ValueError, ProjectFormatError) as exc:
+                raise StudioError("Import varianti non valido: " + str(exc)) from exc
+
     def export_project(self) -> dict:
         with self.lock:
             if self.tape is None:
@@ -1436,6 +1481,10 @@ class StudioHandler(BaseHTTPRequestHandler):
                 self.server.workspace.switch_style_variant(self._read_json())
                 self._json(200, self.server.workspace.snapshot())
                 return
+            if path == "/api/variants/import":
+                self.server.workspace.import_style_variants(self._read_json())
+                self._json(200, self.server.workspace.snapshot())
+                return
             if path == "/api/captions/generate":
                 self.server.workspace.generate_captions(self._read_json())
                 self._json(200, self.server.workspace.snapshot())
@@ -1641,6 +1690,22 @@ class StudioHandler(BaseHTTPRequestHandler):
                 self._json(200, self.server.workspace.get_waveform())
             except StudioError as exc:
                 self._failed(409, str(exc))
+            return
+        if path == "/api/variants/export":
+            try:
+                content = json.dumps(
+                    self.server.workspace.export_style_variants(),
+                    ensure_ascii=False, indent=2
+                ).encode("utf-8")
+            except StudioError as exc:
+                self._failed(400, str(exc))
+                return
+            self._headers(200, len(content), "application/json; charset=utf-8")
+            self.send_header(
+                "Content-Disposition", 'attachment; filename="pausio-three-variants.json"'
+            )
+            self.end_headers()
+            self.wfile.write(content)
             return
         if path == "/api/project/export":
             try:
