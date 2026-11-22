@@ -250,6 +250,11 @@ function update(next){
   }
   el("export-action").disabled=!approved||busy||ready;
   el("export-action").hidden=ready;el("download-action").hidden=!ready;
+  // Each approved variant is exported through the same local endpoint, but
+  // carries its own filename so the browser won't overwrite sibling videos.
+  el("download-action").download=next.active_variant
+    ? "pausio-"+next.active_variant.replaceAll("_","-")+".mp4"
+    : "pausio-final.mp4";
   const hasCaptions=(next.captions||[]).length>0;
   el("transcript-empty").hidden=!!next.transcript||hasCaptions;
   el("transcript-content").hidden=!next.transcript&&!hasCaptions;
