@@ -43,6 +43,12 @@ def render_three_approved(
         raise ValueError("Cartella di esportazione non valida.")
     if any(not variants.tapes[k].view.approved for k in STYLE_IDS):
         raise ValueError("Conferma il montaggio di tutte e tre le varianti.")
+    # The portable tapes are SHA-bound, but the local media bytes might
+    # have been replaced since import. Fail before committing any output.
+    with source.open("rb") as handle:
+        actual_sha = hashlib.file_digest(handle, "sha256").hexdigest()
+    if actual_sha != variants.tapes[STYLE_IDS[0]].media["sha256"]:
+        raise ValueError("Il video sorgente è cambiato: reimporta l'originale.")
     for key in STYLE_IDS:
         variants.tapes[key].require_media(
             sha256=variants.tapes[STYLE_IDS[0]].media["sha256"],
