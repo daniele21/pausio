@@ -98,6 +98,8 @@ class StylePackBrowserTests(unittest.TestCase):
                     )
                     self.assertEqual(ws.variants.active, "authority")
                     self.assertEqual(ws.tape.view.caption_style, "minimal")
+                    self.assertFalse(page.locator("#style-variants-render-all").is_enabled())
+                    self.assertTrue(page.locator("#style-variants-download-all").is_hidden())
                     page.locator("#style-variant-workspaces button").nth(2).click()
                     page.wait_for_function(
                         "() => document.getElementById('style-variant-status')"
