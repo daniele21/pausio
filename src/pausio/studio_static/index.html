@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="/image_overlay_ui.css">
   <link rel="stylesheet" href="/caption_emphasis_ui.css">
   <link rel="stylesheet" href="/scene_template_ui.css">
+  <link rel="stylesheet" href="/style_pack_ui.css">
   <script src="/audio_monitor_ui.js" defer></script>
   <script src="/app.js" defer></script>
   <script src="/visual_fx_ui.js" defer></script>
@@ -18,6 +19,7 @@
   <script src="/visual_transition_ui.js" defer></script>
   <script src="/graphic_overlay_ui.js" defer></script>
   <script src="/editorial_ui.js" defer></script>
+  <script src="/style_pack_ui.js" defer></script>
   <script src="/media_motion_ui.js" defer></script>
   <script src="/image_overlay_ui.js" defer></script>
   <script src="/caption_emphasis_ui.js" defer></script>
@@ -354,6 +356,39 @@
                 </label>
                 <p>Solo se autorizzi separatamente, ChatGPT può ascoltare estratti WAV fino a 6 secondi, massimo 4 al minuto. La voce può contenere informazioni personali.</p>
                 <p id="audio-sharing-status" class="visual-fx-status" role="status" aria-live="polite">Condivisione audio disattivata.</p>
+              </div>
+            </section>
+            <section class="visual-fx-panel" id="style-pack-panel" aria-labelledby="style-pack-heading">
+              <header class="visual-fx-heading">
+                <h3 id="style-pack-heading">Tre regie · scegli il trattamento</h3>
+                <p>Crea tre versioni indipendenti dello stesso video, ciascuna con il proprio montaggio e Undo/Redo. Confronta le proposte, applica gli interventi e genera preview ed MP4 per la versione attiva.</p>
+              </header>
+              <div class="visual-fx-controls">
+                <div class="style-variant-manager" aria-labelledby="style-variant-manager-title">
+                  <h4 id="style-variant-manager-title">Versioni del montaggio</h4>
+                  <p class="visual-fx-status">Le versioni condividono il video originale, ma mantengono modifiche, conferma ed esportazione separate. La preview è sempre relativa alla versione attiva.</p>
+                  <button type="button" class="button button-outline button-full" id="style-variants-create" disabled>+ Crea 3 versioni indipendenti</button>
+                  <div class="style-pack-actions">
+                    <button type="button" class="button button-outline" id="style-variants-import" disabled>Importa 3 versioni</button>
+                    <a class="button button-outline" id="style-variants-export" href="/api/variants/export" download="pausio-three-variants.json" hidden>Esporta 3 versioni</a>
+                  </div>
+                  <div id="style-variant-workspaces" class="style-variant-workspaces" role="group" aria-label="Versioni indipendenti del montaggio"></div>
+                  <div class="style-variant-export">
+                    <button type="button" class="button button-primary button-full" id="style-variants-render-all" disabled>Esporta tutte e 3 · MP4</button>
+                    <a class="button button-outline button-full" id="style-variants-download-all" href="/api/variants/download-all" download="pausio-three-variants.zip" hidden>Scarica i tre MP4 · ZIP</a>
+                    <p class="visual-fx-status" id="style-variants-render-status" role="status" aria-live="polite">Per esportare insieme le versioni, conferma il montaggio di ciascuna.</p>
+                  </div>
+
+                  <p class="visual-fx-status" id="style-variant-status" role="status" aria-live="polite">Un solo montaggio attivo. Crea le versioni dopo aver preparato la timeline.</p>
+                </div>
+                <button type="button" class="button button-primary button-full" id="style-pack-generate" disabled>✦ Confronta 3 storyboard</button>
+                <div id="style-pack-choices" class="style-pack-choices" role="group" aria-label="Selezione regia"></div>
+                <p id="style-pack-selected" class="style-pack-selected">Seleziona uno stile e genera le tre proposte</p>
+                <div class="style-pack-actions">
+                  <button type="button" class="button button-outline" id="style-pack-caption" disabled>Applica stile sottotitoli</button>
+                </div>
+                <p class="visual-fx-status" id="style-pack-status" role="status" aria-live="polite">Prepara prima un montaggio.</p>
+                <div id="style-pack-candidates" aria-label="Interventi proposti, da confermare individualmente"></div>
               </div>
             </section>
             <section class="visual-fx-panel" id="editorial-plan-panel" aria-labelledby="editorial-plan-heading">
@@ -817,6 +852,7 @@
     <input type="file" id="file-input" accept="video/mp4,video/quicktime,video/webm,video/x-matroska,.m4v,.mov,.mkv" hidden>
     <input type="file" id="fx-input" accept=".mp3,.wav,.m4a,.aac,.flac,.ogg,audio/*" hidden>
     <input type="file" id="project-input" accept=".json,.pausio.json,application/json" hidden>
+    <input type="file" id="style-variants-input" accept=".json,application/json" hidden>
     <div class="job-banner" id="job-banner" role="status" aria-live="polite" hidden>
       <span class="spinner" aria-hidden="true"></span>
       <span id="job-message">Analisi in corso…</span>

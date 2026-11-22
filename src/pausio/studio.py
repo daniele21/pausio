@@ -34,6 +34,9 @@ from pausio.media_observation import ObservationError, frame_jpeg
 from pausio.audio_observation import audio_wav
 from pausio.graphic_overlays import remap_graphics
 from pausio.scene_templates import catalog as scene_template_catalog
+from pausio.style_packs import PACKS, catalog as style_pack_catalog, propose_three_variants
+from pausio.variant_projects import STYLE_IDS, VariantWorkspace
+from pausio.variant_export import BATCH_FILENAME, render_three_approved
 from pausio.image_overlays import MAX_IMAGE_BYTES, IMAGE_EXTENSIONS
 from pausio.video_broll import MAX_BROLL_BYTES, VIDEO_EXTENSIONS
 from pausio.planner import CUT_PRESETS, validate_cut_settings, policy_from_cut_settings, propose_segments
@@ -67,6 +70,8 @@ ASSETS = {
     "/visual_observation_ui.js": ("visual_observation_ui.js", "text/javascript; charset=utf-8"),
     "/scene_template_ui.css": ("scene_template_ui.css", "text/css; charset=utf-8"),
     "/editorial_ui.js": ("editorial_ui.js", "text/javascript; charset=utf-8"),
+    "/style_pack_ui.js": ("style_pack_ui.js", "text/javascript; charset=utf-8"),
+    "/style_pack_ui.css": ("style_pack_ui.css", "text/css; charset=utf-8"),
     "/image_overlay_ui.js": ("image_overlay_ui.js", "text/javascript; charset=utf-8"),
     "/media_motion_ui.js": ("media_motion_ui.js", "text/javascript; charset=utf-8"),
     "/caption_emphasis_ui.js": ("caption_emphasis_ui.js", "text/javascript; charset=utf-8"),
@@ -99,6 +104,7 @@ class StudioWorkspace:
         self.importing = False
         self.approved = False
         self.tape: ProjectTape | None = None
+        self.variants: VariantWorkspace | None = None
         self.media_sha256: str | None = None
         self.media_id: str | None = None
         self.source: Path | None = None
@@ -107,6 +113,7 @@ class StudioWorkspace:
         self.plan: EditPlan | None = None
         self.suggested_plan: EditPlan | None = None
         self.transcript: dict | None = None
+        self.batch_ready = False
         self.export_ready = False
         self.preview_ready = False
         self.preview_range_ready = False
@@ -142,6 +149,7 @@ class StudioWorkspace:
                     self.media_id = uuid.uuid4().hex
                     self.info = info
                     self._install_tape(tape, persist=False)
+                    self.variants = self.store.recovered_variants
                     self.transcript = transcript
                     self.recovered = True
                     if from_backup:
@@ -198,6 +206,9 @@ class StudioWorkspace:
                 "graphic_overlays": [dict(g) for g in self.tape.view.graphic_overlays] if self.tape else [],
                 "scene_templates": [dict(g) for g in self.tape.view.scene_templates] if self.tape else [],
                 "scene_template_catalog": scene_template_catalog(),
+                "active_variant": self.variants.active if self.variants else None,
+                "variant_workspaces": self.variants.summary() if self.variants else [],
+                "style_pack_catalog": style_pack_catalog(),
                 "video_broll": [
                     {**dict(clip), "available": self._video_path(
                         clip["asset_sha256"], clip["filename"]).is_file() and
@@ -218,6 +229,7 @@ class StudioWorkspace:
                     self.tape.view.captions, self.plan.segments
                 ) if self.tape and self.plan and self.tape.view.captions else [],
                 "export_ready": self.export_ready,
+                "batch_export_ready": self.batch_ready and (self.directory / BATCH_FILENAME).is_file(),
                 "preview_ready": self.preview_ready,
                 "visual_sharing_enabled": self.visual_sharing_enabled,
                 "audio_sharing_enabled": self.audio_sharing_enabled,
@@ -455,11 +467,14 @@ class StudioWorkspace:
                 self.media_sha256 = sha256
                 self.info = info
                 self.tape = tape
+                self.variants = None
                 self.plan = None
                 self.suggested_plan = None
                 self.approved = False
                 self.transcript = None
                 self.export_ready = False
+                self.batch_ready = False
+                (self.directory / BATCH_FILENAME).unlink(missing_ok=True)
                 self.preview_ready = False
                 self.preview_range_ready = False
                 self.preview_range_window = None
@@ -480,9 +495,20 @@ class StudioWorkspace:
             finally:
                 self.importing = False
 
-    def _install_tape(self, tape: ProjectTape, *, persist: bool = True) -> None:
-        """Only expose the new derived state after successful autosave."""
+    def _install_tape(
+        self, tape: ProjectTape, *, persist: bool = True,
+        variant_bundle: VariantWorkspace | None = None,
+    ) -> None:
+        """Only expose tape and sibling variants after one successful autosave."""
         assert self.source is not None
+        new_variants = (
+            variant_bundle if variant_bundle is not None
+            else self.variants.with_active_tape(tape) if self.variants else None
+        )
+        if new_variants is not None and (
+            new_variants.tapes[new_variants.active].as_dict() != tape.as_dict()
+        ):
+            raise StudioError("La variante attiva non corrisponde al montaggio.")
         new_plan = tape.edit_plan(str(self.source))
         proposal = tape.view.suggested
         suggested_plan = (
@@ -494,12 +520,18 @@ class StudioWorkspace:
             if proposal is not None else None
         )
         if persist and self.store:
-            self.store.save(tape, self.source, transcript=self.transcript)
+            self.store.save(
+                tape, self.source, transcript=self.transcript,
+                variant_bundle=new_variants,
+            )
         self.tape = tape
+        self.variants = new_variants
         self.plan = new_plan
         self.suggested_plan = suggested_plan
         self.approved = tape.view.approved
         self.export_ready = False
+        self.batch_ready = False
+        (self.directory / BATCH_FILENAME).unlink(missing_ok=True)
         self.preview_ready = False
         self.preview_range_ready = False
         self.preview_range_window = None
@@ -532,11 +564,14 @@ class StudioWorkspace:
             self.media_sha256 = None
             self.media_id = None
             self.tape = None
+            self.variants = None
             self.plan = None
             self.suggested_plan = None
             self.approved = False
             self.transcript = None
             self.export_ready = False
+            self.batch_ready = False
+            (self.directory / BATCH_FILENAME).unlink(missing_ok=True)
             self.preview_ready = False
             self.preview_range_ready = False
             self.preview_range_window = None
@@ -833,6 +868,136 @@ class StudioWorkspace:
             except ValueError as exc:
                 raise StudioError(str(exc)) from exc
 
+    def suggest_style_variants(self, raw: dict) -> dict:
+        """Propose three review-only storyboards on the current edited timeline."""
+        with self.lock:
+            self._ensure_unlocked()
+            if (self.tape is None or self.plan is None or
+                    self.info is None or self.media_sha256 is None):
+                raise StudioError("Importa e prepara un montaggio prima di creare le varianti.")
+            if not isinstance(raw, dict) or set(raw) != {"revision", "beats"}:
+                raise StudioError("Le varianti richiedono revision e beats.")
+            revision = raw["revision"]
+            if type(revision) is not int or revision != self.tape.revision:
+                raise StudioError("La revisione del progetto è cambiata.")
+            output_ms = sum(s.end_ms - s.start_ms for s in self.plan.segments)
+            try:
+                variants = propose_three_variants(raw["beats"], output_ms)
+            except ValueError as exc:
+                raise StudioError(str(exc)) from exc
+            return {
+                "base_revision": revision,
+                "media_sha256": self.media_sha256,
+                "variants": variants,
+                "review_required": True,
+            }
+
+    def fork_style_variants(self, raw: dict) -> None:
+        """Create three separately undoable copies and save them atomically."""
+        with self.lock:
+            self._ensure_unlocked()
+            if self.variants is not None:
+                raise StudioError("Le tre versioni esistono già. Selezionane una.")
+            if self.tape is None or self.plan is None or self.source is None:
+                raise StudioError("Prepara prima la timeline e importa un video.")
+            if (not isinstance(raw, dict) or set(raw) != {"revision"} or
+                    type(raw["revision"]) is not int or
+                    raw["revision"] != self.tape.revision):
+                raise StudioError("Revisione non valida per creare le tre versioni.")
+            try:
+                bundle = VariantWorkspace.fork(self.tape)
+                # Explicit "create three variants" action applies caption style
+                # independently to each copy; existing caption content/timing
+                # and every other track are preserved.
+                if self.tape.view.captions:
+                    new_tapes = {}
+                    for key in STYLE_IDS:
+                        tape = bundle.tapes[key]
+                        wanted = PACKS[key].caption_preset
+                        if tape.view.caption_style != wanted:
+                            tape = tape.append("caption.style", {"style": wanted})
+                        new_tapes[key] = tape
+                    bundle = VariantWorkspace(bundle.active, new_tapes)
+                self._install_tape(
+                    bundle.tapes[bundle.active], variant_bundle=bundle
+                )
+                self.media_id = uuid.uuid4().hex  # Invalidate stale plans for pre-fork view.
+            except (ValueError, ProjectFormatError) as exc:
+                raise StudioError(str(exc)) from exc
+
+    def switch_style_variant(self, raw: dict) -> None:
+        """Switch local editor's single active preview/export to another tape."""
+        with self.lock:
+            self._ensure_unlocked()
+            if self.variants is None or self.tape is None:
+                raise StudioError("Crea prima le tre versioni.")
+            if (not isinstance(raw, dict) or set(raw) != {"revision", "style_id"} or
+                    type(raw["revision"]) is not int or
+                    raw["revision"] != self.tape.revision or
+                    type(raw["style_id"]) is not str or
+                    raw["style_id"] not in STYLE_IDS):
+                raise StudioError("Variante o revisione non valida.")
+            if self.variants.active == raw["style_id"]:
+                return
+            try:
+                bundle = self.variants.switch(raw["style_id"])
+                self._install_tape(
+                    bundle.tapes[bundle.active], variant_bundle=bundle
+                )
+                self.media_id = uuid.uuid4().hex  # New per-variant observation token.
+            except ValueError as exc:
+                raise StudioError(str(exc)) from exc
+
+    def suggest_style_variants_auto(self, raw: dict) -> dict:
+        """Three reviewable technical edit plans from actual caption/cut evidence.
+
+        This reuses the existing conservative editorial planner, NOT semantic AI.
+        The source, project tape and preview are never mutated.
+        """
+        with self.lock:
+            self._ensure_unlocked()
+            if (self.tape is None or self.plan is None or self.info is None or
+                    self.media_sha256 is None):
+                raise StudioError("Prepara un montaggio per confrontare i tre stili.")
+            if not isinstance(raw, dict) or set(raw) != {"revision"}:
+                raise StudioError("La richiesta richiede solo la revisione.")
+            revision = raw["revision"]
+            if type(revision) is not int or revision != self.tape.revision:
+                raise StudioError("Proposte scadute: aggiorna la revisione del progetto.")
+            segments = [dict(x) for x in self.tape.view.segments]
+            captions = [dict(x) for x in self.tape.view.captions]
+            graphics = [dict(x) for x in self.tape.view.graphic_overlays]
+            fx = [dict(x) for x in self.tape.view.video_fx]
+            variants = {}
+            try:
+                for style_id, pack in PACKS.items():
+                    suggestion = propose_editorial_plan(
+                        segments=segments, captions=captions,
+                        existing_graphics=graphics, existing_fx=fx,
+                        transcript=self.transcript, preset=pack.editorial_preset,
+                        media_sha256=self.media_sha256,
+                        base_revision=revision,
+                        source_duration_ms=self.info.duration_ms,
+                    )
+                    variants[style_id] = {
+                        "style_id": style_id,
+                        "style_version": 1,
+                        "caption_preset_suggestion": pack.caption_preset,
+                        "camera_preset_suggestion": pack.camera_preset,
+                        "editorial_preset_suggestion": pack.editorial_preset,
+                        "candidates": suggestion["candidates"],
+                        "missing_signals": suggestion["missing_signals"],
+                    }
+            except ValueError as exc:
+                raise StudioError(str(exc)) from exc
+            return {
+                "base_revision": revision,
+                "media_sha256": self.media_sha256,
+                "variants": variants,
+                "review_required": True,
+                "explanation": "Proposte tecniche da sottotitoli e tagli; non analisi semantica AI.",
+            }
+
     def suggest_face_anchor(self, raw: dict) -> dict:
         """Opt-in read-only local sample; only a human/agent edit changes framing."""
         with self.lock:
@@ -941,6 +1106,51 @@ class StudioWorkspace:
             except ProjectFormatError as exc:
                 raise StudioError(str(exc)) from exc
 
+    def export_style_variants(self) -> dict:
+        """Export all three command tapes, never source media or ASR text."""
+        with self.lock:
+            if self.variants is None or self.tape is None:
+                raise StudioError("Crea prima le tre versioni.")
+            return self.variants.as_dict()
+
+    def import_style_variants(self, raw: dict) -> None:
+        """Explicitly restore a verified three-version bundle on the imported video."""
+        with self.lock:
+            self._ensure_unlocked()
+            if (self.tape is None or self.info is None or self.source is None or
+                    self.media_sha256 is None or self.filename is None):
+                raise StudioError("Importa prima il video originale.")
+            if self.variants is not None:
+                raise StudioError("Le tre versioni esistono già: non sovrascriverle.")
+            if (not isinstance(raw, dict) or set(raw) != {"revision", "bundle"} or
+                    type(raw["revision"]) is not int or
+                    raw["revision"] != self.tape.revision):
+                raise StudioError("Revisione del progetto non aggiornata.")
+            try:
+                imported = VariantWorkspace.from_dict(raw["bundle"])
+                restored = {}
+                for key in STYLE_IDS:
+                    tape = imported.tapes[key]
+                    tape.require_media(
+                        sha256=self.media_sha256,
+                        duration_ms=self.info.duration_ms,
+                        has_audio=self.info.has_audio,
+                    )
+                    # A renamed local copy of the SAME video is legitimate.
+                    # Normalize only its display filename, not hash or commands.
+                    if tape.media["filename"] != self.filename:
+                        document = tape.as_dict()
+                        document["media"]["filename"] = self.filename
+                        tape = ProjectTape.from_dict(document)
+                    restored[key] = tape
+                bundle = VariantWorkspace(imported.active, restored)
+                self._install_tape(
+                    bundle.tapes[bundle.active], variant_bundle=bundle
+                )
+                self.media_id = uuid.uuid4().hex
+            except (ValueError, ProjectFormatError) as exc:
+                raise StudioError("Import varianti non valido: " + str(exc)) from exc
+
     def export_project(self) -> dict:
         with self.lock:
             if self.tape is None:
@@ -961,6 +1171,73 @@ class StudioWorkspace:
             except ProjectFormatError as exc:
                 raise StudioError(str(exc)) from exc
             self._install_tape(incoming)
+
+    def render_all_style_variants(self, raw: dict) -> None:
+        """Explicitly render the three approved variants; never auto-approve."""
+        with self.lock:
+            self._ensure_unlocked()
+            if (self.variants is None or self.tape is None or self.info is None
+                    or self.media_sha256 is None or self.source is None):
+                raise StudioError("Crea e rivedi prima le tre versioni.")
+            if (not isinstance(raw, dict) or set(raw) != {"revision", "media_id"}
+                    or type(raw["revision"]) is not int
+                    or raw["revision"] != self.tape.revision
+                    or type(raw["media_id"]) is not str
+                    or raw["media_id"] != self.media_id):
+                raise StudioError("Timeline cambiata: aggiorna Studio prima di esportare.")
+            bundle = self.variants
+            missing = [key for key in STYLE_IDS if not bundle.tapes[key].view.approved]
+            if missing:
+                raise StudioError("Conferma prima queste versioni: " + ", ".join(missing))
+            try:
+                for key in STYLE_IDS:
+                    bundle.tapes[key].require_media(
+                        sha256=self.media_sha256,
+                        duration_ms=self.info.duration_ms,
+                        has_audio=self.info.has_audio,
+                    )
+            except ProjectFormatError as exc:
+                raise StudioError(str(exc)) from exc
+            source, info = self.source, self.info
+            destination = self.directory / BATCH_FILENAME
+            destination.unlink(missing_ok=True)
+            self.batch_ready = False
+            self.job = {
+                "status": "running", "kind": "render_variants", "error": None,
+                "completed": 0, "total": 3, "variant": None,
+            }
+
+        def report(style_id: str, completed: int) -> None:
+            with self.lock:
+                self.job.update(completed=completed, variant=style_id)
+
+        def worker() -> None:
+            try:
+                render_three_approved(
+                    bundle, source, info, destination,
+                    audio_asset=self._audio_path,
+                    image_asset=self._image_path,
+                    video_asset=self._video_path,
+                    progress=report,
+                )
+                with self.lock:
+                    self.batch_ready = True
+                    self.job = {
+                        "status": "completed", "kind": "render_variants",
+                        "error": None, "completed": 3, "total": 3,
+                        "variant": STYLE_IDS[-1],
+                    }
+            except Exception as exc:
+                destination.unlink(missing_ok=True)
+                with self.lock:
+                    self.batch_ready = False
+                    self.job = {
+                        "status": "failed", "kind": "render_variants",
+                        "error": str(exc)[:350],
+                        "completed": self.job.get("completed", 0),
+                        "total": 3, "variant": self.job.get("variant"),
+                    }
+        threading.Thread(target=worker, name="pausio-render-three", daemon=True).start()
 
     def start_job(
         self, kind: str, *, settings: object | None = None, asr: object | None = None,
@@ -1071,7 +1348,8 @@ class StudioWorkspace:
                         # a disk-write error must not claim ASR was saved.
                         if self.store:
                             assert self.tape is not None and self.source is not None
-                            self.store.save(self.tape, self.source, transcript=result)
+                            self.store.save(self.tape, self.source, transcript=result,
+                                            variant_bundle=self.variants)
                         self.transcript = result
                 elif kind == "preview_range" and self.preview_ready:
                     assert selection is not None
@@ -1350,6 +1628,30 @@ class StudioHandler(BaseHTTPRequestHandler):
                 proposal = self.server.workspace.suggest_editorial_plan(self._read_json())
                 self._json(200, proposal)
                 return
+            if path == "/api/editorial/variants":
+                proposal = self.server.workspace.suggest_style_variants(self._read_json())
+                self._json(200, proposal)
+                return
+            if path == "/api/editorial/variants/auto":
+                proposal = self.server.workspace.suggest_style_variants_auto(self._read_json())
+                self._json(200, proposal)
+                return
+            if path == "/api/variants/create":
+                self.server.workspace.fork_style_variants(self._read_json())
+                self._json(200, self.server.workspace.snapshot())
+                return
+            if path == "/api/variants/switch":
+                self.server.workspace.switch_style_variant(self._read_json())
+                self._json(200, self.server.workspace.snapshot())
+                return
+            if path == "/api/variants/render-all":
+                self.server.workspace.render_all_style_variants(self._read_json())
+                self._json(202, self.server.workspace.snapshot())
+                return
+            if path == "/api/variants/import":
+                self.server.workspace.import_style_variants(self._read_json())
+                self._json(200, self.server.workspace.snapshot())
+                return
             if path == "/api/captions/generate":
                 self.server.workspace.generate_captions(self._read_json())
                 self._json(200, self.server.workspace.snapshot())
@@ -1592,6 +1894,25 @@ class StudioHandler(BaseHTTPRequestHandler):
             except StudioError as exc:
                 self._failed(409, str(exc))
             return
+        if path == "/api/variants/download-all":
+            self._download_style_archive()
+            return
+        if path == "/api/variants/export":
+            try:
+                content = json.dumps(
+                    self.server.workspace.export_style_variants(),
+                    ensure_ascii=False, indent=2
+                ).encode("utf-8")
+            except StudioError as exc:
+                self._failed(400, str(exc))
+                return
+            self._headers(200, len(content), "application/json; charset=utf-8")
+            self.send_header(
+                "Content-Disposition", 'attachment; filename="pausio-three-variants.json"'
+            )
+            self.end_headers()
+            self.wfile.write(content)
+            return
         if path == "/api/project/export":
             try:
                 content = json.dumps(
@@ -1647,6 +1968,33 @@ class StudioHandler(BaseHTTPRequestHandler):
                         preview_range=path == "/api/preview/range")
         else:
             self._failed(404, "Risorsa non trovata.")
+
+    def _download_style_archive(self) -> None:
+        """Serve a completed ZIP in chunks; file paths never enter the URL."""
+        with self.server.workspace.lock:
+            path = self.server.workspace.directory / BATCH_FILENAME
+            if (not self.server.workspace.batch_ready or path.is_symlink()
+                    or not path.is_file() or path.stat().st_size <= 0):
+                self._failed(404, "Il pacchetto delle tre versioni non è disponibile.")
+                return
+            try:
+                stream = path.open("rb")
+                total = path.stat().st_size
+            except OSError:
+                self._failed(404, "Pacchetto non disponibile.")
+                return
+        try:
+            self._headers(200, total, "application/zip")
+            self.send_header("Content-Disposition",
+                             'attachment; filename="pausio-three-variants.zip"')
+            self.end_headers()
+            while True:
+                chunk = stream.read(1024 * 1024)
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+        finally:
+            stream.close()
 
     def _media(
         self, exported: bool, headers_only: bool, *,

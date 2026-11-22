@@ -6,6 +6,21 @@ A local-first toolkit for natural-sounding, talking-head social videos. Pausio i
 
 > **Status:** `main` include Video FX v2 (zoom avanzati, transizioni dip-to-black e crop statico del volto opzionale); **la release scaricabile `v0.1.0` è una technical preview precedente e non include queste funzioni.** The current CLI inspects videos, suggests cuts using FFmpeg's signal-level silence detection, writes a human-editable JSON timeline, and exports a vertical 1080x1920 MP4. It now has optional standalone MLX Whisper ASR on Apple Silicon (no ClosedRoom app or service required), but does not yet make semantic cuts, denoise or export CapCut projects; its on-device transcripts can now drive **editable burned-in captions**.
 
+## Integrazione tre regie + B-roll + Motion Graphics (branch sperimentale)
+
+Il branch `feat/editorial-integration-v15` combina la gestione di
+**Authority, Visual Explainer e Social Impact** come tre timeline
+indipendenti, la UI di confronto delle proposte, gli effetti B-roll e
+i componenti motion v14, e il template `metric_countup` dello schema v15.
+È incluso anche **Esporta tutte e 3 · MP4**: dopo tre approvazioni
+indipendenti Pausio genera localmente un unico ZIP con i tre video
+verticali 1080 × 1920; nessun contenuto viene pubblicato online.
+Non è ancora distribuito: richiede test di integrazione ed esame visivo
+di preview ed export, prima del merge in `main`.
+Dettagli: [Tre varianti](docs/EDITORIAL_VARIANTS_V1.md),
+[Style Pack](docs/EDITORIAL_STYLE_PACKS_V1.md),
+[Counter v15](docs/METRIC_COUNTUP_V15.md).
+
 ## In sviluppo — scena Metric Count-up v15
 
 Il branch `feat/metric-countup-v15` (basato sul lavoro di PR #87)
