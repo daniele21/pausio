@@ -1196,7 +1196,8 @@ class StudioWorkspace:
                         # a disk-write error must not claim ASR was saved.
                         if self.store:
                             assert self.tape is not None and self.source is not None
-                            self.store.save(self.tape, self.source, transcript=result)
+                            self.store.save(self.tape, self.source, transcript=result,
+                                            variant_bundle=self.variants)
                         self.transcript = result
                 elif kind == "preview_range" and self.preview_ready:
                     assert selection is not None
