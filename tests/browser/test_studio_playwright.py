@@ -472,7 +472,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
         original=self.upload_analyze()
         self.page.locator('[data-workspace-nav="visual"]').click()
         self.wait_condition(lambda:self.page.locator(
-            "#scene-template-kind option").count()==8)
+            "#scene-template-kind option").count()==9)
         selector=self.page.locator("#scene-template-kind")
         selector.select_option("floating_insight")
         self.assertEqual(self.page.locator(
@@ -506,7 +506,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
     def test_dashboard_split_reframes_creator_and_animates_in_render_preview(self):
         initial=self.upload_analyze()
         self.page.locator('[data-workspace-nav="visual"]').click()
-        self.wait_condition(lambda:self.page.locator("#scene-template-kind").locator("option").count()==8)
+        self.wait_condition(lambda:self.page.locator("#scene-template-kind").locator("option").count()==9)
         self.page.locator("#scene-template-kind").select_option("dashboard_split")
         self.page.locator("#scene-template-duration").fill("2800")
         self.page.locator("#scene-template-fields").locator(
@@ -537,7 +537,7 @@ class StudioPlaywrightAudit(unittest.TestCase):
     def test_fullscreen_scene_template_is_editable_and_previewed_with_ffmpeg(self):
         initial=self.upload_analyze()
         self.page.locator('[data-workspace-nav="visual"]').click()
-        self.wait_condition(lambda:self.page.locator("#scene-template-kind").locator("option").count()==8)
+        self.wait_condition(lambda:self.page.locator("#scene-template-kind").locator("option").count()==9)
         self.page.locator("#scene-template-kind").select_option("stat_reveal")
         self.page.locator("#scene-template-duration").fill("2500")
         self.page.locator("#scene-template-fields").locator('[data-scene-field="number"]').fill("1.379")
