@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import unittest
+from types import SimpleNamespace
 
 from pausio.project_commands import ProjectTape
 from pausio.scene_templates import TEMPLATES
@@ -13,7 +14,7 @@ class StudioStylePackTests(unittest.TestCase):
         self.workspace = StudioWorkspace()
         self.workspace.source = self.workspace.directory / "synthetic.mp4"
         self.workspace.media_sha256 = "a" * 64
-        self.workspace.info = object()
+        self.workspace.info = SimpleNamespace(as_dict=lambda: {"duration_ms": 12000})
         tape = ProjectTape({
             "filename": "synthetic.mp4", "sha256": "a" * 64,
             "duration_ms": 12000, "has_audio": True,
