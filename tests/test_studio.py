@@ -92,6 +92,61 @@ class StudioHttpTests(unittest.TestCase):
         self.assertIn(b'id="scene-template-panel"', self.request("GET", "/")[2])
         self.assertIn(b'id="approve-action"', self.request("GET", "/")[2])
 
+    def test_style_pack_assets_and_revision_guarded_auto_storyboards(self):
+        """The Studio endpoint returns three proposals without mutating ProjectTape."""
+        from pausio.project_commands import ProjectTape
+        from pausio.media import MediaInfo
+
+        for path, snippet in (
+            ("/", b'id="style-pack-generate"'),
+            ("/style_pack_ui.js", b"/api/editorial/variants/auto"),
+            ("/style_pack_ui.css", b".style-pack-choices"),
+        ):
+            status, headers, data = self.request("GET", path)
+            self.assertEqual(status, 200, path)
+            self.assertIn(snippet, data)
+            self.assertEqual(headers["Cache-Control"], "no-store")
+
+        media = {
+            "filename": "sample.mp4", "sha256": "a" * 64,
+            "duration_ms": 12000, "has_audio": True,
+        }
+        self.workspace.source = self.workspace.directory / "sample.mp4"
+        self.workspace.filename = "sample.mp4"
+        self.workspace.media_id = "b" * 32
+        self.workspace.media_sha256 = "a" * 64
+        self.workspace.info = MediaInfo(12000, 180, 320, True, "h264", "30/1")
+        self.workspace._install_tape(
+            ProjectTape(media).append("timeline.keep_all", {})
+        )
+        state = self.get_state()
+        self.assertEqual(len(state["style_pack_catalog"]), 3)
+        before = self.workspace.tape.as_dict()
+        revision = state["project_revision"]
+        status, _, data = self.post("/api/editorial/variants/auto", {
+            "revision": revision,
+        })
+        self.assertEqual(status, 200, data[:250])
+        result = json.loads(data)
+        self.assertTrue(result["review_required"])
+        self.assertEqual(set(result["variants"]), {
+            "authority", "visual_explainer", "social_impact",
+        })
+        self.assertEqual(before, self.workspace.tape.as_dict())
+
+        for raw in ({"revision": revision + 1}, {"revision": True},
+                    {"revision": revision, "unknown": 1}):
+            status, _, _ = self.post("/api/editorial/variants/auto", raw)
+            self.assertEqual(status, 400)
+
+        status, _, _ = self.request(
+            "POST", "/api/editorial/variants/auto",
+            json.dumps({"revision": revision}).encode("utf-8"),
+            {"Content-Type": "application/json", "Origin": self.base},
+        )
+        self.assertEqual(status, 400, "Missing Pausio client security header")
+        self.assertEqual(before, self.workspace.tape.as_dict())
+
     def test_browser_favicon_request_is_not_a_spurious_404(self):
         for method in ("GET", "HEAD"):
             with self.subTest(method=method):
