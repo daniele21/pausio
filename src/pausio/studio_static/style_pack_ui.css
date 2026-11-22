@@ -72,3 +72,18 @@
 @media(max-width:520px) {
   .style-variant-workspaces { grid-template-columns:1fr; }
 }
+
+.style-variant-export {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 8px;
+}
+.style-variant-export .button {
+  width: 100%;
+  justify-content: center;
+}
+.style-variant-export #style-variants-download-all {
+  border-color: var(--style-accent);
+}
