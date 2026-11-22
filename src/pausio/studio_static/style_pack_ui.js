@@ -20,6 +20,8 @@
   // Compare the project revision and opaque media ID; no source paths are exposed.
   const isFresh=()=>proposal&&proposal.base_revision===current().project_revision&&
     forMedia===current().media_id;
+  const matchesActive=()=>!current().active_variant||
+    selection===current().active_variant;
 
   function button(label,action,cls="button button-outline"){
     const node=document.createElement("button");
@@ -59,6 +61,7 @@
       }),
       button("Applica intervento",async()=>{
         if(!isFresh())throw Error("Il progetto è cambiato. Rigenera le proposte.");
+        if(!matchesActive())throw Error("Prima attiva la versione scelta in «Versioni del montaggio».");
         // One canonical command, one undo; never a hidden batch.
         await edit(candidate.command_type,candidate.payload);
         proposal=null;skipped.clear();
@@ -73,7 +76,63 @@
     card.append(title,evidence,description,actions);
     return card;
   }
+  function drawVariants(){
+    const rows=current().variant_workspaces||[];
+    const create=el("style-variants-create");
+    const list=el("style-variant-workspaces");
+    if(!create||!list)return;
+    create.hidden=rows.length>0;
+    create.disabled=!ready()||rows.length>0;
+    list.replaceChildren();
+    for(const item of rows){
+      const node=document.createElement("button");
+      node.type="button";
+      node.className="style-variant-choice";
+      node.setAttribute("aria-pressed",String(item.active));
+      node.setAttribute("aria-label",(labels[item.id]||item.id)+
+        (item.active?" · versione attiva":" · passa a questa versione"));
+      node.disabled=!ready()||item.active;
+      const title=document.createElement("strong");
+      title.textContent=labels[item.id]||item.id;
+      const details=document.createElement("small");
+      details.textContent=(item.approved?"Approvata":"Da revisionare")+
+        " · "+item.scene_count+" scene · rev "+item.revision;
+      node.append(title,details);
+      node.addEventListener("click",()=>run(()=>switchVariant(item.id)));
+      list.append(node);
+    }
+    el("style-variant-status").textContent=rows.length
+      ? "Attiva: "+(labels[current().active_variant]||current().active_variant)+
+        ". Ogni versione conserva i propri tagli, effetti, sottotitoli e cronologia. "+
+        (current().autosaved
+          ?"Salvataggio locale recuperabile dopo il riavvio."
+          :"Sessione temporanea: esporta la singola versione per conservarla.")
+      : "Nessuna variante creata. Il montaggio attuale sarà copiato tre volte.";
+  }
+  async function createVariants(){
+    if(!ready())throw Error("Prepara il montaggio prima di creare le versioni.");
+    const revision=current().project_revision;
+    const state=await post("/api/variants/create",{revision});
+    update(state);
+    proposal=null;skipped.clear();selection="authority";
+    message="Tre timeline indipendenti create. Seleziona una versione per personalizzarla.";
+    draw();
+  }
+  async function switchVariant(styleId){
+    if(!ready())throw Error("Completa prima l'elaborazione corrente.");
+    if(mode==="rendered")changeMode("original");
+    const revision=current().project_revision;
+    const state=await post("/api/variants/switch",{
+      revision,style_id:styleId
+    });
+    proposal=null;skipped.clear();forMedia=null;selection=styleId;
+    update(state);
+    message="Versione attiva: "+(labels[styleId]||styleId)+
+      ". Preview e export si riferiscono a questa timeline.";
+    draw();
+  }
   function draw(){
+    drawVariants();
     const container=el("style-pack-choices");
     const list=el("style-pack-candidates");
     if(!container||!list)return;
@@ -110,13 +169,19 @@
       : "Seleziona uno stile e genera le tre proposte";
     const caption=el("style-pack-caption");
     caption.disabled=!ready()||!(current().captions||[]).length||
-      !currentVariant||current().caption_style===currentVariant.caption_preset_suggestion;
+      !currentVariant||!matchesActive()||
+      current().caption_style===currentVariant.caption_preset_suggestion;
     caption.textContent=currentVariant
       ? "Applica sottotitoli: "+currentVariant.caption_preset_suggestion
       : "Applica stile sottotitoli";
     if(currentVariant){
       const available=currentVariant.candidates.filter(c=>!skipped.has(c.candidate_id));
-      for(const item of available)list.append(row(item));
+      for(const item of available){
+        const node=row(item);
+        const apply=node.querySelector(".button-primary");
+        if(apply)apply.disabled=!ready()||!matchesActive();
+        list.append(node);
+      }
       if(!available.length){
         const note=document.createElement("p");note.className="visual-fx-status";
         note.textContent="Nessun altro intervento tecnico suggerito. Non aggiungere effetti solo per riempire.";
@@ -143,11 +208,13 @@
   async function applyCaption(){
     const row=proposal?.variants?.[selection];
     if(!isFresh()||!row)throw Error("Proposte scadute.");
+    if(!matchesActive())throw Error("Attiva prima la versione scelta.");
     if(!(current().captions||[]).length)throw Error("Genera prima sottotitoli.");
     await edit("caption.style",{style:row.caption_preset_suggestion});
     proposal=null;skipped.clear();message="Preset sottotitoli applicato alla timeline corrente.";
     draw();
   }
+  el("style-variants-create").addEventListener("click",()=>run(createVariants));
   el("style-pack-generate").addEventListener("click",()=>run(generate));
   el("style-pack-caption").addEventListener("click",()=>run(applyCaption));
   window.pausioStylePacks={update:draw};
