@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/image_overlay_ui.css">
   <link rel="stylesheet" href="/scene_template_ui.css">
+  <link rel="stylesheet" href="/style_pack_ui.css">
   <script src="/audio_monitor_ui.js" defer></script>
   <script src="/app.js" defer></script>
   <script src="/visual_fx_ui.js" defer></script>
@@ -17,6 +18,7 @@
   <script src="/visual_transition_ui.js" defer></script>
   <script src="/graphic_overlay_ui.js" defer></script>
   <script src="/editorial_ui.js" defer></script>
+  <script src="/style_pack_ui.js" defer></script>
   <script src="/image_overlay_ui.js" defer></script>
   <script src="/scene_template_ui.js" defer></script>
   <script src="/visual_observation_ui.js" defer></script>
@@ -350,6 +352,22 @@
                 </label>
                 <p>Solo se autorizzi separatamente, ChatGPT può ascoltare estratti WAV fino a 6 secondi, massimo 4 al minuto. La voce può contenere informazioni personali.</p>
                 <p id="audio-sharing-status" class="visual-fx-status" role="status" aria-live="polite">Condivisione audio disattivata.</p>
+              </div>
+            </section>
+            <section class="visual-fx-panel" id="style-pack-panel" aria-labelledby="style-pack-heading">
+              <header class="visual-fx-heading">
+                <h3 id="style-pack-heading">Tre regie · scegli il trattamento</h3>
+                <p>Confronta tre proposte basate sui tagli e sui sottotitoli esistenti. Non sono ancora tre MP4: ogni intervento si può applicare singolarmente e verificare nella preview FFmpeg.</p>
+              </header>
+              <div class="visual-fx-controls">
+                <button type="button" class="button button-primary button-full" id="style-pack-generate" disabled>✦ Confronta 3 storyboard</button>
+                <div id="style-pack-choices" class="style-pack-choices" role="group" aria-label="Selezione regia"></div>
+                <p id="style-pack-selected" class="style-pack-selected">Seleziona uno stile e genera le tre proposte</p>
+                <div class="style-pack-actions">
+                  <button type="button" class="button button-outline" id="style-pack-caption" disabled>Applica stile sottotitoli</button>
+                </div>
+                <p class="visual-fx-status" id="style-pack-status" role="status" aria-live="polite">Prepara prima un montaggio.</p>
+                <div id="style-pack-candidates" aria-label="Interventi proposti, da confermare individualmente"></div>
               </div>
             </section>
             <section class="visual-fx-panel" id="editorial-plan-panel" aria-labelledby="editorial-plan-heading">
