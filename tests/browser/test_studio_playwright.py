@@ -341,6 +341,9 @@ class StudioPlaywrightAudit(unittest.TestCase):
         self.assertTrue(preview["preview_ready"])
         self.assertFalse(preview["approved"])
         self.shot("media-motion-image-video-preview")
+        # Global undo shortcut only applies outside editable form controls.
+        # Focus a non-editable toolbar button to avoid native input undo.
+        self.page.locator("#undo-action").focus()
         self.page.keyboard.press("Control+z")
         undone=self.wait_state("revision",revised["project_revision"]+1)
         self.assertNotIn("motion",undone["video_broll"][0])
