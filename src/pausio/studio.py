@@ -34,7 +34,7 @@ from pausio.media_observation import ObservationError, frame_jpeg
 from pausio.audio_observation import audio_wav
 from pausio.graphic_overlays import remap_graphics
 from pausio.scene_templates import catalog as scene_template_catalog
-from pausio.style_packs import catalog as style_pack_catalog, propose_three_variants
+from pausio.style_packs import PACKS, catalog as style_pack_catalog, propose_three_variants
 from pausio.image_overlays import MAX_IMAGE_BYTES, IMAGE_EXTENSIONS
 from pausio.planner import CUT_PRESETS, validate_cut_settings, policy_from_cut_settings, propose_segments
 from pausio.project_commands import ProjectTape, ProjectFormatError, UI_COMMANDS, default_audio_mix
@@ -783,6 +783,56 @@ class StudioWorkspace:
                 "review_required": True,
             }
 
+    def suggest_style_variants_auto(self, raw: dict) -> dict:
+        """Three reviewable technical edit plans from actual caption/cut evidence.
+
+        This reuses the existing conservative editorial planner, NOT semantic AI.
+        The source, project tape and preview are never mutated.
+        """
+        with self.lock:
+            self._ensure_unlocked()
+            if (self.tape is None or self.plan is None or self.info is None or
+                    self.media_sha256 is None):
+                raise StudioError("Prepara un montaggio per confrontare i tre stili.")
+            if not isinstance(raw, dict) or set(raw) != {"revision"}:
+                raise StudioError("La richiesta richiede solo la revisione.")
+            revision = raw["revision"]
+            if type(revision) is not int or revision != self.tape.revision:
+                raise StudioError("Proposte scadute: aggiorna la revisione del progetto.")
+            segments = [dict(x) for x in self.tape.view.segments]
+            captions = [dict(x) for x in self.tape.view.captions]
+            graphics = [dict(x) for x in self.tape.view.graphic_overlays]
+            fx = [dict(x) for x in self.tape.view.video_fx]
+            variants = {}
+            try:
+                for style_id, pack in PACKS.items():
+                    suggestion = propose_editorial_plan(
+                        segments=segments, captions=captions,
+                        existing_graphics=graphics, existing_fx=fx,
+                        transcript=self.transcript, preset=pack.editorial_preset,
+                        media_sha256=self.media_sha256,
+                        base_revision=revision,
+                        source_duration_ms=self.info.duration_ms,
+                    )
+                    variants[style_id] = {
+                        "style_id": style_id,
+                        "style_version": 1,
+                        "caption_preset_suggestion": pack.caption_preset,
+                        "camera_preset_suggestion": pack.camera_preset,
+                        "editorial_preset_suggestion": pack.editorial_preset,
+                        "candidates": suggestion["candidates"],
+                        "missing_signals": suggestion["missing_signals"],
+                    }
+            except ValueError as exc:
+                raise StudioError(str(exc)) from exc
+            return {
+                "base_revision": revision,
+                "media_sha256": self.media_sha256,
+                "variants": variants,
+                "review_required": True,
+                "explanation": "Proposte tecniche da sottotitoli e tagli; non analisi semantica AI.",
+            }
+
     def suggest_face_anchor(self, raw: dict) -> dict:
         """Opt-in read-only local sample; only a human/agent edit changes framing."""
         with self.lock:
@@ -1292,6 +1342,10 @@ class StudioHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/editorial/variants":
                 proposal = self.server.workspace.suggest_style_variants(self._read_json())
+                self._json(200, proposal)
+                return
+            if path == "/api/editorial/variants/auto":
+                proposal = self.server.workspace.suggest_style_variants_auto(self._read_json())
                 self._json(200, proposal)
                 return
             if path == "/api/captions/generate":
