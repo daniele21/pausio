@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import tempfile
+import hashlib
+import shutil
+import subprocess
 import threading
 import time
 import unittest
@@ -11,6 +14,10 @@ from unittest.mock import patch
 from zipfile import ZipFile
 
 from pausio.studio import StudioError
+from pausio.media import probe
+from pausio.project_commands import ProjectTape
+from pausio.variant_projects import STYLE_IDS, VariantWorkspace
+from pausio.variant_export import render_three_approved
 from pausio.variant_export import BATCH_FILENAME
 from test_studio_recovery import applied_plan, imported_workspace, new_workspace
 
@@ -35,6 +42,47 @@ def await_export(ws):
 
 
 class ThreeVariantBatchExportTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"),
+                         "Real FFmpeg/FFprobe required")
+    def test_real_full_hd_zip_preserves_voice_audio_for_each_style(self):
+        """Three actual 1080×1920 MP4s, not mock files or editor screenshots."""
+        with tempfile.TemporaryDirectory() as td:
+            folder=Path(td)
+            source=folder/"source.mp4"
+            subprocess.run([
+                "ffmpeg","-hide_banner","-loglevel","error","-nostdin","-y",
+                "-f","lavfi","-i","color=c=0x172337:s=180x320:r=24:d=1.2",
+                "-f","lavfi","-i","sine=frequency=440:duration=1.2",
+                "-shortest","-c:v","mpeg4","-c:a","aac",str(source),
+            ],check=True,timeout=40)
+            info=probe(source)
+            media={
+                "filename":source.name,"sha256":hashlib.sha256(source.read_bytes()).hexdigest(),
+                "duration_ms":info.duration_ms,"has_audio":info.has_audio,
+            }
+            initial=ProjectTape(media).append("timeline.keep_all",{})
+            variants=VariantWorkspace.fork(initial)
+            bundle=VariantWorkspace("authority",{
+                name:variants.tapes[name].append("timeline.approve",{})
+                for name in STYLE_IDS
+            })
+            archive=folder/BATCH_FILENAME
+            missing=lambda *args:folder/"missing"
+            render_three_approved(bundle,source,info,archive,
+                audio_asset=missing,image_asset=missing,video_asset=missing)
+            with ZipFile(archive) as content:
+                self.assertEqual(len(content.namelist()),3)
+                self.assertIsNone(content.testzip())
+                for name in STYLE_IDS:
+                    filename=f"pausio-{name.replace('_','-')}.mp4"
+                    output=folder/filename
+                    output.write_bytes(content.read(filename))
+                    rendered=probe(output)
+                    self.assertTrue(rendered.has_audio)
+                    self.assertEqual((rendered.width,rendered.height),(1080,1920))
+                    self.assertGreater(rendered.duration_ms,900)
+                    self.assertGreater(output.stat().st_size,1000)
+
     def test_approval_revision_and_media_gates(self):
         with tempfile.TemporaryDirectory() as td:
             ws=imported_workspace(Path(td)/"workspace")
