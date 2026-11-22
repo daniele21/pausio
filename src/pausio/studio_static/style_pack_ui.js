@@ -96,7 +96,7 @@
     const job=current().job||{};
     if(job.kind==="render_variants"&&job.status==="running"){
       status.textContent="Generazione MP4 "+(job.completed||0)+"/3 completata. "+
-        "Video in lavorazione: "+(labels[job.variant]||"preparazione")+
+        "Ultima versione completata: "+(labels[job.variant]||"nessuna")+
         ". Lo ZIP sarà disponibile solo a render concluso.";
     }else if(job.kind==="render_variants"&&job.status==="failed"){
       status.textContent="Esportazione non riuscita: "+(job.error||"controlla gli asset locali")+
