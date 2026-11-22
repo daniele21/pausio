@@ -86,9 +86,9 @@
     el("style-variants-import").disabled=!ready()||rows.length>0;
     el("style-variants-export").hidden=rows.length===0;
     const allReviewed=rows.length===3&&rows.every(item=>item.approved);
-    const run=el("style-variants-render-all");
-    run.disabled=!ready()||!allReviewed;
-    run.textContent=allReviewed?"Esporta tutte e 3 · MP4":
+    const exportButton=el("style-variants-render-all");
+    exportButton.disabled=!ready()||!allReviewed;
+    exportButton.textContent=allReviewed?"Esporta tutte e 3 · MP4":
       "Conferma tutti e 3 i montaggi per esportare";
     const download=el("style-variants-download-all");
     download.hidden=!current().batch_export_ready;
