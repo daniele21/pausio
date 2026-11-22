@@ -8,7 +8,8 @@ from pathlib import Path
 
 from pausio.studio import StudioError
 from pausio.studio_persistence import STATE_FILE, SESSION_VERSION, VARIANT_SESSION_VERSION
-from test_studio_recovery import imported_workspace, new_workspace, applied_plan
+from test_studio_recovery import (imported_workspace, new_workspace,
+                                  applied_plan, complete_transcription)
 
 
 class VariantStudioTests(unittest.TestCase):
@@ -153,6 +154,29 @@ class VariantStudioTests(unittest.TestCase):
                 self.assertIsNotNone(recovered.tape)
             finally:
                 recovered.close()
+
+    def test_transcribing_after_fork_preserves_saved_variant_bundle(self):
+        with tempfile.TemporaryDirectory() as td:
+            directory = Path(td) / "private"
+            ws = imported_workspace(directory)
+            try:
+                applied_plan(ws)
+                ws.fork_style_variants({"revision": ws.tape.revision})
+                complete_transcription(ws)
+                data = json.loads((directory / STATE_FILE).read_text())
+                self.assertEqual(data["schema_version"], VARIANT_SESSION_VERSION)
+                self.assertEqual(set(data["variants"]["projects"]), {
+                    "authority", "visual_explainer", "social_impact",
+                })
+                self.assertIsNotNone(data["transcript"])
+            finally:
+                ws.close()
+            restored = new_workspace(directory)
+            try:
+                self.assertEqual(len(restored.snapshot()["variant_workspaces"]), 3)
+                self.assertIsNotNone(restored.snapshot()["transcript"])
+            finally:
+                restored.close()
 
     def test_legacy_v2_session_is_left_unchanged_without_variants(self):
         with tempfile.TemporaryDirectory() as td:
