@@ -300,6 +300,7 @@ function update(next){
   window.pausioVisualObservation?.update(next);
   window.pausioImages?.update(next);
   window.pausioEditorial?.update(next);
+  window.pausioStylePacks?.update(next);
   updateFxMonitorUI();drawAudioMixer();syncVoicePlayback();syncLiveFx();transport();
   syncDesktopCommands();
   if(has&&next.waveform_status==="ready"&&waveformRequestedFor!==next.media_id){
