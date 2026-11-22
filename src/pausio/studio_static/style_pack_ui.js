@@ -17,10 +17,7 @@
   };
   const time=ms=>(ms/1000).toFixed(1).replace(".",",")+" s";
   const ready=()=>!!current().media&&!!current().plan&&!working();
-  const fresh=()=>proposal&&proposal.base_revision===current().project_revision&&
-    forMedia===current().media_id&&proposal.media_sha256===current().plan?.media?.sha256;
-  // A project plan may not expose media fingerprint. Compare against the
-  // request's media ID + revision instead of leaking or guessing a path.
+  // Compare the project revision and opaque media ID; no source paths are exposed.
   const isFresh=()=>proposal&&proposal.base_revision===current().project_revision&&
     forMedia===current().media_id;
 
