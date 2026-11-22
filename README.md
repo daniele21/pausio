@@ -6,6 +6,15 @@ A local-first toolkit for natural-sounding, talking-head social videos. Pausio i
 
 > **Status:** `main` include Video FX v2 (zoom avanzati, transizioni dip-to-black e crop statico del volto opzionale); **la release scaricabile `v0.1.0` è una technical preview precedente e non include queste funzioni.** The current CLI inspects videos, suggests cuts using FFmpeg's signal-level silence detection, writes a human-editable JSON timeline, and exports a vertical 1080x1920 MP4. It now has optional standalone MLX Whisper ASR on Apple Silicon (no ClosedRoom app or service required), but does not yet make semantic cuts, denoise or export CapCut projects; its on-device transcripts can now drive **editable burned-in captions**.
 
+## In sviluppo — tre Style Pack editoriali e Motion Graphics spike
+
+Sul branch `feat/editorial-style-packs` sono disponibili i **preset di regia read-only**
+Authority, Visual Explainer e Social Impact e un prototipo locale di metrica
+con animazione count-up. I preset producono proposte di scene revisionabili, non
+eseguono montaggi automatici e non sono ancora selezionabili in Studio.
+Per architettura, limiti e demo sintetica FFmpeg:
+[Style Packs e Motion Graphics v1](docs/EDITORIAL_STYLE_PACKS_V1.md).
+
 ## Download — GitHub Early Access v0.1.0
 
 **[Scarica Pausio v0.1.0 da GitHub Releases](https://github.com/daniele21/pausio/releases/tag/v0.1.0)**. I file disponibili sono un pacchetto Python `.whl`, una distribuzione sorgente `.tar.gz` e `SHA256SUMS.txt`. **Non è ancora un'app `.dmg` installabile con doppio clic.**
