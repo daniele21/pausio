@@ -836,6 +836,7 @@ class StudioWorkspace:
                 self._install_tape(
                     bundle.tapes[bundle.active], variant_bundle=bundle
                 )
+                self.media_id = uuid.uuid4().hex  # Invalidate stale plans for pre-fork view.
             except (ValueError, ProjectFormatError) as exc:
                 raise StudioError(str(exc)) from exc
 
@@ -858,6 +859,7 @@ class StudioWorkspace:
                 self._install_tape(
                     bundle.tapes[bundle.active], variant_bundle=bundle
                 )
+                self.media_id = uuid.uuid4().hex  # New per-variant observation token.
             except ValueError as exc:
                 raise StudioError(str(exc)) from exc
 
