@@ -42,7 +42,7 @@ class MediaLayerMotionTests(unittest.TestCase):
                 edited=base.append(kind+".update", {payload_key:modified})
                 field="image_overlays" if kind.startswith("image") else "video_broll"
                 self.assertEqual(getattr(edited.view,field)[0]["motion"], self.motion)
-                self.assertEqual(edited.as_dict()["schema_version"],14)
+                self.assertEqual(edited.as_dict()["schema_version"],15)
                 self.assertEqual(getattr(edited.undo().view,field)[0],initial)
                 self.assertEqual(getattr(edited.undo().redo().view,field)[0],modified)
                 self.assertEqual(getattr(ProjectTape.from_dict(edited.as_dict()).view,field)[0],modified)
