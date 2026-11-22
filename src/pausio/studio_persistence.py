@@ -25,8 +25,10 @@ except ImportError:  # pragma: no cover - Windows compatibility
     import msvcrt
 
 from pausio.project_commands import ProjectTape, ProjectFormatError
+from pausio.variant_projects import VariantWorkspace
 
 SESSION_VERSION = 2
+VARIANT_SESSION_VERSION = 3
 LEGACY_SESSION_VERSION = 1
 MAX_TRANSCRIPT_BYTES = 4 * 1024 * 1024
 STATE_FILE = "active-session.json"
@@ -166,6 +168,7 @@ class StudioSessionStore:
             self.directory.chmod(0o700)
         self.active = self.directory / STATE_FILE
         self.previous = self.directory / BACKUP_FILE
+        self.recovered_variants: VariantWorkspace | None = None
         self._lock_fd = os.open(
             self.directory / ".session.lock", os.O_CREAT | os.O_RDWR, 0o600
         )
@@ -222,7 +225,8 @@ class StudioSessionStore:
 
     def save(
         self, tape: ProjectTape, source: Path, *,
-        transcript: dict | None = None
+        transcript: dict | None = None,
+        variant_bundle: VariantWorkspace | None = None,
     ) -> None:
         """Commit an entire validated project as one atomic new checkpoint.
 
@@ -237,9 +241,18 @@ class StudioSessionStore:
         if filename != self.media_path(tape.media["sha256"], source.suffix).name:
             raise RecoveryError("Hash del video e nome della sessione non corrispondono.")
         private_transcript = _session_transcript(transcript, media=tape.media)
+        if variant_bundle is not None:
+            if not isinstance(variant_bundle, VariantWorkspace):
+                raise RecoveryError("Formato delle varianti locali non valido.")
+            try:
+                VariantWorkspace.from_dict(
+                    variant_bundle.as_dict(), source_tape=tape
+                )
+            except ValueError as exc:
+                raise RecoveryError(str(exc)) from exc
         state = {
             "format": "pausio.local-session",
-            "schema_version": SESSION_VERSION,
+            "schema_version": VARIANT_SESSION_VERSION if variant_bundle else SESSION_VERSION,
             "media_file": filename,
             "project": tape.as_dict(),
             "transcript": (
@@ -247,6 +260,8 @@ class StudioSessionStore:
                 if private_transcript is not None else None
             ),
         }
+        if variant_bundle is not None:
+            state["variants"] = variant_bundle.as_dict()
         raw = (json.dumps(state, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
         if len(raw) > MAX_STATE_BYTES:
             raise RecoveryError("La sessione è troppo grande per il salvataggio automatico.")
@@ -257,7 +272,7 @@ class StudioSessionStore:
             self._atomic_bytes(self.previous, self.active.read_bytes())
         self._atomic_bytes(self.active, raw)
 
-    def _parse(self, path: Path) -> tuple[Path, ProjectTape, dict | None]:
+    def _parse(self, path: Path) -> tuple[Path, ProjectTape, dict | None, VariantWorkspace | None]:
         if path.is_symlink() or not path.is_file() or path.stat().st_size > MAX_STATE_BYTES:
             raise RecoveryError("Il file della sessione non è sicuro o supera il limite.")
         try:
@@ -271,9 +286,11 @@ class StudioSessionStore:
         if (
             saved.get("format") != "pausio.local-session"
             or type(version) is not int
-            or version not in (LEGACY_SESSION_VERSION, SESSION_VERSION)
+            or version not in (LEGACY_SESSION_VERSION, SESSION_VERSION, VARIANT_SESSION_VERSION)
             or set(saved) != (
                 common if version == LEGACY_SESSION_VERSION
+                else common | {"transcript", "variants"}
+                if version == VARIANT_SESSION_VERSION
                 else common | {"transcript"}
             )
         ):
@@ -293,7 +310,7 @@ class StudioSessionStore:
         if sha256_file(video) != tape.media["sha256"]:
             raise RecoveryError("Il video della sessione non supera la verifica SHA-256.")
         transcript = None
-        if version == SESSION_VERSION and saved["transcript"] is not None:
+        if version in (SESSION_VERSION, VARIANT_SESSION_VERSION) and saved["transcript"] is not None:
             wrapper = saved["transcript"]
             if (
                 not isinstance(wrapper, dict)
@@ -304,7 +321,15 @@ class StudioSessionStore:
             transcript = _session_transcript(wrapper["data"], media=tape.media)
             if transcript is None:
                 raise RecoveryError("Dati della trascrizione mancanti.")
-        return video, tape, transcript
+        bundle = None
+        if version == VARIANT_SESSION_VERSION:
+            try:
+                bundle = VariantWorkspace.from_dict(
+                    saved["variants"], source_tape=tape
+                )
+            except ValueError as exc:
+                raise RecoveryError("Bundle varianti non valido: " + str(exc)) from exc
+        return video, tape, transcript, bundle
 
     def recover(self) -> tuple[Path, ProjectTape, dict | None, bool] | None:
         """Recover active, or fall back to previous checkpoint without data loss."""
@@ -313,11 +338,12 @@ class StudioSessionStore:
             if not candidate.exists() and not candidate.is_symlink():
                 continue
             try:
-                video, tape, transcript = self._parse(candidate)
+                video, tape, transcript, bundle = self._parse(candidate)
                 if candidate == self.previous:
                     # Repair primary before the next save, so a corrupt active
                     # document never overwrites the only known-good backup.
                     self._atomic_bytes(self.active, self.previous.read_bytes())
+                self.recovered_variants = bundle
                 return video, tape, transcript, candidate == self.previous
             except RecoveryError as exc:
                 errors.append(f"{candidate.name}: {exc}")
